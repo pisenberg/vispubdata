@@ -1,0 +1,369 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Visualizing Gridded Datasets with Large Number of Missing Values</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Suzana</forename><surname>Djurcilov</surname></persName>
+							<email>suzana@cse.ucsc.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Computer Science Department</orgName>
+								<orgName type="institution">UCSC</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Pang</surname></persName>
+							<email>pang@cse.ucsc.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Computer Science Department</orgName>
+								<orgName type="institution">UCSC</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Visualizing Gridded Datasets with Large Number of Missing Values</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:39+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>curvilinear grid</term>
+					<term>sparse data visualization</term>
+					<term>Delauney triangulation</term>
+					<term>isosurface</term>
+					<term>NEXRAD</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Much of the research in scientific visualization has focused on complete sets of gridded data. This paper presents our experience dealing with gridded data sets with large number of missing or invalid data, and some of our experiments in addressing the shortcomings of standard off-the-shelf visualization algorithms. In particular, we discuss the options in modifying known algorithms to adjust to the specifics of sparse datasets, and provide a new technique to smooth out the side-effects of the operations. We apply our findings to data acquired from NEXRAD (NEXt generation RADars) weather radars, which usually have no more than 3 to 4 percent of all possible cell points filled.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>In atmospheric sciences, researches are often facing the problem of visualizing gridded datasets that are incomplete -either a grid of data is extrapolated from a set of scattered data observations and there is insufficient support to validate a data point, or there is simply no observation for that specific region. Observed meteorological data are mostly point (0 dimension) measurements made at sparsely distributed weather stations. They may also be 1 dimensional measurements such as those obtained by a weather balloon or a vertical wind profiler which measures wind velocities at various heights. They may also be 2 dimensional such as those obtained from satellite imagery or derived from radial velocities from a pair of radars (e.g. CODAR). More recently, volumetric weather measurements are available through the NEXRAD radar which makes a series of conical scans (www.osf.noaa.gov/nexrad.htm). This paper is a case study in visualizing 3D volumetric NEXRAD data which is characterized by a large proportion of missing or invalid data points.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">BACKGROUND</head><p>NEXRAD, also known under its official name WSR-88D is a meteorological instrument generating dozens of data types, including reflectivity, storm total precipitation and radial wind velocity. It does so by processing the radar signal bounced off the particles in the atmosphere, be it rain drops, hail, or ice crystals. Occasionally, NEXRAD may report non-weather related phenomena, such as smoke plumes from fires and large flocks of birds. It is a doppler radar and uses the "doppler effect" to determine the direction and velocity of the particles along a radial direction. On a clear day, NEXRAD can retrieve information as far out as 143 miles. As opposed to the conventional weather radar which makes one circular sweep, NEXRAD makes up to 14 conical sweeps with varying elevation angles from the horizon, often ranging from 0.5 to 19.5 de-grees above the horizon. The sweep pattern, including grid points where available, is illustrated in <ref type="figure">Figure 1</ref>. The most interesting feature of NEXRAD is that it measures the weather within its local volume of space, producing a curvilinear volume scan from the conical sweeps. NEXRAD is most noted for its usefulness in early storm detection and rainfall estimates.</p><p>Currently, the National Weather Service has 160 WSR-88D radars employed nationwide. As part of REINAS <ref type="bibr" target="#b4">[5]</ref>, a large project involving recording and storing weather information from the Monterey Bay, we receive regular feeds of NEXRAD stationed atop Mt. Umunhum near San Francisco. For this case study, we compared different visualization techniques for data obtained for December 6th, 1997 at 8:30am.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Figure 1: NEXRAD grid pattern</head><p>Our primary interest was developing 3D images, since the current visualization techniques for NEXRAD simply discard the 3D nature of the dataset and provide 2D plots of the lowest layer of the grid. The main difficulty arose from the fact that most visualization techniques that are designed for gridded data assume that the underlying dataset is complete. That is, it contains a valid data value at each grid point. When incomplete, gridded datasets are often filled with pre-defined values outside the valid data range , for example by NaN -the IEEE representation for Not-a-Number. How incomplete, invalid, or missing values are treated varies from implementation to implementation, and from application to application. Often times, the visualization program will leave holes in the visualization where the data is missing. Other times, they may explicitly be flagged and shown together with the rest of the data. Depending on the type of data, this may or may not be desirable. According to <ref type="bibr" target="#b7">[8]</ref>: "Empty spaces [must] signify absence of phenomena and not missing data." Because of the nature of radar returns from NEXRAD, this is often the case -there is not sufficient phenomena (e.g. precipitation, air particles) at places where there are no measurements available.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">VISUALIZATION ISSUES</head><p>One of the primary use of NEXRAD data is identifying storm clouds and tracking them over time. In this section we explore several ways of extracting and presenting relevant NEXRAD information. We assume that the value of 23.5 represents some physically significant phenomenon such as water particles in the clouds. Hence, the feature of interest is to locate these clusters of rain cell. There are two general approaches to this task. We can discard the gridded nature of the dataset and treat each data point as an individual reading, thus reducing the task at hand to one of scattered data visualization. The other option is to adapt and modify known visualization techniques for gridded data so that they handle cases with large gaps. Sections 3.1 through 3.4 address the first option, while the remainder address the latter case.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Point Cloud</head><p>A natural start with a scattered dataset is to simply draw a colored point for each data point. This technique is known as a point cloud. The image in <ref type="figure" target="#fig_0">Figure 2</ref> is exaggerated in the vertical direction and quickly points out the conical nature of the grid. It is also easy to see that most of the data are found in the lower layers of the atmosphere, with density receding in the higher levels. To find the regions where there is rain (i.e. values above 23.5), we generate another point cloud representation for those values. This is shown in <ref type="figure" target="#fig_1">Figure 3</ref>, along with the underlying terrain of the greater San Francisco bay area. This time we used mini-spheres as a way to give the image some texture. The white points are at 23.5 moving towards red as the values increase. We can observe that the largest cloud cluster is formed inland from the bay, offcenter to the right of the image.</p><p>The advantage of this method is that it gives the user an idea where the higher concentrations are found. However, it only works for very sparse sets of data, as the visualization quickly becomes cluttered and obscured with the increase in data points.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Delaunay Triangulation</head><p>While the point cloud is a cheap and simple way of identifying important values in the dataset, the presentation is less than ideal and tend to look confusing because of poor depth cues, specially in a static view. Hence, the next step is to extract a surface from these points of interest. The problem reduces to one of creating a set of triangles connecting points that are natural neighbors. This task is accomplished by using Delaunay triangulation on the desired subset of points -with values ranging from 23.4 to 23.6. The result of this operation can be seen in <ref type="figure">Figure 4</ref>. Here, we start to see more coherent structures of what might be cloud formations. We are also immediately drawn to some obvious disadvantages of this triangulation method. Firstly, clusters are connected with long triangles. Such artifacts can be eliminated by constraining the maximum size of a triangle. Secondly, Delaunay triangulation connects concave regions thus flattening out the bumps in the surface. A remedy to this problem has been proposed by Edelsbrunner and Mucke <ref type="bibr" target="#b1">[2]</ref> with the use of Alpha-shapes. A drawback to this method is that the Alpha parameter has to be chosen experimentally, and depending on the sampling density, can yield unsatisfactory results. Similarly Amenta et al. <ref type="bibr" target="#b0">[1]</ref> improve the basic algorithm by removing triangles which would form a convex hull and apply additional heuristics to separate connected components. Unfortunately, this method is also dependent on sampling density, which often cannot be controlled.</p><p>We believe both of these approaches provide valid improvements in cases where data points are positioned at somewhat equal distances. For other datasets this triangulating and thresholding process may be further improved by adding a physically meaningful set of constraints that specify boundary conditions and surface tension coefficients.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Surface Reconstruction from Scattered Points</head><p>In search of an algorithm capable of triangulating a surface from any set of points we turn to research in surface reconstruction. We have seen a surge of such solutions in recent years. While many of these algorithms are geared towards the results from 3D scans, some of them can be used on an unorganized set of points. One such example is Hoppe et al.'s <ref type="bibr" target="#b3">[4]</ref> method which approximates a surface by contour tracing a distance function to tangent planes incident to the original mesh-points. Again, we have taken points between 23.4 and 23.6 as input to the surface reconstruction program. The result is seen in <ref type="figure">Figure 5</ref>.</p><p>The contouring part of this method discards cells with no nearby tangent planes, thus resulting in the choppy surface borders. Visually, the output provides much more detail than the previous case, albeit at a greater computing cost.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Interpolation</head><p>Interpolation is a popular option employed to obtain unknown or missing values from known ones. A wide variety of algorithms exist, for example, Shepard's <ref type="bibr" target="#b8">[9]</ref> inverse distance weighting functions, Hardy's radial basis multi-quadrics <ref type="bibr" target="#b2">[3]</ref>, and thin-plate splines to mention a few. One must be careful when selecting the interpolation method, as most of them do not provide any means of estimating the interpolation error. Those that do, such as kriging <ref type="bibr" target="#b5">[6]</ref>, are computationally expensive and do not scale well with the number of data points. Many researchers, e.g. <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b6">7]</ref>, have had to grapple with the issues arising from inadequacy and uncertainty in implementing interpolation methods, caused by the lack of constraints  <ref type="figure">Figure 8</ref>. Here, the same dataset as seen previously in <ref type="figure" target="#fig_0">Figure 2</ref> was <ref type="figure">Figure 8</ref>: Undesirable "stack of pancake" artifact when using Shepard's interpolation resampled to a 40x40x20 grid using Shepard's method. We then generated isosurfaces using a threshold of 23.5. The resulting isosurfaces have a layered look as if the volume of the clouds increase at different layers. This problems is not a feature of the data but rather an artifact from the interpolation algorithm. Using Hardy's multi-quadrics also has a major disadvantage because it can produce interpolated values outside the original data range. Finding a reliable interpolation scheme, especially for unevenly distributed data is still a great challenge. Furthermore, for many environmental data it means going from a small set of trustworthy information to a large set of untrustworthy information. In the case of NEXRAD, where missing data signifies a lack of atmospheric phenomena, it would be meaningless to attempt and produce a value where no phenomena is observed.</p><p>A decision to use interpolation methods must be made only with a thorough knowledge of data distribution, propagation and contextual properties.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Isosurface</head><p>So then, why not simply replace the missing data with a value that is outside the valid range (e.g. NaN) and proceed with standard algorithms? The problem is that contour lines in 2D or isosurfaces in 3D can be erroneously formed where none are meant to exist. In general, these false contours show up in cells with missing values.   <ref type="figure" target="#fig_4">Figure 9</ref> shows the problem of filling missing values with data outside the valid range. In this illustration, we have chosen 99.99 and -99.99 to represent "invalid" numbers. Iso-lines with threshold value of 2 are then generated. Due to the linear interpolation along the cell edges, incorrect contour edges are produced in cells containing invalid points. Volume visualizations, such as isosurfacing and direct volume rendering will suffer as well, unless the algorithms are transformed to explicitly ignore invalid data points during interpolation procedures. In addition, algorithms using gradient information to calculate the surface normals must be adjusted to use central, forward or backward differences, depending on what configuration of data points are available for the cell. Perhaps, a better approach is to ignore cells with missing data points. This approach is presented below.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6">Modified Normals</head><p>Fortunately, nowadays many visualization programs are able to ignore the "missing" grid points and produce an image for only the part of the grid that yield complete cells. As such, this approach can be successful with datasets characterized by clusters of valid data, as is the case with NEXRAD. An example can be seen in <ref type="figure">Figure 6</ref>. Unfortunately, when there are large gaps, and the data is of high frequency, such as in the case with NEXRAD, the isosurfaces appear grainy and spiky.</p><p>We have developed a method to smooth out some of the roughness seen in an isosurface created from sparse gridded data. The first step is implemented using a first-order neighborhood smoothing algorithm similar to the one seen in <ref type="bibr" target="#b9">[10]</ref>. We use the gradient information of the neighbor points to adjust the surface normals.</p><p>Out of the 6 neighbor points, each valid one adds 10 percent of its value to the neighbor. The idea is to exploit the nature of atmospheric data and propagate the neighboring information among the cells. In essence we are using a low-pass filter to smooth the signal. <ref type="figure">Figure 10</ref> shows the visual effects of smoothing the surface normals.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Without smoothing</head><p>With smoothing <ref type="figure">Figure 10</ref>: Effects of modifying surface normals</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.7">Modified Isosurface</head><p>In addition to modifying the surface normals, we smooth both the location of points and the surface normals of the isosurface triangles. This method works as follows:</p><p>Calculate the gradient at each valid grid point, using either central, forward or backward differences Update the gradient at each valid grid point by adding influences from the valid neighbors Create isosurface using standard techniques Reposition each isosurface vertex in the direction of the incident gradient vector</p><p>Images of an isosurface detail before and after the modification are seen in <ref type="figure">Figure 11</ref> below. Our results show that although remarkable effects are not likely, this method does smooth out the sharp edges to bring out the cloud-like nature of the dataset.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Original geometry</head><p>Modified geometry <ref type="figure">Figure 11</ref>: Effects of modifying geometry and surface normals</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.8">Smoothed Isosurface</head><p>Finally, the most pleasing visualization was produced when we used Taubin's <ref type="bibr" target="#b10">[11]</ref> smoothing algorithm that functions on the isosurface geometry by balancing out the bumps and valleys. This is a non-shrinking variant of the Gaussian smoothing algorithm that moves vertices of the isosurface geometry inwards and outwards, in alternating steps. The image in <ref type="figure">Figure 7</ref> was created after 20 iterations of the algorithm.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">SUMMARY AND CONCLUSION</head><p>We have presented some of the challenges inherent in handling sparse gridded data and shown some common methods in visualizing such datasets. These data sets vary with the amount of missing values (percentage of valid values) and the clustering or group of cells with valid values.</p><p>As a general guideline we recommend using scattered data visualization methods for cases where known points are overly sparse or have no coherent clustering. Otherwise, for datasets with significant clustering of valid points, modified iso-surfacing mechanisms seem more effective, even for as little as 3-4% of the possible values. For more or less evenly scattered data, resampling to a full grid might be the option, after careful weighing of the choices.</p><p>In the future, we plan to investigate how other scalar and vector visualization techniques are affected and need to be modified to accommodate datasets characterized by large number of missing values.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 :</head><label>2</label><figDesc>Figure 2shows a sample NEXRAD data set for a particular instant in time. Each colored Pseudo-colored point representation of NEXRAD data point represent a location in the vicinity of the radar with a valid reading. The value at each location is pseudo-colored such that low values are bluish, and high values are reddish. It is pretty apparent that there is a significant amount of dark regions with no data. Most standard visualization packages either fail or give incorrect visualizations of this dataset.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 3 :</head><label>3</label><figDesc>Pseudo-colored point cloud of NEXRAD data representing "rain" (values above 23.5)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 4 Figure 6 :</head><label>46</label><figDesc>Isosurface Figure 7: Smoothed Isosurface on the output data. An example of such side-effects can be seen in</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 9 :</head><label>9</label><figDesc>Incorrect contours when arbitrary numbers are used</figDesc></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">ACKNOWLEDGEMENTS</head><p>We would like to thank Wendell Nuss for earlier discussion on the NEXRAD data, and the members of the Advanced Visualization and Interactive Systems laboratory at Santa Cruz for their feedback and suggestions. We would also like to acknowledge the time and effort of the anonymous reviewers and their suggestions for improving this paper. This project is supported by ONR grant N00014-96-1-0949, NASA grant NCC2-5281, LLNL Agreement No. B347879 under DOE Contract No. W-7405-ENG-48, DARPA grant N66001-97-8900, and NSF grant IRI-9423881.</p></div>
+			</div>
+
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>Pseudo-colored point representation of NEXRAD. Point cloud of NEXRAD data representing rain".</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Delaunay triangulation.</head><p>Surface reconstruction from scattered data.</p><p>Isosurface. Smoothed Isosurface.</p><p>Without smoothing. With smoothing. E ects of modifying surface normals.</p><p>Without smoothing. With smoothing. E ects of modifying geometry and surface normals.</p></div>			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">A new Voronoi-based surface reconstruction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nina</forename><surname>Amenta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marshall</forename><surname>Bern</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Manolis</forename><surname>Kamvysselis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings SIGGRAPH &apos;98</title>
+		<meeting>SIGGRAPH &apos;98</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="415" to="421" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Three-dimensional Alpha shapes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mucke</forename><surname>Edelsbrunner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transaction on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page" from="43" to="72" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Multiquadratic equations of topography and other irregular surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Hardy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Geophysical Research</title>
+		<imprint>
+			<biblScope unit="volume">76</biblScope>
+			<date type="published" when="1905" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Surface reconstruction from unorganized points</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Derose</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Duchamp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mcdonald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Stuetzle</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics Proceedings</title>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="71" to="78" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">REINAS the real-time environmental information network and analysis system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">D E</forename><surname>Long</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">E</forename><surname>Mantey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Wittenbrink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">R</forename><surname>Haining</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">R</forename><surname>Montague</surname></persName>
+		</author>
+		<ptr target="www.cse.ucsc.edu/research/reinas" />
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Proceedings of COMPCON</title>
+		<meeting><address><addrLine>San Francisco, CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1995-03" />
+			<biblScope unit="page" from="482" to="487" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Principles of geostatistics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Matheron</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Economic Geology</title>
+		<imprint>
+			<biblScope unit="volume">58</biblScope>
+			<biblScope unit="page" from="1246" to="1266" />
+			<date type="published" when="1963" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Data quality issues in visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alex</forename><surname>Pang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Furman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wendell</forename><surname>Nuss</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SPIE Vol. 2178 Visual Data Exploration and Analysis</title>
+		<imprint>
+			<publisher>SPIE</publisher>
+			<date type="published" when="1994-02" />
+			<biblScope unit="page" from="12" to="23" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Rules and principles in scientific data visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hikmet</forename><surname>Senay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eve</forename><surname>Ignatius</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1990" />
+		</imprint>
+		<respStmt>
+			<orgName>Department of Computer Science, George Washington University, Washington, D.C</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">A two-dimensional interpolation function for irregularly spaced data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Shepard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 23rd National Conference</title>
+		<meeting>the 23rd National Conference</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1968-08" />
+			<biblScope unit="page" from="517" to="524" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Surface smoothing for enhanced 3D medical visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Siege</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">F</forename><surname>Hemler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Vining</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the SPIE</title>
+		<meeting>the SPIE</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1997-02" />
+			<biblScope unit="page" from="582" to="592" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A signal processing approach to fair surface design</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Taubin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics Proceedings</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="351" to="358" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">The challenges of visualizing and modeling environmental data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Xiao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ziebarth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Woodbury</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Bayer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Rundell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Der Zijp</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization 96</title>
+		<meeting>Visualization 96</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="413" to="416" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

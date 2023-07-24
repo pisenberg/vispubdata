@@ -1,0 +1,611 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Scanline Surfacing: Building Separating Surfaces from Planar Contours</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Weinstein</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Scientific Computing and Imaging Institute School of Computing</orgName>
+								<orgName type="institution">University of Utah</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Scanline Surfacing: Building Separating Surfaces from Planar Contours</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:44+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>CR Categories: I.3.5 [Computer Graphics] Computational Geometry and Object Modeling-Curve</term>
+					<term>surface</term>
+					<term>solid and object representations Separating Surfaces</term>
+					<term>Planar Contours</term>
+					<term>Surface Construction</term>
+					<term>Scanline</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>A standard way to segment medical imaging datasets is by tracing contours around regions of interest in parallel planar slices. Unfortunately, the standard methods for reconstructing three dimensional surfaces from those planar contours tend to be either complicated or not very robust. Furthermore, they fail to consistently mesh abutting structures which share portions of contours. In this paper we present a novel, straightforward algorithm for accurately and automatically reconstructing surfaces from planar contours. Our algorithm is based on scanline rendering and separating surface extraction. By rendering the contours as distinctly colored polygons and reading back each rendered slice into a segmented volume, we reduce the complex problem of building a surface from planar contours to the much simpler problem of extracting separating surfaces from a classified volume. Our scanline surfacing algorithm robustly handles complex surface topologies such as bifurcations, embedded features, and abutting surfaces.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Computational models of biological structures are generally built from CT or MRI scans. The scan measurements are acquired on a regularly gridded volume of hexahedral voxels, and the data are stored as discrete values. From this discretized volume, a surfacebased model can be constructed by identifying collections of voxels corresponding to features of interest. Such features can be as small as blood vessels in an angiogram, or as large as a kidney in an MRI scan. This process of labeling features of interest is termed segmentation or classification.</p><p>Volumetric datasets are typically segmented one slice at a time via manual algorithms, rather than as an entire volume all at once. That said, there have been some note-worthy semi-automatic volumetric segmentation algorithms. These algorithms have worked by growing segmented regions from seeds via level set methods <ref type="bibr" target="#b13">[14]</ref>, by evolving snakes through planar slices to bound segmented regions <ref type="bibr" target="#b7">[8]</ref>, and by various statistical methods <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b23">24]</ref>. While these methods are of substantial utility on well-behaved datasets, they tend to be of limited use on noisy or artifact-laden datasets, or on Email: dmw@cs.utah.edu WWW: http://www.cs.utah.edu/∼dmw datasets through which the feature sizes can shrink to sub-voxel sizes. As automatic segmentation is a fundamentally difficult research problem, there will always be a place for processing the output of manual segmentation tools. The most common manual segmentation tools are contour drawing programs. An expert views planar slices of the volume (such as the angiography slices shown in <ref type="figure" target="#fig_0">Figure 1</ref>(a)) and draws polylines (contours) to outline regions of interest (such as the vessel contours shown in <ref type="figure" target="#fig_0">Figure 1</ref>(b)). The unique power of manual segmentation is that the expert can draw these curves despite noise, low-resolution data, signal fallout, and other pathologies which would confound automatic techniques.</p><p>As the expert outlines slice features, multiple features may appear in each slice, and individual features may appear more than once. To identify attached features between as well as within slices, the user typically selects a particular color or classification tag for each feature of interest. <ref type="figure" target="#fig_1">Figure 2</ref> shows a single planar slice of a pelvic dataset. Note that the dark blue contours (also shown in colorplate <ref type="bibr">Figure 10)</ref>, which correspond to a single structure, the right pelvis, appear three times in this single slice. The user proceeds through all of the slices, consistently labeling regions of interest in each. At the end of this process, the user has created a set of planar contours uniquely identifying every feature of interest in the volume. The slice contours can then be aligned in 3D, as shown in   While manual segmentation can take hours of user time for a dataset like that shown in <ref type="figure" target="#fig_2">Figure 3</ref>, constructing surfaces from those contours (such as those in <ref type="figure">Figure 4</ref>) rarely requires more than a minute of CPU time on modern architectures. As such, it is of limited benefit to produce faster algorithms for constructing surfaces from contours. Rather, what matters more is that the surfacing algorithm produces a correct result.</p><p>The traditional method for building triangulated surfaces from planar contours consists of solving three subproblems for each structure in the volume: correspondence, tiling, and branching <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b5">6,</ref><ref type="bibr" target="#b14">15,</ref><ref type="bibr" target="#b20">21]</ref>. However, because these methods process the structures serially, rather than processing them simultaneously, they do not necessarily produce correct results for volumes in which surfaces abut.</p><p>Full volumetric models, such as torso models, cranial models, or pelvic models are often comprised largely of such abutting surfaces. The human body is not comprised of well-separated, free-floating surfaces, but rather of tightly packed organs which often conform to one another's shapes. The surfaces are merely the boundaries between structures within the volume. When these surfaces are constructed from a segmented volumetric dataset (such as a tetrahedral mesh or a voxelized volume), they are termed separating surfaces <ref type="bibr" target="#b17">[18]</ref>. Separating surfaces can be smoothed and simplified without producing spurious gaps or surface interpenetrations <ref type="bibr" target="#b22">[23]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Background</head><p>Constructing surfaces from planar contours has traditionally been decomposed into three subproblems: correspondence, tiling, and branching. Excellent reviews of these problems were presented by Sloan and Painter <ref type="bibr" target="#b20">[21]</ref>, as well as by Meyers <ref type="bibr" target="#b14">[15]</ref>. We describe each subproblem briefly below.</p><p>The correspondence problem aims to determine which contours belong to the same structure. Simply stated: Which contours in one slice are to be connected to which contours in neighboring slices? The question of correspondence applies within a slice, as well as between slices. From the magnetic resonance angiography dataset shown with a maximum intensity projection in <ref type="figure">Figure 5</ref>, we extracted the indicated subvolume which intersects a pair of blood vessels. For each slice of the subvolume, we hand drew corresponding contours around the vasculature, as shown in <ref type="figure" target="#fig_4">Figure 6</ref>. All of the red contours correspond to one vessel, while all of the blue contours correspond to a different vessel. While the correspondence for this simple example is trivial, in general, algorithms for determining correspondence can be under-constrained. For example, imagine trying to determine correspondences for tomographic slices of a bowl of spaghetti. Algorithms for resolving correspondence when there is ambiguity resort to heuristics based on shape fitting <ref type="bibr" target="#b1">[2]</ref> or graph analysis <ref type="bibr" target="#b19">[20]</ref>. In contrast, if an unambiguous correspondence does exist, it can often be found by simply evaluating overlaps of contours in consecutive slices <ref type="bibr" target="#b21">[22,</ref><ref type="bibr" target="#b24">25]</ref>.</p><p>The second subproblem in constructing surfaces from contours is the tiling problem. What is the optimal triangle strip for joining corresponding contours from consecutive slices? There has been much research targeted at solving this problem efficiently. The problem was reformulated by <ref type="bibr">Keppel [11]</ref> as finding a path through a toroidal graph. Formalization of this method and efficiency improvements were subsequently introduced <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b5">6,</ref><ref type="bibr" target="#b20">21]</ref>. These methods vary in the heuristics used for optimizing the tiling, as well as in the complexity of their search. The simplest method is a greedy algorithm that marches through pairs of contours. For each step, it chooses whether to advance along the top contour or the bottom contour by picking the one which will contribute the shortest edge, and then building the resulting triangle. More complex global algorithms seek to minimize the surface area of the triangle strip, or to maximize the volume it encloses.</p><p>The simplest greedy methods are not robust against certain complexities (such as pathological concavities) and even the complex methods fail to handle abutting contours. Figures 7(a) and (b) depict a simple case for which the greedy heuristic has produced an <ref type="figure">Figure 4</ref>: Reconstructed surfaces generated with our scanline surfacing algorithm. (See also colorplate.) <ref type="figure">Figure 5</ref>: Maximum intensity projection of a masked, contrast enhanced magnetic resonance angiography dataset. The dark square indicates the subvolume which will be processed below. A specific case of tiling that is typically handled separately from the methods described above is branching. How should m contours in one slice be attached to the n corresponding contours in a consecutive slice? Branching is typically handled through either a contour compositing scheme, or through Delaunay triangulation. In contour compositing, multiple contours are merged into a single contour <ref type="bibr" target="#b18">[19]</ref>. This method requires user intervention to resolve complex cases. The Delaunay method uses Delaunay tetrahderalization to mesh the volume between the contours, after which only those triangles which span the two contours are preserved <ref type="bibr" target="#b0">[1]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Methods</head><p>The traditional methods described above are useful for reconstructing unconstrained triangulated surfaces, with an independent surface for each structure. However, none of the above algorithms correctly handle contour sets with abutting structures. Since the traditional methods reconstruct each surface independently, the prostate (cyan) and sacrum (magenta) contours in <ref type="figure" target="#fig_1">Figure 2</ref> will likely result in different tilings at their interface. Such discrepancies are problematic, as they can result in interpenetrations or gaps between the surfaces. An example interpenetration is shown for two abutting synthetic structures in <ref type="figure" target="#fig_6">Figure 8</ref>. Furthermore, if the contour points for the two abutting surfaces are not precisely coincident (e.g.,if contours were generated by uniformly resampling polylines with cubic b-splines), there would be no hope of producing consistent triangulations across boundaries. Ultimately, what we need is an algorithm that will recognize and correctly maintain abutting surfaces, and that will be capable of producing shared surface patches between them. Separating surface algorithms <ref type="bibr" target="#b16">[17,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b22">23]</ref> offer just such a solution.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Algorithm Overview</head><p>In order to produce separating surfaces, we must first build a classified volume. That is, instead of building surfaces directly from contours, we take the novel approach of first voxelizing the con- There has been much previous research done on designing fast and accurate voxelization algorithms for converting polygonal models into volumes <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b6">7,</ref><ref type="bibr" target="#b8">9,</ref><ref type="bibr" target="#b9">10]</ref>. Those reports have focused on scan converting polyhedral or parametric models, and on developing methods with proofs of accuracy for those voxelizations. The work presented here is somewhat tangential. Rather than voxelizing polyhedral models to produce volumes, we are interested in voxelizing planar contours, and then from the voxelization extracting polyhedral models. Fortunately, voxelizing planar contours is very straight-forward and can be implemented using a standard graphics scan conversion algorithm. Because of this simplicity, the above voxelization research results are not required for our approach.</p><p>The premise for our scanline surfacing algorithm is that when building complex surfaces, it is much easier to scan convert the set of contours (as polygons) than it is to determine correspondences, tilings, and branchings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Input</head><p>Instead of constructing the surface two slices at a time for each structure independently, as is done with tiling, our algorithm processes all of the contours on one slice at a time. For each slice, all of the contours on that slice are rendered into the frame buffer.</p><p>Our scanline surfacing algorithm takes as input a list of features that have been manually contoured. For each feature, there is a list of slices that that feature appears in, and for each of its slices, there is a list of all of the contours for that feature in that slice. Each contour is composed of a list of (x, y) coordinates in a consistent polyline ordering (e.g.,clockwise). The only user-chosen parameters for the algorithm are the number of pixels per scanline, nx, and the number of scanlines, ny. To store the classified volume, our algorithm allocates an (nx × ny × nz) array of voxels, where nz is two greater than the number of input slices. (The outermost voxels of the volume function as the layer of padding needed for producing capped surface models.) </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Initialization</head><p>In order to retain classification information in the volume, the algorithm assigns classification numbers to each of the features before rendering them. The features are numbered from 1 to n, where features with higher indices correspond to features which are outside. One contour is considered outside of another if all of the inner contour's points are to the right as one traverses the outer contour in clockwise order. The sorting order of the features can either be provided by the user, or can be determined using quicksort with the inner/outer comparison operator described above. This sorting produces a "nesting" that is guaranteed to be acyclic. Features contained entirely inside of other features (such as ribs inside of the skin, or blood inside of the veins) have lower indices. We note that sibling relationships (features which share external boundaries, such as the prostate and sacrum) require no particular ordering. The final steps of our setup stage are to allocate an image buffer with (nx × ny) pixels, and to define an orthographic projection oriented with the image plane parallel to the slice and such that the minimum and maximum corners of the contour set's bounding box will project to the centers of pixels (1, 1) and (nx − 1, ny − 1), respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Slice Scan Conversion</head><p>Our scanline surfacing algorithm was implemented using the OpenGL graphics pipeline for scan conversion. Each slice of contours is transformed into a slice of our classified volume by rendering the contours as closed polygons and then reading the image buffer into a volume slice. Contours and their respective scan conversions are shown for a subset of the pelvic volume in <ref type="figure" target="#fig_7">Figure 9(a)</ref>, and for the angiography subvolume in <ref type="figure" target="#fig_0">Figure 1(c)</ref>.</p><p>To render each slice, our algorithm clears the image buffer and then scan converts the contours of that slice. Rather than rendering the contours in out-to-in order, our method renders each contour with its sorted index as its "color" value as well as its z-value, and relies on the z-buffer for sorting. After all of the contours for a slice have been rendered, the image buffer is copied into the classified volume.</p><p>The contours from the slice shown in <ref type="figure" target="#fig_1">Figure 2</ref> have been scan converted, resulting in the fully segmented slice shown in <ref type="figure" target="#fig_0">Figure 10</ref>. (The contours have been super-imposed in distinct colors for reference.) This process is repeated for all of the slices, resulting in the segmented volume shown in <ref type="figure" target="#fig_0">Figure 11</ref>. The 21 slice pelvic volume was reconstructed at 64 × 128 resolution in 1.78 seconds using an SGI O2 with a 300 MHz R5000 processor and CRM graphics. This timing included contour sorting, scan conversion, and reading back the frame buffer. As mentioned above, the surface generation time is essentially negligible when compared to the user-intensive time required to generate the initial planar contours.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Separating Surface Extraction and Smoothing</head><p>Having voxelized the planar contours, our algorithm must now extract the separating surfaces from the segmented volume. For volumes consisting of only two levels of classification (background material and non-abutting foreground features), an isosurface extraction algorithm such as Marching Cubes <ref type="bibr" target="#b12">[13]</ref> can be used. However, for more complex volumes in which features can be nested or can abut, a surfacing algorithm designed for classified volumes is required. An algorithm specifically designed for separating surface extraction was developed by Müller <ref type="bibr" target="#b16">[17]</ref> and independently by Nielson and Franke <ref type="bibr" target="#b17">[18]</ref>. This algorithm builds triangulated faces between homogeneous regions. As a preprocess, their algorithm transforms hexahedral voxels into tetrahedra. It then marches through each tetrahedron, building triangles for the separating surfaces by evaluating the classifications of the tetrahedron's nodes against a mask and a case table. Using this method, our algorithm extracts separating surfaces from the classified angiography subvolume in <ref type="figure" target="#fig_0">Figure 1(a)</ref>; the sacrum, prostate and rectum in <ref type="figure" target="#fig_7">Figure 9</ref>(b); and the full pelvis in <ref type="figure" target="#fig_0">Figure 11</ref>.</p><p>As a final step, our algorithm employs a constrained separating surface smoothing algorithm <ref type="bibr" target="#b22">[23]</ref> that relaxes the vertices with respect to their neighbors. Conceptually, an ellipsoid is centered at the original position of each vertex, such that the ellipsoids are packed together but do not overlap. The motion of each vertex as it is smoothed is constrained to remain within its ellipsoid. This constraint prevents nodes from crossing and thus prevents surfaces from interpenetrating. Smoothing the surfaces to best conform to the original contours remains a topic for future research. The final smoothed separating surfaces for the pelvis and blood vessels are shown in <ref type="figure" target="#fig_7">Figures 4, 9(c)</ref>, and 1(e). <ref type="figure" target="#fig_0">Figure 12</ref> shows a close-up of the triangulation of the pelvic bones in order to reveal the smooth, regular structure of the triangulation. The deviation between the original contours and cross-sections of the separating surfaces are due to two factors. First, the new vertices are located at the centers and edges of the scan converted pixels, and not at the locations of the original contour vertices. Second, the vertex positions move in order to produce a smoother surface. Thus, as the scanline resolution increases, the disparity between the original contours and cross-sections of the separating surfaces diminishes. A typical result is shown in <ref type="figure" target="#fig_0">Figure 13</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Discussion and Conclusion</head><p>By voxelizing the planar contours, we have gained straight-forward solutions to the traditional surfaces-from-contours subproblems of correspondence, tiling, and branching that were discussed in Section 2. Correspondence and branching are implicit in the connected components of the voxelization, and the tiling is produced by the separating surface extraction. We note that while these solutions are straight-forward, they do not always produce the desired result. Specifically, if corresponding features do not overlap in their scan conversions between consecutive slices, they will not be tiled together, and they may not even be identified as corresponding. In short, this algorithm is not robust against datasets which are exceedingly under-sampled between slices. Extensions to this algorithm which will generate interpolated z-slices is a topic for future research.</p><p>We also note that whereas traditional algorithms produce interpenetrating surfaces when presented with overlapping contours, our algorithm does not. This property is a direct result of using separating surfaces. While this is certainly a desirable characteristic for many applications, it is possible that it could be undesirable for others. In general, we believe that our method has utility beyond medical imaging, and it is a topic for future work to identify and evaluate other appropriate applications.</p><p>Unlike traditional methods, our algorithm does not preserve the original contour vertices or edges in the final surface. The original vertices are replaced with new approximating vertices located at the centers and edges of the classified voxels. By choosing a small enough pixel size (large enough nx and ny parameters), we can produce vertices that come asymptotically close to the original contour vertices. More important than duplicating the original vertices, though, is the ability to replicate features of the original contours. This can also be controlled by varying nx and ny, and in the case of feature reproduction there is a bound on how large nx and ny must be. Specifically, the upper-bound on a pixel's dimension is the diameter of the largest alpha-shape that can trace the minimal feature of interest <ref type="bibr" target="#b15">[16]</ref>. As we reduce the scan conversion pixel resolution in order to capture smaller features, our algorithm produces ever finer triangulations throughout the entire model. We note that regions which are tessellated too finely can be decimated with the constrained simplification method described in <ref type="bibr" target="#b22">[23]</ref>.</p><p>In conclusion, we have presented a fresh approach to solving a classic problem. By combining a standard scanline algorithm from computer graphics with separating surface methods, we have built a novel technique for efficiently generating robust surfaces from arbitrarily complex planar contour sets. Using this method, we have been able to automatically construct smooth, non-interpenetrating surfaces from sets of complex planar contours.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Stages of our scanline surfacing algorithm. From slices of raw data (a), an expert draws contours around features (b), which are scan converted into images (c). After stacking these images into a classified volume (d), separating surfaces are extracted and smoothed (e). (See also colorplate.)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Hand drawn planar contours of pelvic structures. Skin (red), left pelvis (green), right pelvis (dark blue), rectum (yellow), prostrate (cyan), and sacrum (magenta) have been segmented.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Planar contours outlining structures of interest are aligned in 3D. (See also colorplate.)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 3 .</head><label>3</label><figDesc>Figure 3. While manual segmentation can take hours of user time for a dataset like that shown in Figure 3, constructing surfaces from those contours (such as those in Figure 4) rarely requires more than a minute of CPU time on modern architectures. As such, it is of limited benefit to produce faster algorithms for constructing surfaces from contours. Rather, what matters more is that the surfacing algorithm produces a correct result. The traditional method for building triangulated surfaces from planar contours consists of solving three subproblems for each structure in the volume: correspondence, tiling, and branching [4, 6, 15, 21]. However, because these methods process the structures serially, rather than processing them simultaneously, they do not necessarily produce correct results for volumes in which surfaces abut. Full volumetric models, such as torso models, cranial models, or pelvic models are often comprised largely of such abutting surfaces. The human body is not comprised of well-separated, free-floating surfaces, but rather of tightly packed organs which often conform to one another's shapes. The surfaces are merely the boundaries between structures within the volume. When these surfaces are constructed from a segmented volumetric dataset (such as a tetrahedral mesh or a voxelized volume), they are termed separating surfaces [18]. Separating surfaces can be smoothed and simplified without producing spurious gaps or surface interpenetrations [23].</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 6 :</head><label>6</label><figDesc>Planar contours of blood vessels from the angiography dataset shown above. unacceptable tiling: a self-intersecting surface composed largely of triangle fans, as seen in Figures 7(c) and (d).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 7 :</head><label>7</label><figDesc>For the two simple contours shown in (a) and (b), a greedy tiling algorithm gets stuck in local concavities, producing the unacceptable tiling shown in (c) and (d). In contrast, our new scanline surfacing algorithm produces the reasonable tiling shown in (e) and (f).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 8 :</head><label>8</label><figDesc>Interpenetration at an abutting interface. If adjacent structures do not have the exact same contour points or tilings along abutting regions, interpenetrations (as seen here) or gaps between the structures can result. tours and then extracting separating surfaces from that voxelization. Our approach is illustrated with the angiography subvolume inFigure1. For each slice of the volume (a), contours are hand-drawn around blood vessels of interest (b). These contours are then scan converted into low-resolution images (c), which are stacked into a classified volume (d). At this point, the original contours are said to be voxelized. Extracting separating surfaces from the classified volume, we recover approximations to the true surfaces, which are then smoothed, resulting in the final surfaces shown in (e).In contrast to the unacceptable tiling produced by the traditional algorithm inFigures 7(c)and (d), our new scanline surfacing algorithm produces the reasonable output surface seen in Figures 7(e) and (f).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 9 :</head><label>9</label><figDesc>Sacrum (blue), prostrate (gray), and rectum (magenta). The contours of each feature are scan converted into image slices (a). These slices are then stacked into a volume (b), and the features are extracted and smoothed as separating surfaces (c).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure 10 :Figure 11 :</head><label>1011</label><figDesc>Scanline fill of all of the contours for a slice of the full pelvic models. Contours and filled regions are shown in different colors for visual contrast. (See also colorplate.) The scan converted images are stacked together, producing a classified volume of the pelvic dataset. (See also colorplate.)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Figure 12 :Figure 13 :</head><label>1213</label><figDesc>Close-up wireframe view of the smoothed pelvic surface. (See also colorplate.) A cross-section of the final smoothed separating surface superimposed on the original planar contours.</figDesc></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Acknowledgments</head><p>This work was supported in part by awards from the National Institutes of Health, and the National Science Foundation. The author would like to thank Gordon Kindlmann, Chris Johnson, Laura Traynor, and Helen Hu for their valuable comments and suggestions. The author would also like to extend special thanks to the reviewers for their constructive criticism and meticulous edits. The pelvic and angiography datasets were generously provided by Ismail Khalil Bustany from the Radiology Department at UCSF, and Dennis Parker from the CAMT at the University of Utah, respectively.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Shape reconstruction from planar cross sections. Computer Vision, Graphics, and Image Processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jean-Daniel</forename><surname>Boissonnat</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1988-10" />
+			<biblScope unit="volume">44</biblScope>
+			<biblScope unit="page" from="1" to="29" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Boundary Elements: An Introductory Course</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">A</forename><surname>Brebbia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dominguez</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1989" />
+			<publisher>McGraw-Hill</publisher>
+			<pubPlace>Boston</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">A three-dimensional display system for diagnostic imaging applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Larry</forename><forename type="middle">T</forename><surname>Cook</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Samuel</forename><forename type="middle">J</forename><surname>Dwyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Solomon</forename><surname>Iii</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyo Rak</forename><surname>Batnitzky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lee</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="13" to="19" />
+			<date type="published" when="1983-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">A triangulation algorithm from arbitrary shaped multiple planar contours</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">B</forename><surname>Ekoule</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">C</forename><surname>Peyrin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">L</forename><surname>Odet</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="182" to="199" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Accurate methods for the voxelization of planar objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Filippov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+		<idno>OSU-CISRC-2/97-TR08</idno>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+		<respStmt>
+			<orgName>Ohio State University</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Optimal surface reconstruction from planar contours</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Fuchs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><forename type="middle">M</forename><surname>Kedem</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">P</forename><surname>Uselton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page" from="693" to="702" />
+			<date type="published" when="1977-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">An accurate method for voxelizing polygon meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roni</forename><surname>Yagel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Vassily</forename><surname>Filippov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yair</forename><surname>Kurzion</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Volume Visualization</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="119" to="126" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Snakes: Active contour models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kass</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Witkin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Terzopoulos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal of Computer Vision</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="321" to="331" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">An algorithm for 3d scan-conversion of polygons</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arie</forename><surname>Kaufman</surname></persName>
+		</author>
+		<editor>G. Marechal</editor>
+		<imprint>
+			<date type="published" when="1987-08" />
+			<biblScope unit="volume">87</biblScope>
+			<biblScope unit="page" from="197" to="208" />
+			<pubPlace>North-Holland</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Efficient algorithms for 3D scan-conversion of parametric curves, surfaces, and volumes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arie</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics (SIGGRAPH &apos;87 Proceedings)</title>
+		<editor>Maureen C. Stone</editor>
+		<imprint>
+			<date type="published" when="1987-07" />
+			<biblScope unit="page" from="171" to="179" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Approximating complex surfaces by triangulation of contour lines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Keppel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IBM Journal of Research and Development</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="2" to="11" />
+			<date type="published" when="1975-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Geometric Model Extraction form Magnetic Resonance Volume Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">H</forename><surname>Laidlaw</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+		<respStmt>
+			<orgName>California Institute of Technology</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Marching cubes: A high resolution 3d surface construction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="163" to="169" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Level set methods for curvature flow, image enhancement, and shape recovery in medical images</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Malladi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Sethian</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of Conf. on Visualization and Mathematics</title>
+		<editor>H.-C. Hege and K. Polthier</editor>
+		<meeting>of Conf. on Visualization and Mathematics<address><addrLine>Heidelberg</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer-Verlag</publisher>
+			<date type="published" when="1995-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Surfaces from contours</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Meyers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shelley</forename><surname>Skinner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenneth</forename><surname>Sloan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="228" to="258" />
+			<date type="published" when="1992-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Introducing alpha shapes for the analysis of path integral monte carlo results</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Moran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wagner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Conference on Visualization</title>
+		<editor>R. Daniel Bergeron and Arie E. Kaufman</editor>
+		<meeting>the Conference on Visualization<address><addrLine>Los Alamitos, CA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1994-10" />
+			<biblScope unit="page" from="52" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Modelling and Planning for Sensor Based Intelligent Robot Systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Heinrich</forename><surname>Müller</surname></persName>
+		</author>
+		<idno>566</idno>
+		<editor>H. Bunke, T. Kanade, H. Noltemeier</editor>
+		<imprint>
+			<date type="published" when="1995-01" />
+			<publisher>World Scientific Publ. Co</publisher>
+		</imprint>
+		<respStmt>
+			<orgName>University of Dortmund</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+	<note>Boundary extraction for rasterized motion planning</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Computing the separating surface of segmented data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">M</forename><surname>Nielson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Franke</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;97</title>
+		<imprint>
+			<publisher>IEEE Press</publisher>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="229" to="233" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Surface definition for branching, contour-defined objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Shantz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="242" to="259" />
+			<date type="published" when="1981-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">The correspondence problem: Reconstruction of objects from contours in parallel sections. Master&apos;s thesis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marie</forename><surname>Shelley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Skinner</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1991" />
+		</imprint>
+		<respStmt>
+			<orgName>University of Washington</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Pessimal guesses may be optimal: A counterintuitive search result</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kenneth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><surname>Sloan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Painter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Pattern Analysis and Machine Intelligence</title>
+		<imprint>
+			<date type="published" when="1988-11" />
+			<biblScope unit="page" from="949" to="955" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Surface reconstruction and representation of 3-D scenes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><forename type="middle">F</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">K</forename><surname>Aggarwal</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Pattern Recognition</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="page" from="197" to="207" />
+			<date type="published" when="1986" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Separating surfaces: Extraction, smoothing and simplification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">M</forename><surname>Weinstein</surname></persName>
+		</author>
+		<idno>UUCS-00-009</idno>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+		<respStmt>
+			<orgName>University of Utah</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Statistical intensity correction and segmentation of MRI data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">M</forename><surname>Wells</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E L</forename><surname>Grimson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kikinis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">A</forename><surname>Jolesz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization in Biomedical Computing</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="13" to="24" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Surface construction from planar contours</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><forename type="middle">J</forename><surname>Zyda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Allan</forename><forename type="middle">R</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patrick</forename><forename type="middle">G</forename><surname>Hogan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers and Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="393" to="408" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,1354 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/kermitt2/grobid/master/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">DIEL: Interactive Visualization Beyond the Here and Now</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName><forename type="first">Yifan</forename><surname>Wu</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Remco</forename><surname>Chang</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Joseph</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Arvind</forename><surname>Satyanarayan</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Eugene</forename><surname>Wu</surname></persName>
+						</author>
+						<title level="a" type="main">DIEL: Interactive Visualization Beyond the Here and Now</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<idno type="MD5">59309188FEE308444704A4F0A70CA544</idno>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.7.1" ident="GROBID" when="2022-06-13T13:57+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Interactive Visualization Toolkit/Library</term>
+					<term>Scalability</term>
+					<term>Asynchrony</term>
+				</keywords>
+			</textClass>
+			<abstract>
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>Interactive visualization design and research have primarily focused on local data and synchronous events. However, for more complex use cases-e.g., remote database access and streaming data sources-developers must grapple with distributed data and asynchronous events. Currently, constructing these use cases is difficult and time-consuming; developers are forced to operationally program low-level details like asynchronous database querying and reactive event handling. This approach is in stark contrast to modern methods for browser-based interactive visualization, which feature high-level declarative specifications. In response, we present DIEL, a declarative framework that supports asynchronous events over distributed data. As in many declarative languages, DIEL developers specify only what data they want, rather than procedural steps for how to assemble it. Uniquely, DIEL models asynchronous events (e.g., user interactions, server responses) as streams of data that are captured in event logs. To specify the state of a visualization at any time, developers write declarative queries over the data and event logs; DIEL compiles and optimizes a corresponding dataflow graph, and automatically generates necessary low-level distributed systems details. We demonstrate DIEL's performance and expressivity through example interactive visualizations that make diverse use of remote data and asynchronous events. We further evaluate DIEL's usability using the Cognitive Dimensions of Notations framework, revealing wins such as ease of change, and compromises such as premature commitments.</p></div>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Recent advances have made authoring browser-based interactive visualizations quite simple, via novel abstractions for specifying encodings <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b54">56]</ref>, layout, data transformations, and interactions <ref type="bibr" target="#b42">[44,</ref><ref type="bibr" target="#b44">46]</ref>. Critically, these abstractions enable declarative specification: developers can compose these visualization elements and defer execution concerns to the toolkit runtime. Declarative abstractions thus enable developers to build and iterate on designs quickly and expressively, while reducing the errors that would arise from imperative implementation <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b44">46]</ref>. However, these abstractions do not gracefully support use cases where data may be distributed across multiple locations, or where events cannot be synchronously handled to completion. To illustrate, we discuss two interactive visualization settings-one quite traditional and another more complex-and reflect on the difficulty of addressing these issues with current practices.</p><p>Consider the client-server architecture, a classical design for scalable interactive visualizations that remains common even in recent research <ref type="bibr" target="#b29">[30,</ref><ref type="bibr" target="#b30">31]</ref>. A concrete example is shown in Fig. <ref type="figure" target="#fig_0">1</ref> 1 , where the brush selection over the scatterplot is computed by a remote database. To handle the brush selection, a developer can no longer rely on existing declarative abstractions (e.g., Vega-Lite's selections <ref type="bibr" target="#b42">[44]</ref>) alone. Instead, they must now translate interaction logic from a visualization specification to the query language of the database, network with the remote database, and manually bookkeep the provenance of interactions and database responses to ensure that the interface is displaying the correct results, in the correct order, in the face of non-deterministic processing latency.</p><p>A more specialized example is streaming data, increasingly investigated in research <ref type="bibr" target="#b24">[25,</ref><ref type="bibr" target="#b51">53,</ref><ref type="bibr" target="#b60">62]</ref> and industry <ref type="bibr" target="#b62">[64]</ref>. An example is shown in Fig. <ref type="figure" target="#fig_0">1</ref> 2 , where the points can be streamed in the scatterplot and selected by a brush interaction. The two processes -the user's brushing interaction, and the tweet stream -introduce ambiguity about what should happen when both attempt to update the visualization concur-   <ref type="bibr" target="#b0">(1)</ref> data may not fit into the browser and thus lives in a remote database, and/or (2) events, including user interactions and data updates from servers, need to be evaluated asynchronously. Concretely, 1 shows interactions taking time to process, creating asynchrony between interactions and result updates (see Fig. <ref type="figure" target="#fig_4">4</ref> for details). 2 shows data updating in real time as the user is interacting with a visualization. <ref type="bibr" target="#b2">3</ref> shows an example collaboration experience <ref type="bibr" target="#b32">[33]</ref>; 4 shows a visualization of past interactions to curate "information scent" (see Fig. <ref type="figure" target="#fig_9">9</ref>). rently. For instance, consider the case when a new point streams in, falling within a brushed region. Should this new point be part of the existing selection, or should it be isolated in a new separate selection? Should the new point be blocked until the user removes the brush selection, or should the point be added and the brush selection removed? These decisions can be further complicated if the brush selection is processed by a remote server, which introduces another asynchronous event that multiplies the complexity.</p><p>For a designer to explore decision space fluidly <ref type="bibr" target="#b16">[17]</ref>, we want to to minimize the friction of experimenting with these choices. But distributed and streaming visualizations still have a high programming barrier, despite progress on declarative libraries for browser-based data visualizations. The effect is that designers get "cornered" into whatever is easiest: for example opting for a high-latency blocking design, or disallowing users from interacting with streaming data, purely for ease of implementation rather than superior usability. To improve design fluidity in these use cases, we identify two key abstractions that are missing from existing interactive visualization frameworks: Distributed Data. Data is increasingly distributed at different compute nodes Traditionally, this was across multiple database servers hosting a large dataset, however user-facing applications increasingly distribute data across browser threads, and across browser state and remote databases as well. As such, developers currently need to write code to access the data, which they often need to further optimize. Our goal is to develop abstractions that (1) free developers from sending data manually between local and remote processes, (2) allow developers to easily change their data storage and compute sources (e.g., between the main browser thread, a WebWorker <ref type="bibr" target="#b31">[32]</ref>, a local database, or cloud databases) without rewriting their application code, and <ref type="bibr" target="#b2">(3)</ref> unobtrusively perform low-level optimization (e.g., caching). Asynchronous Events. When data is local on one client, user interactions are the only events that a developer has to work with. Thus, computation caused by interactions, such as filtering data based on a selection, can be handled synchronously. However, when data is remote, asynchronous events are the norm: responses from a server, streaming data from real-world events, or events generated by other users. These asynchronous events are outside of the application's direct control and, thus, have to be handled as they arrive. Our goal is to develop abstractions and a library that allow developers to (1) create consistent user experiences in the face of concurrency and out-of-order execution, and (2) easily experiment with different designs for handling asynchronous events.</p><p>To effectively work in this new paradigm of distributed data and asynchronous events, we adapt two patterns from the field of distributed systems programming: Logical Constraints. Rather than imperatively manipulating data, developers express logical constraints (i.e., queries) over data, and the system determines the methods used to execute the queries <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b38">40]</ref>. By decoupling the how from the what, logical constraints allow the system to plan and optimize the execution of the query (possibly spanning multiple databases) <ref type="bibr" target="#b38">[40]</ref>, relieving the developer of this burden. This approach also has practical implications. In particular, SQL and dataframe libraries express logical constraints over data, and have been widely adopted by developers and database engines <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b34">35,</ref><ref type="bibr" target="#b47">49]</ref> alike. Immutable Events. Past events, along with their time steps, are stored as an immutable log by the system. Developers declare the current state of the application as a logical constraint over the immutable log rather than transiently handling events and mutating state via side effects <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b18">19]</ref>. As a result, developers can coordinate events declaratively without worrying about how to update the application state through callbacks over transient events.</p><p>In this work, we bring these ideas from distributed systems programming to the context of interactive visualization. DIEL 1 models interactions and asynchronous data computation events as timestamped records in event tables, and the state of the interface as a query over the event tables and data tables. The DIEL runtime maintains an event loop to reevaluate queries as event tables change, ensuring that the interface is responsive to interactions. With DIEL, we are able to achieve the requirements outlined earlier -developers no longer need to implement low-level networking with remote databases or perform optimizations, and have a way to easily coordinate asynchronous events that maintain a consistent interface.</p><p>To evaluate DIEL's expressiveness, we construct a diverse set of interactive visualizations over distributed data and asynchronous time. Examples include ways to handle request-response asynchrony <ref type="bibr" target="#b57">[59,</ref><ref type="bibr" target="#b59">61]</ref>, interactions on streaming data, composing two related interactions, and interaction scents <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b55">57]</ref>. These examples show that DIEL's abstractions allow developers to rapidly and concisely explore different interface designs. We also present a heuristic analysis of the usability of these abstractions using the Cognitive Dimensions of Notation framework <ref type="bibr" target="#b4">[5]</ref>, highlighting both gains to fluidity, and compromises to premature commitment. Finally, we verify the viability of DIEL through performance measurements of a prototype, and show that DIEL adds low overhead and scales as data increases in size.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>DIEL builds on prior work in databases, visualization systems, and distributed systems programming. 1 </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Declarative Interaction Event Log</head><p>Database and Visualization Systems. Research at the intersection of visualization and database systems has traditionally focused on enhancing performance -for instance, by offloading data aggregation and filtering to a remote database <ref type="bibr" target="#b29">[30,</ref><ref type="bibr" target="#b49">51]</ref> or by embedding a highperformance database-like query engine into the browser <ref type="bibr" target="#b42">[44]</ref>. In contrast, our work is not motivated primarily by performance but instead by the programming experience of visualization developers. Although DIEL embeds a SQL query engine in the browser, it does so for its benefits as a programming construct, and its ability to interoperate with a remote database. Critically, DIEL is agnostic to the specific database system, which could range from a SQLite instance in the browser's main thread <ref type="bibr" target="#b26">[27]</ref>, to commonly used databases on a server, such as SQLite, Postgres <ref type="bibr" target="#b34">[35]</ref>, or new research systems <ref type="bibr" target="#b25">[26,</ref><ref type="bibr" target="#b37">39]</ref>.</p><p>FORWARD is a general web application programming framework that directly binds database records and query results to DOM elements <ref type="bibr" target="#b14">[15]</ref>. DIEL is similar in that it manages how elements in the visualization are updated based on changes in the underlying database that represents user interactions. However, DIEL uniquely addresses the challenges of asynchronous events, which are shown to be especially challenging for interactive visualizations <ref type="bibr" target="#b59">[61]</ref>. DIEL does so through a novel declarative programming API over event histories. Visual Programming over Tables. There is a close connection between visual querying and textual queries -visual querying systems combine textual query specification with direct manipulation and data visualization. For instance, VIQING maps visual selections, joins, and reordering to SQL operators <ref type="bibr" target="#b33">[34]</ref>. Polaris endowed the pivot operator with powerful interactive capabilities <ref type="bibr" target="#b49">[51]</ref>. Wrangler brings together interactions and a query based DSL for data transformations <ref type="bibr" target="#b22">[23]</ref>. Many commercial tools, such as Trifacta, Tableau, and Microsoft Power BI/Query, provide a combination of these capabilities.</p><p>Beyond the connection between queries and interactive visualization, Psallidas and Wu demonstrated the application of query lineage in interactive visualizations <ref type="bibr" target="#b36">[38]</ref>. Also leveraging lineage, B2 instruments interactive cross-filtering visualizations in computational notebooks <ref type="bibr" target="#b58">[60]</ref>. DIEL builds on these close connections using relational queries to define the data transformation logic of interactions. However, DIEL differs from these systems in that it is a programming abstraction for a middleware layer designed to support general purpose interactive visualization programming. Interactive Visualization Libraries. While DIEL makes use of interactive visualization libraries, such as D3 <ref type="bibr" target="#b5">[6]</ref> and Vega <ref type="bibr" target="#b42">[44]</ref>, it is not one itself. DIEL relies on the front-end visualization libraries to map data to visual encodings, perform visualization-specific transformations (such as voronï, treemap, or wordcloud [37]), create interactors, and capture selection values. Existing abstractions in these libraries support interactions in a synchronous setting where the computation is expected to finish immediately. As a result, the events are also transient by default and assumed to be unnecessary for subsequent events. In contrast, DIEL supplements existing frontend visualization libraries by filling in the gap of working with distributed data and asynchronous events. Of particular note is how DIEL differs from Vega, which also models interaction events as streaming data. Like other libraries, events in Vega are transient by default and, although a rich set of data transformations are offered, they only operate over client-side data. DIEL, on the other hand, records all events into a persistent log and offers a simple set of relational abstractions over distributed data. Future research could consider how to further extend Vega's dataflow abstractions <ref type="bibr" target="#b43">[45,</ref><ref type="bibr" target="#b44">46]</ref> to better integrate with, or adopt DIEL's abstractions. Frameworks for Provenance and Asynchrony. With current programming paradigms, developers need additional instrumentation to support features like logging or undo/redo. For example, Trrack is a purpose-built library that augments existing interactive visualizations with a provenance graph of state history <ref type="bibr" target="#b11">[12]</ref>. DIEL, in contrast, offers a more general-purpose set of abstractions which provide provenance tracking via first-class event histories.</p><p>Similarly, to be able to share and synchronize multiple users' changes over the network, programmers of collaborative groupware applications rely on special-purpose frameworks. Toolkits such as Janus help developers resolve concurrent and possibly conflicting events to ensure that each participant views a consistent artifact <ref type="bibr" target="#b45">[47]</ref>. DIEL takes inspiration from these systems, e.g., the time-stamped events in Janus <ref type="bibr" target="#b45">[47]</ref>, but also adds specialization for interactive visualizations, such as providing support for working with distributed data and tracking request-response provenance. DIEL was directly inspired by distributed programming language research, notably the Bloom <ref type="bibr" target="#b1">[2]</ref> language and CRDT <ref type="bibr" target="#b35">[36]</ref> data structures. Like Bloom, DIEL focuses on the semantics of atomic timesteps immediately after the user interacts, helping developers reason about out-of-order events. DIEL differs from the prior work in its focus on reifying a log of history as a core aspect of its data model. Reactive Programming. Reactive Extensions (Rx) is a widely-used example of a Functional Reactive Programming (FRP) library, which coordinates event-based and asynchronous computations such as mouse moves and high-latency calls to Web services <ref type="bibr" target="#b28">[29]</ref>. Vega <ref type="bibr" target="#b44">[46]</ref> and Bloom <ref type="bibr" target="#b1">[2]</ref> also follow the model of reactive programming. DIEL takes inspiration from these libraries, implementing reactive programming semantics. Meijer's article about Rx, Your Mouse is a Database <ref type="bibr" target="#b28">[29]</ref>, informed our formulation of user events as record insertions into tables.</p><p>However, compared to Rx, DIEL has a much more restrictive model targeted at visual analytic applications. Unlike Rx, DIEL does not support general purpose applications but provides domain specific functionalities for the use cases in interactive visualization. One could implement DIEL-like logic as a specialized design pattern in an FRP language like Rx but doing so would involve implementing the distributed query execution logic that DIEL provides, which is not a casual task for a visualization developer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">PROGRAMMING INTERACTIONS ACROSS SPACE &amp; TIME</head><p>To address the challenges of asynchronous events and distributed data, we look to distributed systems programming for inspiration and adapt the ideas to interactive visualization programming.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Asynchronous Interactions: Immutable Events</head><p>Asynchronous events, unlike their synchronous counterparts, need to be coordinated by developers to ensure a good user experience <ref type="bibr" target="#b59">[61]</ref>. This coordination can be challenging as developers need to maintain relevant information of past events and selectively trigger event handlers. And, since different parts of the event handling and bookkeeping logic are scattered across functions and variables, these imperative bookkeeping and callbacks can become tedious to maintain and prone to errors. This situation is exacerbated when new types of events need to be supported (e.g., a new interaction). To address these challenges, we look to key methods in distributed systems programming. Events as Data. An important technique in distributed systems programming is making events immutable and first class <ref type="bibr" target="#b18">[19]</ref>. Events are stored as a log, and the state after each event is defined as a function (or query) of the log <ref type="bibr" target="#b0">[1]</ref>. This design abstracts away the details of maintaining state (no more mutations with callbacks) and makes it easier to reason about the consistency of the application <ref type="bibr" target="#b1">[2]</ref>. We can apply this framing directly to interactive visualizations: user interactions are events, and queries over these events (and other tables) can specify the state of the interface. Atomic Timesteps. Compared to synchronous events, asynchronous events can, by definition, arrive out of order. This behavior can lead to a variety of "inconsistent" visualization states, as documented by Wu et al. <ref type="bibr" target="#b59">[61]</ref>. One simple example is naively rendering a response when it is received, even if it is for an "old" interaction made prior to the most recent one. To deal with unpredictable sequences of events, developers need to reason about what prior events occurred, and when they did so.</p><p>Given this challenge of inconsistency, one obvious solution is to synchronize the events. However, this solution violates a core HCI principle: responsiveness <ref type="bibr" target="#b19">[20,</ref><ref type="bibr" target="#b20">21]</ref>. Making events synchronous means that the user is blocked from performing new interactions until their previous interaction result has been executed completely (including being sent to the server, computed on the server database, received by the client, and rendered to the UI). As this process can take a significant amount of time to complete, making the interface unresponsive yields a frustrating user experience.</p><p>To maintain a smooth user experience, it is important to work with asynchronous events. Here, one idea from distributed programming is particularly helpful: atomic timesteps <ref type="bibr" target="#b1">[2]</ref>, whereby the system guarantees an atomic unit of evaluation by computing the state of the application in full before admitting another input event. With atomic timesteps, developers reason independently, "frame by frame", about what computation needs to be computed synchronously within a given timestep. Moreover, developers can reference the explicit timesteps stamped on events, with the guarantee that an event with a smaller timestep precedes an event with a larger timestep. Finally, developers can be sure that the interface satisfies the constraints specified at every timestep, which could support robust UX in the face of asynchrony.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Distributed Data: Logical Constraints</head><p>To be able to scale an interactive visualization application, a developer must be able to flexibly change where the data is stored and computed upon. They may initially build a prototype over small datasets that are stored and computed in the main thread of the browser. To use a larger dataset, they may utilize WebWorkers <ref type="bibr" target="#b31">[32]</ref>, which allow the datarich tasks to run asynchronously in the background and not block the interface. Then, as the developer deploys the application to real-world datasets, they may move the computation to a database on their local machine or a cloud database.</p><p>To achieve this flexibility, the system should abstract data access details from developers. The field of databases has tackled this problem using a concept that is not unfamiliar to interactive visualization developers: relations (also called tables). Relations are sets of data tuples with a fixed schema, and computation over relations is governed by an algebra of select, project, join, and group by operators <ref type="bibr" target="#b8">[9]</ref>. Relational query languages bring with them two important properties for our purposes: Physical Data Independence. Currently, to change from storing and computing data in the main browser thread to any other options requires custom code: developers may need to map interaction logic from JavaScript to SQL, handle the database connection, and perform networking. This work is needed for two reasons. First, developers often specify how to access the data. If the data location changes, the program changes. Second, the computation abstractions on the client and other locations may be different. Relational languages can address both of the factors. They allow developers to specify what data to access, making the program independent from the physical details of the data. Furthermore, if a standard relational language is used everywhere, be it the client, a WebWorker thread, or a remote database, the developer can work with one abstraction and not have to translate between specifications. Rich Optimization Currently, developers may implement optimizations manually, such as caching. This is not ideal for two reasons: one is a higher programming barrier, and another is that the developer may not have enough time for more involved optimizations beyond a simple cache. Having relational abstractions over both the client and the server can relieve the optimization burden from the developer and allow the system to compile the logical specification into a physical execution plan, using a wealth of optimization techniques <ref type="bibr" target="#b38">[40]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">THE DIEL MODEL</head><p>To address the challenges in Section 1, DIEL manages user interactions, remote databases, and the communication between local and remote. On the browser frontend, the developer specifies the data that the user can interact with and select (e.g., using Vega-Lite <ref type="bibr" target="#b42">[44]</ref>) and translates them into events that are sent to DIEL via its JavaScript API. DIEL stores events in the local in-browser local database and manages query processing on the remote databases, which are connected to DIEL through a set of remote-side APIs. Through standard database connection libraries such as node-postgres and sqlite3, DIEL allows the developer to connect to remote databases ranging from SQLite, to PostgreSQL, to cloud databases like Amazon Redshift.</p><p>Note that remote databases and their asynchronous complexities can arise in surprising settings. In addition to databases on remote servers (such as Redshift), remote databases also arise when data is  Frontend rendering and event capture</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Remote DBs</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">E</head><p>The top half is a graphical representation of an example interactive visualization implemented using DIEL, which sits between the database and the browser client.</p><p>The bottom half is the actual DIEL code and APIs used, both for the client and server. The letters correspond between the numbered boxes.</p><p>Fig. <ref type="figure">2</ref>: Example code using DIEL to power the interactive visualization of wild fires in the US. The user can click on a US state to filter the distribution of fires over the years 3 . To create this visualization, developers use DIEL in conjunction with data visualization libraries and remote databases 1 . Developers query over timestamped event logs (selection) and base dataset (fire) to specify the state of the application (a logical spec 5 ), and DIEL orchestrates the computation between the local and remote databases (an execution plan 2 ). managed by a different process on the user's computer. For instance, browser WebSockets communicate with the web page's main thread via asynchronous messaging. For this reason, DIEL is designed to work for any distributed database setting, irrespective of whether the databases are on the cloud.</p><p>The developer provides a specification that DIEL uses to coordinate query processing between the local and remote databases. The specification defines the application state that DIEL will manage, and is written in a SQL-like language. We chose SQL as the basis because it is the most widely used data processing languages today <ref type="bibr" target="#b48">[50]</ref>, and is familiar to developers working with large datasets. However, DIEL is not tied to SQL, and alternative relational languages. It is straightforward to layer a dataframe-like API atop DIEL's abstractions. Given the specification and runtime API calls, DIEL coordinates the local and remote database to exchange data and query results. The query results then update visualization state back to the application via a JavaScript API so that it can render results and update the visualizations.</p><p>We next discuss how developers specify different types of application state, and how it is managed during run time. Fig. <ref type="figure">2</ref> depicts the running example, and Tables <ref type="table" target="#tab_4">1 and 2</ref> summarize the syntax.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Data Model</head><p>Static Visualizations Static visualization is a well-accepted domain, where tabular data is fed to APIs that implement a grammar of graphics <ref type="bibr" target="#b42">[44,</ref><ref type="bibr" target="#b54">56]</ref>. For static visualization, DIEL is responsible for preparing the data to be rendered, and invoking the visualization API when the data is ready. The tables used to create visualizations could either be stored tables or the results of queries. For instance, in Fig. <ref type="figure">2</ref>, the map visualization maps the fields (us state, count) from the query result in (5B) to polygons and fill color in the visualization. When the application is first loaded, DIEL evaluates the initial queries to render the static visualizations. Using the BindOutput API (6C), the developer registers a callback rendering function that is called when the query results are updated. The developer annotates the queries that the rendering function will access using the OUTPUT keyword. The system uses the information to inform the dataflow as well as instrument the BindOutput API. Events DIEL stores events as timestamped tables. When the developer defines visualization interactions, such as selections, the data records that are selected are ingested into DIEL through the NewEvent API and stored in tables. For instance, the selection on the map (3A) is mapped via a Vega listener (6A) and stored in the selection  a single column, us state, representing the state selected, e.g., "CA". An event may be one or more rows. At runtime, each new event is augmented with a logical timestep, which we discuss in Section 4.2 , and a physical timestamp, recording the wall-clock time of the event. Other external events, such as those generated from an automated process in the browser on behalf of the user (e.g., timers), follow the same model.</p><p>Developers mark event tables with the EVENT keyword (5A). DIEL generates the corresponding JavaScript handler for the API NewEvent. Developers are free to use their favorite frontend libraries (e.g., Vega-Lite, D3) to generate events; they simply invoke the DIEL API to store new events in the event table. Interactive Visualizations User interactions add events to DIEL event tables that ultimately update the visualizations. This happens naturally because the developer can query the EVENT tables in the same way as any normal data table. Any such queries marked with OUTPUT will automatically generate the corresponding BindOutput API to register a rendering function callback (used in e.g., 5C).</p><p>When a developer is working with a remote database, they need to query across both the local and the remote databases. For instance, the fires table is on a remote database, whereas selection is in the local database. DIEL automatically manages the asynchronous communication between the two databases. Due to this asynchrony, we treat such queries as events as well, and ask developers to explicitly mark these queries with EVENT VIEW so they are aware of the table being an event log (despite the fact that DIEL can automatically detect them). For EVENT VIEW, DIEL maintains the corresponding timesteps of the event that caused its reevaluation, and stores the timestep values as a column named request timestep in the EVENT VIEW. Developers then use the data in EVENT VIEWs to specify OUTPUTs, with the help of the timesteps to specify how asynchronous events should be handled in the face of out-of-order events.</p><p>For example, the line chart in Fig. <ref type="figure">2</ref> (3C) visualizes the distribution of fires by year. The query in (5D) fetches the distribution of fires based on the us state selected: it combines the fires and selection event tables using the JOIN operator, and then filters the rows in fires by applying the filter on the selected us state selected using the JOIN...ON operator. (5C) is a query that selects the year distribution results of the most recent interaction based on the timestep data. This ensures that the interface displays the correct data despite out of order responses.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">DIEL Execution</head><p>DIEL orchestrates the local database and one or more remote databases in response to new events. Each event is evaluated synchronously in the local thread, corresponding to one logical timestep. As a result, the application-level effects of events with more recent logical timestamps are guaranteed to occur after events with earlier logical timestamps. From the perspective of the local database, user interactions and responses from remote databases are both events, however they are handeled slightly differently, as described in Fig. <ref type="figure" target="#fig_3">3</ref>. Interaction Event: The application creates new events from user interactions (1a), and inserts them into the corresponding EVENT TABLE using the NewEvent API call (1b). DIEL re-computes the local OUTPUT tables, and triggers the corresponding render function callbacks (1c). Finally, DIEL handles any EVENT VIEWs that depend on the new event.</p><p>If it accesses remote data, DIEL first sends the appropriate query to the remote database and handles the response as described below (1d). Otherwise, DIEL executes the local EVENT VIEW query. Data Response Event: Once the local DIEL runtime receives a response from a remote database (2a), which is tagged with the originating event's timestep, it calls NewEvent to insert it into the EVENT VIEW. Finally, the OUTPUTs are reevaluated, and the results are sent to the application rendering functions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">A PROTOTYPE IMPLEMENTATION OF DIEL</head><p>To verify the feasibility of the DIEL model, we implemented a prototype. It ingests a DIEL specification and produces a distributed dataflow that is executed in conjunction with the frontend JavaScript libraries and backend databases. There are two main challenges in this process. First, queries over distributed data cannot be executed directly since the computation requires data to be co-located. Second, the DIEL model poses performance challenges.</p><p>An implementation should both create a dataflow such that necessary data is exchanged between the local and remote databases, and overcome these performance hurdles to keep the interface responsive. As such, DIEL builds the distributed dataflow in four phases. The first three phases address the challenge of distribution, and the last phase address the challenge of performance.</p><p>Two libraries manage these steps: (1) a local (browser-based) library updates the JavaScript state, and (2) a remote library configures access to the remote database. The developer provides these respective libraries with the connection configurations (e.g., Fig 2 <ref type="figure" target="#fig_6">4 and 6</ref> ).</p><p>In the first step, DIEL parses and compiles the specification into an abstract syntax tree that captures the relational operations between tables. The tree diagrams in Fig. <ref type="figure">2</ref> 2 (left) illustrates that of the running example. With the tree of operators, DIEL can now reason about the data exchange needed to co-locate tables for evaluation.</p><p>To reason about the exchange, DIEL next identifies the tables and their schema in the remote databases, i.e. a table catalog. Then, with the catalog, DIEL identifies queries that involve tables on both the local and remote databases. DIEL determines, for such queries, what data need to be exchanged between these databases. This process transforms the high-level logical specification into a distributed dataflow that can now be executed.</p><p>An example of such a transformation done by the current prototype is shown in Fig. <ref type="figure">2</ref> 2 (right). DIEL decides to perform the evaluation of yearDistributionEvent on the remote database, thus requiring the selection table to be sent over the network to the remote database from the local database, and the result yearDistributionEvent to be sent over the network from the remote to the local database. The output yearDistribution is then evaluated within the local database upon each step. Note that this is not the only distributed dataflow possible. Alternative implementations of DIEL could instrument more advanced algorithms that can further optimize for performance by changing what data needs to be shared over the network. One example is to partition the execution of queries into more granular subqueries, and another is to leverage WebWorkers on the local client to parallelize compute.</p><p>In the final phase, DIEL optimizes the physical execution plan from the previous step. Four mechanisms are used. 1. Selective output invocation. Interactive dashboards often contain multiple visualizations, and sometimes ones with many visual elements that are expensive to render. A naive plan will reevaluate all the queries and re-render all the visual marks, which could block the main browser thread from responding to user events. To address this issue, the DIEL prototype analyzes the execution plan and builds a dependency graph of the DIEL queries. Using the dependency graph, DIEL selectively evaluates and invokes rendering functions for only the output views dependent on the current event.</p><p>This issue can be addressed via static analysis of DIEL queries at compile time. From the queries, we can extract dependencies across queries, views and tables syntactically. For example, in Fig. <ref type="figure">2</ref>, there are two outputs-stateDistribution and yearDistribution. Looking closely at 2 2 , note that selection "flows into" yearDistribution, but does not flow into stateDistribution. This reflects the syntax of those outputs in 2 <ref type="bibr" target="#b4">5</ref> , where selection appears only in the definition of yearDistribution. Using this information, DIEL knows to selectively update yearDistribution when there is a new user interaction (selection).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Materialized intermediate views.</head><p>One interaction can require updating multiple visualizations. Data transformations are sometimes shared when computing these updates. For instance, the filtered view in Fig. <ref type="figure" target="#fig_5">5</ref> is shared by two outputs. Since views are just named queries in SQL, this can lead to redundant work: whenever the database evaluates any query that references a view, the view is reevaluated as part of the query. This wasteful reevaluation can be prevented if the view results are materialized into a table for use by downstream queries <ref type="bibr" target="#b7">[8]</ref>. For materialized views to work correctly, they must be updated appropriately when the data they query changes. We tackle this problem pragmatically in our prototype: we implement update mechanisms for views in the our local database code; for remote databases, we count on their native support for materialized view maintenance. 3. Automatic caching. Developers often build a client-side cache by hand to amortize the compute and network time to a server. For any given specification, DIEL can automatically instrument this functionality, thus saving the developers' time. The server response data are already stored in the event log. To make use of the past values, DIEL analyzes the execution plan at this stage and instruments a layer of indirection to the evaluation of the EVENT VIEWs when a new event arrives: DIEL hashes the parameters of the relevant rows of the event tables and looks up the hash in an event cache table instrumented by DIEL. If the hash is present, DIEL returns that value, and if not, DIEL dispatches the dataflow. DIEL's automatic caching process saves storage by not having multiple copies of the responses, which is especially limited on the client. In addition to helping save the developers' time, DIEL's automatic caching process also alleviates the additional memory usage caused by DIEL's log of events. 4. Automatic Index Selection. Good database performance is typically tied to building indexes that suit query workload. For a given DIEL program, this workload is known in advance as part of the spec, hence DIEL analyzes the query structure to statically determine indexes that will result in good performance.</p><p>Besides optimizing the dataflow, we also optimized the execution speed of the local database. Unlike the remote databases, the implementation of the local database is controlled by DIEL. The local database runs in the browser's main-thread and any delay would directly block user interactions and HTML updates. Therefore, it is critical that the local database executes quickly. We make use of a recent advance in browser technology, WebAssembly <ref type="bibr" target="#b52">[54]</ref>. It provides fast execution of SQLite in the browser by compiling C code to WebAssembly.</p><p>The above highlights the most novel aspects of the prototype implementation. Other details, such as the full DIEL syntax specification, along with additional language features discussed in Section 8, are detailed in supplementary materials.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">EVALUATING DIEL'S EXPRESSIVITY</head><p>To assess the benefits of DIEL, we show examples of interactive visualizations that deal with the variety of challenges that arise when managing asynchrony and distribution, including coordinating responses from remote servers, streaming data, and composing interactions. Our discussion focuses on the aspects addressed by DIEL and omits implementation details of the frontend. We also show how DIEL specifications compose in a modular manner, by building each new interaction on the running example of Fig. <ref type="figure">2</ref>. Since the challenges are independent of the particular choice of visual encodings, we do not focus on varying the visual designs. Coordinating Requests and Responses. Latency from remote databases' responses can cause inconsistencies in the interface, if not handled properly <ref type="bibr" target="#b59">[61]</ref>. For instance, Fig. <ref type="figure" target="#fig_4">4</ref> shows a timeline of user interactions (selection) and server responses (yearDistributionEvent). The user clicks TX and then CA, but the remote database responds with the result for CA first. Rendering the most recent result (TX) would surprise a user who is expecting CA. To avoid inconsistent interfaces, developers can use DIEL to specify a range of designs in a few lines of code. We walk through three possible designs shown in Fig. <ref type="figure" target="#fig_4">4</ref>.</p><p>Option A always displays the result of the most recent interaction. The DIEL spec first identifies the interaction by selecting the rows with the highest timestep (LATEST selection), then selects the rows in yearDistributionEvent with matching request-response timesteps (d.request timestep = e.timestep). If no match is available yet, nothing is returned. The front-end visualization logic could indicate as such, e.g., using a spinner as shown.</p><p>Option B always displays the most recent response and its corresponding selection, as well as pending selections. The DIEL spec first selects the most recent response (LATEST yearDistributionEvent), then joins it with the selection table to retrieve the corresponding value of the selection (e.us state) by matching their timesteps. The second out-put pending represents pending selections and is computed by finding the request(s) that do not have a corresponding response.</p><p>Option C displays "snapshots" of all interactions <ref type="bibr" target="#b57">[59]</ref>, where past interactions and their results are scaled down into a scrolling pane of small multiples at the bottom. The DIEL spec simply selects all the interactions from the event table selection, joined with the corresponding responses by their timesteps. The snapshots allow a user to interact with the visualization and navigate to prior states, concurrent with the loading of new responses.</p><p>Without DIEL, implementing these designs would require the developer to manually keep track of events -store the points of interest selected, their respective responses, and the global ordering of all the events -and coordinate multiple event handlers. While each step is simple in isolation, put together the complexity of this low-level datarecording and event handling compounds substantially. Developers may have trouble reasoning about the overall design.</p><p>DIEL, on the other hand, encourages a consistent experience by asking the developer to specify which of the events should be in the output at any given time. There is no accidental design resulting from interrupt-driven event handling, such as immediately rendering whatever response arrives. Furthermore, DIEL takes care of recording event history and provenance. The developer can query these data directlyfor example identifying the responses from remote databases with timestep data that DIEL automatically maintains. As a result, the developer can iterate on alternate designs without instrumentation overhead. Streaming Data. Given the real-time nature of fires, the developer may want to incorporate streaming data into their visualization. Fig. <ref type="figure" target="#fig_6">6</ref> overlays the choropleth in Fig. <ref type="figure">2</ref> with a symbol map of active current fires. The event incident contains the location of the fire and whether it is new or contained. When a new incident event arrives, fires are either added to or removed from the symbol map overlay. To implement this design with DIEL, the event incident is captured as an event table and the data for the overlay is captured by the output table fireMap. Each tuple from the latter is used to query the incident table to identify fires that have not yet been controlled, via the NOT IN subquery. Note how the developer can rely on a few lines of DIEL code, instead of programming custom JavaScript functions to store and manipulate streaming events 2 . Composing Events: Interaction and Streaming. Cross-linking is a common interaction technique <ref type="bibr" target="#b46">[48]</ref>. Fig. <ref type="figure">7</ref> shows a new brush selection added to the map visualization, linked to the bar chart (the backing query is not shown for brevity). contained checks if the lat, lon values in fireMap are within the min and max bounds of the brush. It is a utility function defined by DIEL, using the user-defined function (UDF) construct in SQL <ref type="bibr" target="#b38">[40]</ref>. UDFs are supported by the frontend database library we use, sql.js <ref type="bibr" target="#b27">[28]</ref>, and developers can define UDFs through the DIEL runtime API, AddUDF.</p><p>The new interaction composes with the streaming firemap view from before -if there is a new event received that falls into the brushed area, the incidents selected in brushedIncidents will also be updated, and any dependent output views will be updated as well. This subtle instrumentation, automatically performed by DIEL, may be difficult for a developer to catch in a traditional implementation where the logic may be dispersed into different event handlers. Composing Events: Brushing and Panning. Different interactions serve different purposes and more than one interaction could be employed for the same visualization, which the developer may need to coordinate. Following the running example, suppose now the developer wishes to introduce a pan-zoom interaction, shown in Fig. <ref type="figure">8</ref>. The brush table is defined in geographic coordinates, so the user can pan the map to an area where the brush is no longer visible, and the value of the selection is in question. We present two possible designs to address this ambiguity. Both derives a new brush, effectiveBrush for use in place of the raw brush.</p><p>Option A invalidates the brush when the user initiates a new panning interaction. The DIEL spec selects the most recent brush (LATEST      brush) only if it occurred after the most recent pan (LATEST pan). If we replace option A with option B , we instead invalidate the brush only when a new panning event moves the brush out of view. In either case, developers do not manually modify the callbacks to the panning interaction handler to check and remove the previous brush selection.</p><p>The "removal" is specified declaratively and enforced implicitly by DIEL as the logical timesteps progress. Interaction Scent. Research has shown the benefit of visualizing interaction history to provide a visible trail ("scent") of prior interactions. HindSight visualizes the user's prior interactions in the visualization <ref type="bibr" target="#b13">[14]</ref>; Scented Widgets visualize interactions by other users <ref type="bibr" target="#b55">[57]</ref>; Interaction Snapshots visualize historical interactions and their results <ref type="bibr" target="#b57">[59]</ref>. We have shown an example of Interaction Snapshots in Fig. <ref type="figure" target="#fig_4">4</ref>; we now discuss the other two designs in Fig. <ref type="figure" target="#fig_9">9</ref>.</p><p>A instantiates a HindSight design, where all prior brushes are shown <ref type="bibr" target="#b13">[14]</ref>. The DIEL spec for brushScent selects unique brushes through the UNIQUE operator. B shows an example design of scented widgets, where a histogram of all prior us state selections are aggregated and counted <ref type="bibr" target="#b55">[57]</ref>. The selection all is a table in the database that stores all the event tables from each session, which is saved by panning and brushing (from Fig. <ref type="figure">7</ref>). There are two ways to coordinate: A removes the brush selection whenever there is a more recent panning event, and B removes the brush only when it is panned out of view. . With DIEL, the data backing these visualizations is already in event tables ready to be queried, and the visualization scents are automatically updated. Without DIEL, the developer would have to manually store the events and re-render the visualization scents after each interaction, or use libraries like Trrack <ref type="bibr" target="#b11">[12]</ref>.   The numbers follow the same distribution because the tick performance is decoupled from the database query processing performance. The steps are all local evaluations after receiving the asynchronous events . The actual latencies for each individual response are depicted in Fig. <ref type="figure" target="#fig_0">12</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">EVALUATING DIEL'S PERFORMANCE</head><p>We evaluate the feasibility of the DIEL model using our prototype implementation. We focus on the overhead that the DIEL middleware introduces during initial setup and user interactions, as well as its ability to scale to large datasets as compared to leading visualization libraries. We used Kaggle's wildfire dataset <ref type="bibr" target="#b21">[22]</ref>, creating the visualization shown in Fig. <ref type="figure">2</ref>, and conducted evaluations on a MacBook Pro with 2.7 GHz Quad-Core Intel Core i7 and 16 GB of memory. In the experiments, the "remote" database server is a SQLite process running on a web application deployed on Heroku ("Free Dynos" tier with 512 MB of RAM). The network bandwidth was 18.5 Mbps. Changing the dataset size or database will not affect the overhead that the DIEL middle-ware incurs. Thus we chose to focus on the above evaluation configurations. Initialization. Fig. <ref type="figure" target="#fig_10">10</ref> shows the time taken to setup DIEL. The local setup only involves a local database in the main browser thread. DIEL <ref type="bibr" target="#b0">(1)</ref> sets up the synchronous database in the main thread; (2) compiles the DIEL spec into logical representations, including optimization steps such as caching; and, (3) sets up the views in the local database. The remote setup accesses the remote database server. DIEL shares step (1) and (2) of the local setup, then it builds a catalog of tables in remote databases and sets up a distributed dataflow based on the catalog. The remote+network results are the same as remote, but with the addition of nontrivial network communication overheads. These introduce fixed costs-such as the 200ms overhead to fetch the SQL.js library in order to set up the local database-as well as variable costs to send results between the client and server. These costs depend on the network bandwidth. For instance, decreasing the network bandwidth to 1.4 Mbps caused the set up local database to be 8687ms.</p><p>In all three cases, we see that the initialization time does not pose a usability challenge, especially given that the initiation is a one time cost at the beginning of loading the web page containing the visualizations. Event Handling. Fig. <ref type="figure" target="#fig_11">11</ref> shows the time taken to handle events. One type of event is user interaction, which took less than 5 ms to handle. During that time, DIEL <ref type="bibr" target="#b0">(1)</ref> saves the input event to the local database (serializing from JavaScript to SQLite); (2) outputs the view data (deserializing from SQLite to JavaScript); and, (3) networks with the remote database. Another type of event is a remote database response, which takes about 20 ms to handle. During that time, DIEL (1) processes the remote message; (2) saves the input event to the local database; and, (3) outputs the view data. Processing the data from the remote database and serializing that data into the local database takes the bulk of the time. We see that the overhead in either case is well under the limit of 100 msec prescribed by Card et al. to sustain perceptual causality <ref type="bibr" target="#b6">[7]</ref>. Fig. <ref type="figure" target="#fig_0">12:</ref> A visualization of how long the query processing takes as the data grows in size. One program is implemented with Vega, another with DIEL used in conjunction with a remote SQLite database, whose raw query time is also plotted. DIEL is able to make use of the backend database and process data beyond the capacity of the browser, with less than 1s of additional overhead for (de)serialization when working with the remote database.</p><p>Different Data Sizes. To demonstrate a DIEL program's ability to scale, we created samples from 10 thousand rows to 4 million rows and benchmarked two implementations of the visualization shown in Fig. <ref type="figure">2</ref>: one with DIEL (the SQLite server and static Vega visualizations) and one with Reactive Vega running in the browser. We measured the time taken between the handler receiving the interaction and outputting the computed result. This excludes the rendering logic, which is common across the experimental runs. The SQLite and DIEL results also exclude the network latency since it is shared in both cases.</p><p>Fig. <ref type="figure" target="#fig_0">12</ref> shows that DIEL is able to handle the increasingly large data by leveraging resources beyond the client, whereas a client-only Reactive Vega application freezes the browser at 4 million rows of data. We also measured the query evaluation time directly against the remote SQLite database -DIEL's processing time follows closely with negligible serialization/serialization overhead. Additionally, the DIEL implementation benefits from a non-blocking design because it does not take up costly resources on the main thread.</p><p>While this study does not exhaustively analyze DIEL's performance, we believe it addresses DIEL's core motivations of usability, expressivity and scalability via remote data servers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">A DISCUSSION OF DIEL'S USABILITY</head><p>We evaluate the programming experience of DIEL using the Cognitive Dimensions of Notation <ref type="bibr" target="#b4">[5]</ref>, a set of considerations to evaluate the effectiveness of notational systems. Cognitive dimensions have been used by prior visualization systems to evaluate their usability <ref type="bibr" target="#b40">[42,</ref><ref type="bibr" target="#b41">43,</ref><ref type="bibr" target="#b44">46,</ref><ref type="bibr" target="#b61">63]</ref>. We pick a relevant subset and contrast the effectiveness of DIEL against that of current common practices. Viscosity (resistance to change). DIEL follows relational database abstractions and benefits from its ease of change. First, its declarative query specification abstracts what to compute from how to compute (known as "physical data independence" in database literature). As a result, switching from a client-only application to a client-server one (or to one using WebWorkers) requires only a few lines of change to configuration details. Fig. <ref type="figure">2</ref>(4E) provides an example of the configuration, remoteDbConfigs, a JavaScript object containing high-level specification such as the type of the database used and what socket to connect to the DIEL database wrapper. Query changes are moreover isolated from table changes due to the "logical data independence" property of the relational model <ref type="bibr" target="#b38">[40]</ref>. For instance, if the incident schema changes because the data provider now also includes the reporting station, none of the downstream queries would need to change. Finally, views also provide a way to reuse logic within an application. Fig. <ref type="figure" target="#fig_5">5</ref> shows an example where a change to the internal specification of the query filtered would be abstracted away from the dependent views as long as its SELECT clause is unchanged. These properties combine to make more complex interactive visualizations easier to author, since multiple components could be reused and changed easily. Consider the running example of visualizations over the wildfire data: they could be combined easily into one visualization dashboard.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Closeness of Mapping (closeness of representation to domain).</head><p>Since SQL is widely used in modern databases and for general data manipulation tasks <ref type="bibr" target="#b48">[50]</ref>, DIEL closely represents the data processing domain.</p><p>However, DIEL does not fully represent the complex domain of data visualizations. For example, the Vega authors identify that visualizations involving small multiples often require hierarchical structures with second-order quantification <ref type="bibr" target="#b43">[45]</ref>.</p><p>We agree that the expressiveness of SQL, and hence DIEL, is more limited than interactive visualization frameworks, which are implemented in turing complete languages. Relational languages like DIEL express only first-order logic. In particular, DIEL can define and quantify relationships between entities, but cannot quantify over a datadependent set of table names or column names. Yet this limitation is key for distributed execution and optimization. Neither physical data independence nor the rich optimization methods discussed in Section 3 would be easy to implement without the relational abstraction. In this sense, any alternative approach towards distributed execution at scale will end up using the same principles and hence facing similar limitations. Moreover, developers could transform the data into other forms by manipulating the output tables provided by DIEL in any JavaScript functions. For instance, they can use Vega to transform the tabular data into nested groups to render small multiples. These data transformations happen at the end of DIEL's dataflow and does not diminish the effectiveness of DIEL's ability to orchestrate query evaluations across the client and remote databases. Consistency (similar semantics are expressed in similar syntactic forms). In DIEL, the only data structure is a table. One of the key contributions of DIEL's model is to unify both "live" events and "stored" data in a single frame of reference-tables-which store both data and history. Once events are reified as data in an event table, DIEL presents a unified data-centric language. Premature Commitment (constraints on the order of doing things). For DIEL to be effective, it imposes a premature commitment. Developers must represent the state of visualizations using tables (rather than arbitrary data structures) upfront. This premature commitment can hamper a rapid prototyping process, but we believe the advantages of the table format outweigh these concerns. As discussed in Section 3, the table format facilitates working with distributed data, and makes explicit possibly concurrent processes. Role-expressiveness (the purpose of an entity is readily inferred). DIEL reuses an existing, well-established data model of relational tables and queries, and introduces only two additional constructs: EVENTs and OUTPUTs. This approach has proven sufficiently expressive, as demonstrated by the examples in Section 6. DIEL operates as a middleware layer between the frontend and backends, and lifts the logic of data exchange between client and remotes. The relatively small surface area of DIEL's abstractions stands in contrast to the existing imperative code written to support such use cases, which is often dispersed across custom functions with a commensurate burden of role-expressiveness. Hidden Dependencies (important links between entities are not visible). DIEL makes dependencies quite explicit. The only type of dependency DIEL introduces is between tables, which are syntactically evident in queries: the table a query creates is dependent on the tables it references. In contrast, current imperative practice distributes dependencies across different functions, each with custom logic and bookkeeping formats that require additional effort to navigate and make sense of.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Hard Mental Operations (high demand on cognitive resources).</head><p>There are two potentially challenging programming tasks in DIEL. One challenge is debugging in SQL <ref type="bibr" target="#b15">[16]</ref>. Consider the case where the developer is debugging a view O which involves both V1 and V2 views; they need to inspect both of the views to locate the error. To address this challenge, we built view level constraints, similar to SQL table constraints <ref type="bibr" target="#b38">[40]</ref>, so that developers could make assertions on intermediate queries. For instance, if O is unexpectedly empty, the developer could assert V1 NOT EMPTY and V2 NOT EMPTY respectively to pin-point the error as they arise. Another challenge is not being able to mutate state. It could be challenging to define the state of the visualization with only raw events, especially when the logic is more complex (e.g., undo-redo). To help, we took a page from the construct of state programs in relational transducers <ref type="bibr" target="#b0">[1]</ref>, which allow developers to maintain derived state by inserting values into tables after events. Diffuseness (verbosity of language). The current DIEL syntax hews close to SQL, and as such does not have syntactic conveniences one might like for visualization (e.g., binning <ref type="bibr" target="#b23">[24]</ref>). Some aspects of DIEL's current verbosity can be alleviated by introducing syntactic sugar for common operations. Through our own experience working with DIEL and analyzing code snippets, we identified the most common programming patterns and implemented a handful of syntactic sugars. For instance, LATEST selects the most recent event (i.e. row(s) with the highest timestep). Similarly, the default asynchrony policy for output views over distributed data creates an event table for the developer and selects the response for the most recent interaction. We provide additional details in the supplement.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">CONCLUSION AND FUTURE WORK</head><p>By adapting two key ideas from distributed systems programmingimmutable events and logical constraints -DIEL contributes a substantive step towards declarative programming over distributed data and asynchronous events for interactive visualization. Through examples, we demonstrate that developers can use DIEL to declaratively specify a variety of emerging interactive visualization use cases. And, to assess the challenge that DIEL's use of a relational language poses to developers, we conducted a heuristic evaluating using the Cognitive Dimensions of Notation <ref type="bibr" target="#b4">[5]</ref>. We find that although DIEL introduces premature commitment and possible hard mental operations, these disadvantages are outweighed by a decrease in viscosity when working with distributed data and asynchronous events. Moreover, as our performance benchmarks suggest, this declarative model allows DIEL to reason about the specification and optimize the execution plan.</p><p>As data grows in size and computation grows in complexity, optimizing the performance of interactive visualization application is a hot topic. DIEL's unique middleware architecture that spans the local and remotes allows for a number of research opportunities. To start, operator-level materialized-view maintenance techniques <ref type="bibr" target="#b7">[8]</ref> can make the frontend database even faster. Federated databases that optimize globally across multiple databases <ref type="bibr" target="#b12">[13]</ref> can help us optimize data exchange between the local database and remote database. Another possibility is to automatically parallelize query evaluation <ref type="bibr" target="#b38">[40]</ref> across multiple threads of computation, e.g. multiple WebWorkers in a browser. Finally, we can enhance the performance of each timestep with "garbage collection" by removing rows that are no longer in use from logs. This pattern is common in many areas, such as in replicated database systems <ref type="bibr" target="#b39">[41]</ref>, multi-version concurrency control <ref type="bibr" target="#b3">[4]</ref> and distributed systems programming <ref type="bibr" target="#b9">[10]</ref>.</p><p>In terms of usability, having SQL as the host language has both advantages and disadvantages (discussed in Section 8). To reduce the disadvantages of expressibility, future iterations of DIEL may benefit from using a syntax closer to dataframe libraries like pandas that are better integrated with JavaScript <ref type="bibr" target="#b56">[58]</ref>.</p><p>In terms of functionality, DIEL does not yet support an important distributed use case, collaborative interactive visualizations (Fig 1 <ref type="figure" target="#fig_3">3</ref> ). Coordinating communication between multiple users is a classic challenge in distributed systems and CSCW <ref type="bibr" target="#b50">[52]</ref>. A global order of events across multiple editors cannot be guaranteed without explicit coordination that decreases the interface's responsiveness. Instead, various coordination-free proposals have emerged that use more involved metadata than simple local timesteps to provide distributed consistency guarantees <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b53">55]</ref>. Supporting change from multiple locations would also unlock the support for streaming, since a change from the remote database could then drive change on the client. It would be interesting to extend DIEL with ideas from this work.</p><p>DIEL is an open source system available at https://github.com/ yifanwu/diel.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 :</head><label>1</label><figDesc>Fig.1: Example interactive visualization use cases where (1) data may not fit into the browser and thus lives in a remote database, and/or (2) events, including user interactions and data updates from servers, need to be evaluated asynchronously. Concretely, 1 shows interactions taking time to process, creating asynchrony between interactions and result updates (see Fig.4for details). 2 shows data updating in real time as the user is interacting with a visualization.<ref type="bibr" target="#b2">3</ref> shows an example collaboration experience<ref type="bibr" target="#b32">[33]</ref>; 4 shows a visualization of past interactions to curate "information scent" (see Fig.9).</figDesc><graphic coords="1,457.67,299.69,97.18,122.66" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>A</head><label></label><figDesc>// set up vega vegaEmbed("#yearVis", spec).then(r =&gt; { // capture selection event r.view.addSignalListener( "click", (_, v) =&gt; { diel.NewInput("selection", v); }); // bind output to rendering function diel.BindOutput("yearDistribution", (newValues) =&gt; { // vega APIs to update vis }); });</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 3 :</head><label>3</label><figDesc>Fig. 3: Illustration of the DIEL runtime. The dashed arrows indicate asynchronous events that advance the system logical timestep forward. There are two in this diagram, one from user interaction (green) one from a database response (orange). The solid arrows indicate synchronous evaluation after each new event.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 4 :</head><label>4</label><figDesc>Fig.4: Designs to coordinate asynchronous requests and responses when querying over distributed data: A renders the most recent interaction requested; B renders the most recent response received as well as any pending interactions; C renders snapshots of all interactions and their corresponding results<ref type="bibr" target="#b57">[59]</ref>.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 5 :</head><label>5</label><figDesc>Fig. 5: An example of reuse : the filtering logic based on the selection in Fig. 2, filtered, is shared by two visualizations. DIEL analyzes the query plan and materializes filtered to avoid evaluating it twice.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 6 :</head><label>6</label><figDesc>Fig. 6: Example DIEL spec for the symbol overlay of active fires, determined by selecting incidents that do not yet have a row with the column type of contained.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 7 :Fig. 8 :</head><label>78</label><figDesc>Fig. 7: Example DIEL spec for brushing interaction: brushedIncidents selects fires in the symbol map fireMap that fall into the brushed region pan to update the bar chart (query omitted). The user-defined function contained helps make the code more concise.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head></head><label></label><figDesc>the developer from event tables to the remote databases (and not handled automatically by the current DIEL prototype), e.g., INSERT INTO selection all SELECT * FROM brush.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>BFig. 9 :</head><label>9</label><figDesc>Fig.9: Example DIEL spec for A Hindsight: select all unique brushes in the brush event table, and B Scented Widget: a bar chart that shows the frequency of selections across users.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 10 :</head><label>10</label><figDesc>Fig. 10: The x-axis represents the respective time taken for DIEL's initialization steps, in milliseconds, and the y-axis represents the type of setup being measured.</figDesc><graphic coords="8,344.99,49.37,140.71,78.38" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Fig. 11 :</head><label>11</label><figDesc>Fig.11: The x-axis represents the time taken for the event handling steps, and the y-axis the type of event being measured. These results are evaluated against both the remote+network and the remote only setup. The numbers follow the same distribution because the tick performance is decoupled from the database query processing performance. The steps are all local evaluations after receiving the asynchronous events . The actual latencies for each individual response are depicted in Fig.12.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>table (</head><label>(</label><figDesc></figDesc><table><row><cell cols="2">keyword syntax CREATE</cell></row><row><cell>event</cell><cell>EVENT TABLE &lt;table name&gt;(&lt;column&gt;)...</cell></row><row><cell></cell><cell>EVENT VIEW &lt;view name&gt; AS SELECT...</cell></row><row><cell>output</cell><cell>OUTPUT &lt;output name&gt; AS SELECT...</cell></row><row><cell>5A), with</cell><cell></cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 1 :</head><label>1</label><figDesc>DIEL syntax for creating tables. An EVENT TABLE stores the history of an event. Developers can access the table with two additional columns maintained by DIEL: timestep (logic time of the event) and timestamp (wall-clock time of the event). An EVENT VIEW is a named SQL query (view) that spans the local and server databases. The system appends new view evaluation results to the EVENT VIEW, annotated with the timestep of the corresponding EVENT TABLE entry tracked by DIEL, request timestep, as well as the timestep caused by the new event. Developers access these views similar to how they access event tables. An OUTPUT is a view whose results, after each timestep, are evaluated and passed to the rendering function bound via the BindOutput API. These three key constructs, OUTPUT, EVENT and timesteps augment SQL with reactive semantics for non-blocking interactive visualizations.</figDesc><table><row><cell>API</cell><cell>syntax</cell></row><row><cell>input</cell><cell>diel.NewEvent('&lt;event&gt;', &lt;object&gt;)</cell></row><row><cell cols="2">output diel.BindOutput('&lt;output&gt;', &lt;rendering func&gt;)</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 2 :</head><label>2</label><figDesc>DIEL JavaScript APIs to interface with the frontend. NewEvent takes in events from the developer, e.g., user's selection. BindOutput binds the outputs to a rendering function specified by the developer that takes a table and renders a visualization.</figDesc><table /></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="2">As with materialized views in Section 5, we take a pragmatic approach in our prototype: we handle streams in the client database, but do not support streaming in the remote databases.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>We thank Ryan Purpura and Lucie Choi for their contributions as undergraduate researchers at UC Berkeley; Michael Whittaker for his feedback on methods to perform the distributed execution. </p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Relational transducers for electronic commerce</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Abiteboul</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Vianu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Fordham</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Yesha</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Journal of Computer and System Sciences</title>
+		<imprint>
+			<date type="published" when="2000">2000</date>
+			<publisher>Elsevier</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Consistency analysis in Bloom: a Calm and collected approach</title>
+		<author>
+			<persName><forename type="first">P</forename><surname>Alvaro</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Conway</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><forename type="middle">R</forename><surname>Marczak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CIDR</title>
+				<imprint>
+			<date type="published" when="2011">2011</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Spark sql: Relational data processing in spark</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Armbrust</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><forename type="middle">S</forename><surname>Xin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Lian</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Huai</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">K</forename><surname>Bradley</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Meng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Kaftan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">J</forename><surname>Franklin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Ghodsi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIMOD</title>
+				<imprint>
+			<date type="published" when="2015">2015</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Concurrency control in distributed database systems</title>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">A</forename><surname>Bernstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Goodman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Computing Surveys</title>
+				<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1981">1981</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Cognitive dimensions of notations: Design tools for cognitive technology</title>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">F</forename><surname>Blackwell</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Britton</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Cox</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">R</forename><surname>Green</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Gurr</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Kadoda</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kutar</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Loomes</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">L</forename><surname>Nehaniv</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Petre</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Cognitive technology: instruments of mind</title>
+				<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2001">2001</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">D 3 data-driven documents</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Bostock</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Ogievetsky</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">TVCG. IEEE</title>
+				<imprint>
+			<date type="published" when="2011">2011</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">The model human processor-an engineering model of human performance. In Handbook of perception and human performance</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Card</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Moran</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Newell</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1986">1986</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Materialized views. In Foundations and Trends in Databases</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Chirkova</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Yang</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012">2012</date>
+			<publisher>Now Publishers, Inc</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">A relational model of data for large shared data banks</title>
+		<author>
+			<persName><forename type="first">E</forename><forename type="middle">F</forename><surname>Codd</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<date type="published" when="1970">1970</date>
+			<publisher>ACM</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Edelweiss: Automatic storage reclamation for distributed programming</title>
+		<author>
+			<persName><forename type="first">N</forename><surname>Conway</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Alvaro</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Andrews</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">pVLDB. VLDB Endowment</title>
+				<imprint>
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Language Support for Loosely Consistent Distributed Programming</title>
+		<author>
+			<persName><forename type="first">N</forename><forename type="middle">R G</forename><surname>Conway</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Trrack: A library for provenance tracking in web-based visualizations</title>
+		<author>
+			<persName><forename type="first">Z</forename><forename type="middle">T</forename><surname>Cutler</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Gadhave</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Lex</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">OSF Preprints</title>
+				<imprint>
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Decoupled query optimization for federated database systems</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Deshpande</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICDE</title>
+				<imprint>
+			<date type="published" when="2002">2002</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Hindsight: Encouraging exploration through direct encoding of personal interaction history</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Feng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Deng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><forename type="middle">M</forename><surname>Peck</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Harrison</surname></persName>
+		</author>
+		<editor>TVCG. IEEE</editor>
+		<imprint>
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Forward: Datacentric uis using declarative templates that efficiently wrap third-party javascript components</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><forename type="middle">W</forename><surname>Ong</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Papakonstantinou</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Zamora</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">pVLDB. VLDB Endowment</title>
+				<imprint>
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Debugging database queries: A survey of tools, techniques, and users</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Gathani</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Lim</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Battle</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CHI</title>
+				<imprint>
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Instructions and descriptions: Some cognitive aspects of programming and similar activities</title>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">R</forename><surname>Green</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AVI</title>
+				<imprint>
+			<date type="published" when="2000">2000</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Declarative language design for interactive visualization</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Bostock</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">TVCG. IEEE</title>
+				<imprint>
+			<date type="published" when="2010">2010</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Immutability changes everything</title>
+		<author>
+			<persName><forename type="first">P</forename><surname>Helland</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Queue</title>
+				<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2015">2015</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Direct manipulation interfaces</title>
+		<author>
+			<persName><forename type="first">E</forename><forename type="middle">L</forename><surname>Hutchins</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">D</forename><surname>Hollan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">A</forename><surname>Norman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Human Computer Interaction. Taylor &amp; Francis</title>
+				<imprint>
+			<date type="published" when="1985">1985</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Gui Bloopers 2.0: Common User Interface Design Don&apos;Ts and Dos</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Johnson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2007">2007</date>
+			<publisher>Morgan Kaufmann</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">188 million us wildfires</title>
+		<author>
+			<persName><surname>Kaggle</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Wrangler: Interactive visual specification of data transformation scripts</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Kandel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Paepcke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Hellerstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CHI</title>
+				<imprint>
+			<date type="published" when="2011">2011</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Northstar: An interactive data science system</title>
+		<author>
+			<persName><forename type="first">T</forename><surname>Kraska</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">pVLDB. VLDB Endowment</title>
+				<imprint>
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Visualization of streaming data: Observing change and context in information visualization techniques</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Krstajic</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">A</forename><surname>Keim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Big Data</title>
+				<imprint>
+			<date type="published" when="2013">2013</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Immens: Real-time visual querying of big data</title>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Jiang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics Forum</title>
+				<imprint>
+			<date type="published" when="2013">2013</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Sqlite compiled to javascript through emscripten</title>
+		<author>
+			<persName><forename type="first">O</forename><surname>Lojkine</surname></persName>
+		</author>
+		<ptr target="https://github.com/kripken/sql.js" />
+		<imprint>
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">js api (including how to add user defined functions</title>
+		<author>
+			<persName><forename type="first">O</forename><surname>Lojkine</surname></persName>
+		</author>
+		<ptr target="https://github.com/sql-js/sql.js/blob/master/src/api.js" />
+		<imprint>
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Your mouse is a database</title>
+		<author>
+			<persName><forename type="first">E</forename><surname>Meijer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<date type="published" when="2012">2012</date>
+			<publisher>ACM</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Trust, but verify: Optimistic visualizations of approximate queries for exploring big data</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Moritz</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Fisher</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Ding</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CHI</title>
+				<imprint>
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Falcon: Balancing interactive latency and resolution sensitivity for scalable linked visualizations</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Moritz</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Howe</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">OSF Preprints</title>
+				<imprint>
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Using web workers</title>
+		<author>
+			<persName><surname>Mozilla</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">Representing real-time multi-user collaboration in visualizations</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Neogy</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Zong</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+		<idno>arXiv</idno>
+		<imprint>
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Viqing: Visual interactive querying</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Olston</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Stonebraker</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Aiken</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visual Languages</title>
+				<imprint>
+			<date type="published" when="1998">1998</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title level="m" type="main">The world&apos;s most advanced open source relational database</title>
+		<author>
+			<persName><surname>Posgresql</surname></persName>
+		</author>
+		<ptr target="https://www.postgresql.org/" />
+		<imprint>
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">A commutative replicated data type for cooperative editing</title>
+		<author>
+			<persName><forename type="first">N</forename><surname>Preguica</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Marques</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Shapiro</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Letia</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICDCS</title>
+				<imprint>
+			<date type="published" when="2009">2009</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Provenance for interactive visualizations</title>
+		<author>
+			<persName><forename type="first">F</forename><surname>Psallidas</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Workshop on Human-In-the-Loop Data Analytics</title>
+				<meeting>the Workshop on Human-In-the-Loop Data Analytics</meeting>
+		<imprint>
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Smoke: Fine-grained lineage at interactive speed</title>
+		<author>
+			<persName><forename type="first">F</forename><surname>Psallidas</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">pVLDB. VLDB Endowment</title>
+				<imprint>
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+		<title level="m" type="main">Database Management Systems</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Ramakrishnan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Gehrke</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000">2000</date>
+			<publisher>McGraw Hill</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<title level="m" type="main">Discarding obsolete information in a replicated database system</title>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">K</forename><surname>Sarin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><forename type="middle">A</forename><surname>Lynch</surname></persName>
+		</author>
+		<editor>TSE. IEEE</editor>
+		<imprint>
+			<date type="published" when="1987">1987</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Lyra: An interactive visualization design environment</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics Forum</title>
+				<imprint>
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+		<title level="m" type="main">Critical reflections on visualization authoring systems</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Stasko</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Thompson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Brehmer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Liu</surname></persName>
+		</author>
+		<editor>TVCG. IEEE</editor>
+		<imprint>
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<monogr>
+		<title level="m" type="main">Vega-lite: A grammar of interactive graphics</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Moritz</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Wongsuphasawat</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<editor>TVCG. IEEE</editor>
+		<imprint>
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<monogr>
+		<title level="m" type="main">Reactive vega: A streaming dataflow architecture for declarative interactive visualization</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Russell</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Hoffswell</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<editor>TVCG. IEEE</editor>
+		<imprint>
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Declarative interaction design for data visualization</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Wongsuphasawat</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">UIST</title>
+				<imprint>
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">It&apos;s about time: Confronting latency in the development of groupware systems</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Savery</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Graham</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CSCW</title>
+				<imprint>
+			<date type="published" when="2011">2011</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">The eyes have it: A task by data type taxonomy for information visualizations</title>
+		<author>
+			<persName><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The Craft of Information Visualization</title>
+				<imprint>
+			<publisher>Elsevier</publisher>
+			<date type="published" when="2003">2003</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<monogr>
+		<title level="m" type="main">Small, fast, self-contained, high-reliability, full-featured, sql database engine</title>
+		<author>
+			<persName><surname>Sqlite</surname></persName>
+		</author>
+		<ptr target="https://www.sqlite.org" />
+		<imprint>
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<monogr>
+		<title level="m" type="main">Developer survey results, most popular programming languages</title>
+		<author>
+			<persName><surname>Stackoverflow</surname></persName>
+		</author>
+		<ptr target="https://insights.stackoverflow.com/survey/2019" />
+		<imprint>
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<monogr>
+		<title level="m" type="main">Polaris: A system for query, analysis, and visualization of multidimensional relational databases</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Stolte</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+		<editor>TVCG. IEEE</editor>
+		<imprint>
+			<date type="published" when="2002">2002</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Operational transformation in real-time group editors: Issues, algorithms, and achievements</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Ellis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CSCW</title>
+				<imprint>
+			<date type="published" when="1998">1998</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">State-of-the-art report of visual analysis for event detection in text data streams</title>
+		<author>
+			<persName><forename type="first">F</forename><surname>Wanner</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Stoffel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Jäckle</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><forename type="middle">C</forename><surname>Kwon</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">A</forename><surname>Keim</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><forename type="middle">E</forename><surname>Isaacs</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Giménez</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">I</forename><surname>Jusufi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Gamblin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics Forum</title>
+				<imprint>
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<monogr>
+		<title level="m" type="main">Webassembly, a binary instruction format for a stack-based virtual machine</title>
+		<author>
+			<persName><surname>Webassembly</surname></persName>
+		</author>
+		<ptr target="https://webassembly.org/" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<analytic>
+		<title level="a" type="main">Logoot: A scalable optimistic replication algorithm for collaborative editing on p2p networks</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Urso</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Molli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICDCS</title>
+				<imprint>
+			<date type="published" when="2009">2009</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<monogr>
+		<title level="m" type="main">The Grammar Of Graphics</title>
+		<author>
+			<persName><forename type="first">L</forename><surname>Wilkinson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006">2006</date>
+			<publisher>Springer Science &amp; Business Media</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b55">
+	<monogr>
+		<title level="m" type="main">Scented widgets: Improving navigation cues with embedded visualizations</title>
+		<author>
+			<persName><forename type="first">W</forename><surname>Willett</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Agrawala</surname></persName>
+		</author>
+		<editor>TVCG. IEEE</editor>
+		<imprint>
+			<date type="published" when="2007">2007</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b56">
+	<analytic>
+		<title level="a" type="main">Is a dataframe just a table</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">PLATEAU</title>
+				<imprint>
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b57">
+	<analytic>
+		<title level="a" type="main">Facilitating exploration with interaction snapshots under high latency</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Hellerstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VIS</title>
+				<imprint>
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b58">
+	<analytic>
+		<title level="a" type="main">B2: Bridging code and interactive visualization in computational notebooks</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">UIST</title>
+				<imprint>
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b59">
+	<analytic>
+		<title level="a" type="main">A devil-ish approach to inconsistency in interactive visualizations</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">HILDA Workshop at SIGMOD</title>
+				<imprint>
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b60">
+	<analytic>
+		<title level="a" type="main">Towards exploratory visualization of multivariate streaming data</title>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Xie</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VIS Doctoral Colloquium</title>
+				<imprint>
+			<date type="published" when="2007">2007</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b61">
+	<monogr>
+		<title level="m" type="main">Lyra 2: Designing interactive visualizations by demonstration</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Zong</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Barnwal</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Neogy</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+		<editor>TVCG. IEEE</editor>
+		<imprint>
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b62">
+	<monogr>
+		<title level="m" type="main">streaming-data-why-it-makes-sense-and-how-work-it</title>
+		<author>
+			<persName><surname>Zoomdata</surname></persName>
+		</author>
+		<ptr target="https://www.zoomdata.com/resource/" />
+		<imprint>
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+	<note>Analyze the freshest data</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

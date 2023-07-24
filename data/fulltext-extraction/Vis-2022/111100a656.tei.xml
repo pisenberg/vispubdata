@@ -1,0 +1,1790 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/kermitt2/grobid/master/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Multivariate Probabilistic Range Queries for Scalable Interactive 3D Visualization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName><forename type="first">Amani</forename><surname>Ageeli</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Alberto</forename><surname>Jaspe-Villanueva</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Ronell</forename><surname>Sicat</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Florian</forename><surname>Mannuss</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Peter</forename><surname>Rautek</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Markus</forename><surname>Hadwiger</surname></persName>
+						</author>
+						<title level="a" type="main">Multivariate Probabilistic Range Queries for Scalable Interactive 3D Visualization</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.7.2" ident="GROBID" when="2023-03-27T09:19+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>High-dimensional filtering</term>
+					<term>multivariate filtering</term>
+					<term>output-sensitivity</term>
+					<term>multivariate attribute queries</term>
+					<term>progressive culling</term>
+				</keywords>
+			</textClass>
+			<abstract>
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>Fig. 1. Probabilistic queries. For the meteorological data set shown on the left (N &gt; 1G cells), on the right we show three consecutive query results. (1) Without filtering the data; (2) Filtering for temperature in [−24, −8] and relative humidity in [15, 20]; 1% false positives (shown in red). (3) A d = 5-dimensional query, in addition filtering height in [0, 4000] and two vector field components. (Inset) We improve both the query performance and the false positive rate via a hierarchical early-out strategy using a novel concept of supercells.</p></div>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Large scientific data sets, whether from simulations or measurements, are a core focus of visualization. However, their size and complexity make interactive visualization and analysis challenging. Fast rendering and query evaluation (or filtering) require efficient, scalable data structures and algorithms. In addition to large sizes due to a large number of data samples or grid cells, scientific data often comprise many scalar, vector, and tensor attributes per sample or cell. For example, scalars such as temperature, pressure, humidity, and salinity in large-scale climate or weather simulations, or porosity and permeability in subsurface simulations. Visual analysis requires the efficient filtering of data, often based on multivariate range queries, to locate and visualize all cells with a certain combination of attribute values. We refer to data with many attributes as multivariate data living in a high-dimensional attribute space.</p><p>• Amani Ageeli, Alberto Jaspe-Villanueva, Ronell <ref type="bibr">Sicat</ref> We say that this space comprises D attribute dimensions, with our work targeting scalable visualization of data with large D, e.g., from D = 6 to D = 20 or more. While logical OR operations in range queries over multiple dimensions are simple because they are separable, i.e., each attribute can be queried independently, logical AND operations require checking all attributes whether they jointly fulfill the desired properties. This is an inherently D-dimensional problem: AND queries must be evaluated-at least conceptually-in a D-dimensional space. However, for large D, the curse of dimensionality <ref type="bibr" target="#b68">[69]</ref> can quickly become a problem for query performance as well as for efficient storage. For visualization purposes, the spatial position and corresponding visibility of cells, <ref type="foot" target="#foot_0">1</ref> as well as their corresponding "locations" in attribute space are both crucial properties. We distinguish two major conceptual strategies for evaluating D-dimensional queries for visualization:</p><p>1. Evaluate queries in attribute space first: Determine a query result set, containing all cells for which the query evaluates to true. Only afterward determine the (potentially) visible subset of cells. 2. Evaluate queries in spatial domain first: Traverse data in a spatial data structure, such as an octree; often in visibility order. For each encountered cell (or node with many cells), evaluate the query.</p><p>For strategy #1, common solutions that scale well to large D are, e.g., Rtrees <ref type="bibr" target="#b21">[22]</ref> or kd-trees <ref type="bibr" target="#b5">[6]</ref>. For a data set consisting of N cells, these scale roughly between D • log N and D • N a , a = 1 − 1 D <ref type="bibr" target="#b28">[29]</ref>. However, for large D several scalability problems remain for interactive visualization:  • For large D, trees in attribute space, such as R-trees, become very large, which often prevents storage in GPU memory, and each single tree traversal for query evaluation is hard to parallelize. • Many queries only touch a subset d ≤ D of all attributes. The entire D-dimensional tree must be in memory, and it is not feasible to load or stream a lower-dimensional subset of the tree. Query time is also similar or slower than querying all D dimensions <ref type="bibr" target="#b54">[55]</ref>. Alternatives avoiding these drawbacks build on bitmap indices <ref type="bibr" target="#b56">[57,</ref><ref type="bibr" target="#b66">67]</ref>. However, these scale roughly with D • N (or d • N), which can become a major problem for large data due to linear scaling with the data size N.</p><p>Strategy #2 above enables leveraging view-dependence to query attributes only for the potentially visible set (PVS) of cells inside the view frustum and not occluded, as determined by occlusion culling. We denote the number of cells in the PVS by Ñ (see Table <ref type="table" target="#tab_2">1</ref>). While this helps, since often Ñ N, scanning, i.e., checking all d ≤ D attributes of each cell, scales with d • Ñ (worst case still Ñ = N), accessing actual attribute data in memory. 2 Using spatially aggregated attribute information, e.g., per octree node, can help. However, for coarse approaches, such as a (min, max) value pair per attribute, queries become very inaccurate for nodes with many cells. Aggregating more accurate information, such as a joint D-dimensional histogram per node, scales exponentially with D in memory and in query time. Potential solutions are exploiting histogram sparsity <ref type="bibr" target="#b35">[36]</ref>; or using integral histograms <ref type="bibr" target="#b47">[48]</ref>, which improve query time, but use more memory and still scale exponentially.</p><p>Combining both strategies above is not straightforward. For example, storing an attribute space tree, such as an R-tree, in every node of a spatial hierarchy is not feasible. In this paper, we propose a novel approach for scalable multivariate query evaluation (Fig. <ref type="figure">1</ref>) that achieves an efficient combination of both strategies. Our approach mainly scales with the expected output cardinality |Q|, of any query Q, and the visible output (PVS), instead of with the input size N or the dimensionality D.</p><p>First, we use strategy #1: Evaluating a query Q starts in attribute space (Fig. <ref type="figure" target="#fig_0">2</ref>, center), by using d ≤ D pre-computed 1D projections 3 (Fig. <ref type="figure" target="#fig_0">2</ref>, left). The idea of projections is similar to bitmap indices <ref type="bibr" target="#b56">[57,</ref><ref type="bibr" target="#b66">67]</ref>. However, we achieve scalability independent of the input size N, via fixed-size 4 probabilistic hash tables (Bloom filters). To also incorporate strategy #2, during rendering a single hash table independent of both N and d ≤ D is queried during PVS determination (see Fig. <ref type="figure" target="#fig_0">2</ref>, right). 5  The major properties and contributions of our method are:</p><p>• Although we evaluate D-dimensional joint (logical AND) queries, we store and aggregate only D separate 1D projections. This also enables including or excluding any subset of d dimensions from a query, facilitating streaming and out-of-core approaches. 2 We note that accurate filtering does not permit an easy multi-resolution solution to reduce Ñ further: Ultimately, queries must refer to individual cells. 3 There are D separate projections; each with a size independent of N. 4 The size is chosen for expected query cardinality |Q|, not for input size N. 5 It is a single global hash table, irrespective of the dimensionality d or D.</p><p>• Our method is output-sensitive with respect to both the cardinality of the query result as well as to the on-screen visibility (the PVS). • We query full-resolution data, but introduce supercells for efficient early-out during spatial hierarchy traversal, significantly reducing both query time and the false positives of probabilistic hashing.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Multivariate and multifaceted data are very common in visualization applications <ref type="bibr" target="#b26">[27]</ref>, requiring corresponding data structures and algorithms.</p><p>Multivariate histograms facilitate query-driven visualization <ref type="bibr" target="#b56">[57]</ref> of such data, enabling users to select interesting subsets by specifying multi-attribute range queries, such as (30 &lt; temperature &lt; 50) AND (15 &lt; humidity &lt; 30). However, multivariate or multi-dimensional histograms for joint distributions of multiple attributes often suffer from the curse of dimensionality <ref type="bibr" target="#b68">[69]</ref>, because they grow exponentially as B D , for D attribute dimensions with B histogram bins each. Lu and Shen <ref type="bibr" target="#b35">[36]</ref> introduce a multivariate histogram representation for query-driven visualization on local data blocks. They apply a data space transformation to large yet sparse multivariate histograms, transforming them into smaller multi-dimensional arrays, which are encoded using a dictionary-based approach. Wei et al. <ref type="bibr" target="#b61">[62,</ref><ref type="bibr" target="#b62">63]</ref> use compressed bitmap indices <ref type="bibr" target="#b64">[65]</ref> to perform local histogram matching in multi-field datasets. Sparse PDF maps <ref type="bibr" target="#b23">[24]</ref> and sparse PDF volumes <ref type="bibr" target="#b52">[53]</ref> also compactly encode joint probability density functions of data, by fitting high-dimensional Gaussian basis functions. Histogram (or PDF) encodings are used in various applications, such as fuzzy isosurfacing <ref type="bibr" target="#b58">[59,</ref><ref type="bibr" target="#b60">61]</ref>, uncertainty visualization <ref type="bibr" target="#b32">[33]</ref>, range distribution queries <ref type="bibr" target="#b14">[15]</ref>, or to reduce artifacts in multi-resolution volume rendering <ref type="bibr" target="#b52">[53,</ref><ref type="bibr" target="#b67">68]</ref>.  Bitmap indices <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b42">43,</ref><ref type="bibr" target="#b53">54,</ref><ref type="bibr" target="#b56">57,</ref><ref type="bibr" target="#b65">66,</ref><ref type="bibr" target="#b66">67]</ref> have been used widely for performing multivariate range queries. Given N data items with V possible values, a bitmap index will have one bitmap with N bits for each possible value v. In each bitmap, the n-th bit is set if the n-th data item's value is equal to that of the bitmap's associated value v. Range queries can be performed by applying a logical OR operation on the bitmaps of the values within the queried range. Multivariate data with D attributes require D •V bitmaps, each of size N. Range queries can be performed by applying a logical AND operation to the intermediate results of individual attribute range queries. To reduce storage cost of bitmap indices, several compression methods have been proposed such as Byte-aligned Bitmap Code <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b2">3]</ref> and Word-Aligned Hybrid <ref type="bibr" target="#b65">[66]</ref>, to name just a few. Stockinger et al. <ref type="bibr" target="#b57">[58]</ref> used binning to reduce the size of the bitmap index when applied to attributes with high cardinality, e.g., floating point scientific data. Dextrous data explorer (DEX) <ref type="bibr" target="#b56">[57]</ref> is an implementation of bitmap indexing specifically applied to query-driven visualization, e.g., for isosurface extraction and multi-attribute filtering.</p><p>Span space <ref type="bibr" target="#b33">[34,</ref><ref type="bibr" target="#b34">35]</ref> methods can be used to optimize isosurface extraction from scalar volumes, or to quickly search for cells that fall within a given min-max range. Near optimal isosurface extraction (NOISE) <ref type="bibr" target="#b34">[35]</ref> uses kd-trees <ref type="bibr" target="#b5">[6]</ref>, and isosurfacing in span space with utmost efficiency (ISSUE) <ref type="bibr" target="#b50">[51]</ref> uses 2D regular lattices for fast span space search. Subsequent work uses octrees <ref type="bibr" target="#b51">[52,</ref><ref type="bibr" target="#b63">64]</ref> and max-trees <ref type="bibr" target="#b59">[60]</ref> in order to extract the isosurface and perform spatial filtering of volumetric data. Fiber surfaces <ref type="bibr" target="#b11">[12]</ref> extract surfaces from bivariate data.</p><p>R-trees and similar data structures are widely used in database management systems for multivariate range queries <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b21">22,</ref><ref type="bibr" target="#b49">50,</ref><ref type="bibr" target="#b55">56]</ref>. The R-tree, introduced by Guttman <ref type="bibr" target="#b21">[22]</ref>, is a hierarchy of nested Ddimensional minimum bounding regions. Range queries are performed via recursive traversal of the tree to find intersections with the bounding region of the query. Kratky et al. <ref type="bibr" target="#b27">[28]</ref>, demonstrated the inefficiency of R-trees for narrow range queries, i.e., for small min-max differences, due to a high probability of false positive intersections. They further discuss how for such queries the R-tree efficiency decreases as the dimension of the indexed space increases. Representations based on R-trees often also suffer from the curse of dimensionality, with memory requirements and query times often becoming unfeasible with higher dimensions <ref type="bibr" target="#b54">[55]</ref>. The BB-tree <ref type="bibr" target="#b55">[56]</ref> is a main memory index structure for performing multi-dimensional range queries. It has been shown to be faster than R*-tree <ref type="bibr" target="#b3">[4]</ref>, kd-tree <ref type="bibr" target="#b5">[6]</ref>, PH-tree <ref type="bibr" target="#b69">[70]</ref>, and brute force scanning, for multivariate range queries up to a selectivity of 20%.</p><p>Range trees and similar data structures <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b37">38]</ref> also enable efficient multivariate range queries, although they can be prohibitive in terms of pre-processing and storage requirements <ref type="bibr" target="#b7">[8]</ref>. Similarly, kd-trees <ref type="bibr" target="#b5">[6]</ref> and quadtrees have been used for minimizing the search space of 2D range queries in spatial data <ref type="bibr" target="#b48">[49]</ref>. Kd-trees have also been used to interactively query and explore time series <ref type="bibr" target="#b70">[71]</ref>, or 3D curve data sets <ref type="bibr" target="#b36">[37]</ref>.</p><p>Approximate techniques can greatly speed up range queries, often in the form of approximate nearest neighbor search <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b25">26]</ref> and selectivity estimation <ref type="bibr" target="#b44">[45,</ref><ref type="bibr" target="#b46">47]</ref>. The former techniques often employ random projections <ref type="bibr" target="#b39">[40,</ref><ref type="bibr" target="#b40">41]</ref> of data points to lower dimensions to address the curse of dimensionality. The latter selectivity estimation techniques <ref type="bibr" target="#b44">[45,</ref><ref type="bibr" target="#b46">47]</ref> aim to estimate the cardinality or size of the results of a multivariate query to optimize query execution plans in databases. These methods often employ variants of multi-dimensional histograms <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b41">42,</ref><ref type="bibr" target="#b46">47]</ref>, which can be encoded as multi-resolution wavelets <ref type="bibr" target="#b38">[39]</ref>.</p><p>Bloom filters are a compact, probabilistic data structure for testing the membership of an item in a set <ref type="bibr" target="#b9">[10]</ref>. They can report false positive results, but no false negatives. Bloom filters are widely used for database indexing <ref type="bibr" target="#b10">[11]</ref>, but have also enabled efficient culling of segmented volume data <ref type="bibr" target="#b8">[9]</ref>. There exist many variants, such as counting Bloom filters <ref type="bibr" target="#b45">[46]</ref>, spectral bloom filters <ref type="bibr" target="#b15">[16]</ref>, and tree-structured Bloom filters <ref type="bibr" target="#b16">[17,</ref><ref type="bibr" target="#b19">20]</ref>. Similar data structures with deletions <ref type="bibr" target="#b17">[18]</ref> and data locality <ref type="bibr" target="#b4">[5]</ref> have also been proposed. An example for performing range queries is the multi-dimensional segment Bloom filter (MDSBF) of Hua et al. <ref type="bibr" target="#b24">[25]</ref>. Similar to bitmap indices <ref type="bibr" target="#b66">[67]</ref>, Bloom filters can also benefit from bit string compression, for example using roaring bitmaps <ref type="bibr" target="#b12">[13,</ref><ref type="bibr" target="#b30">31,</ref><ref type="bibr" target="#b31">32]</ref>. In our work, we use a recent compression algorithm <ref type="bibr" target="#b29">[30]</ref> leveraging modern SIMD processors for fast de/compression.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">ALGORITHM</head><p>Our approach consists of the three main conceptual stages depicted in Fig. <ref type="figure" target="#fig_0">2</ref>. The first stage is a pre-computation for the entire input data set. Only the subsequent two stages are executed at run time. The second stage is view-independent, and only needs to be executed whenever a new query is specified by the user. Only the third stage is executed during rendering, e.g., for each new camera transformation. However, even in the third stage all query computations are cached and do not need to be re-computed for any new view unless the query changes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Overview and Processing Stages</head><p>The major goals, data structures, and algorithms of each stage of our approach are as follows. Details are described in subsequent sections.</p><p>Pre-processing: Local filters. For a given data set, we pre-compute a representation of the D-dimensional attribute space. However, instead of computing a D-dimensional data structure, we only compute D onedimensional projections, one for each attribute A 1 ,...,A D (Fig. <ref type="figure" target="#fig_3">2, left</ref>). We call the data structure for each attribute A i a local filter, each of which spanning the range of the corresponding attribute A i , from the minimum value to the maximum value of A i . For each attribute A i we adaptively subdivide its range into b i range bins B 1 i ,...B bi i . Each bin represents a set of cell IDs, whose attribute values map to the corresponding range. However, instead of storing an actual set or a bitmap for each bin, which would scale with the data size N, we hash cell IDs into a Bloom filter <ref type="bibr" target="#b9">[10]</ref> for each bin. A Bloom filter is a hash table comprising a bit vector of m bits for probabilistic membership queries. In our approach, m is chosen according to the expected cardinality |Q| of queries Q, instead of according to the input data size N.</p><p>View-independent query evaluation: Global filter creation. To evaluate a query Q for an attribute range</p><formula xml:id="formula_0">{Q i = [Q min i , Q max i ]} d i=1 , in d ≤ D dimensions,</formula><p>we first proceed as follows. For each attribute A i , we determine the range bins of the corresponding local filter overlapping the range</p><formula xml:id="formula_1">[Q min i , Q max i</formula><p>] (Fig. <ref type="figure" target="#fig_0">2</ref>, center), and compute a bitwise OR of all m Bloom filter hash table bits. Then we sum the result over all attributes A i into a single global filter for all attributes (Fig. <ref type="figure" target="#fig_3">2, center</ref>). The global filter is also implemented as a probabilistic hash table. However, in contrast to the local filters, the global filter is a counting Bloom filter <ref type="bibr" target="#b18">[19]</ref>, with each count ≤ d (Fig. <ref type="figure" target="#fig_2">4</ref>). The crucial insight here is that the resulting counts allow determining the set of cell IDs that are in the d-dimensional intersection of all d ≤ D query ranges, corresponding to a logical AND, although no dor D-dimensional data structure or computation is used. Fig. <ref type="figure" target="#fig_2">4</ref> illustrates this approach.</p><p>View-dependent query evaluation: Global filter querying. The global filter computed in the previous stage is view-independent and contains all information about the query result irrespective of the spatial hierarchy used for rendering, such as an octree. <ref type="foot" target="#foot_1">6</ref> Therefore, in the rendering stage we need to (selectively) query and propagate the information from the global filter into the spatial hierarchy. We do this in a view-dependent and progressive manner. (However, note that our local and global filters do not depend on any specifics of the spatial hierarchy or rendering.) In essence, every octree node needs a binary occupancy state whether the current query Q evaluates to true for any cell<ref type="foot" target="#foot_2">7</ref> located within the spatial extent of the node. We compute the occupancy state of octree nodes in two major ways (for interior nodes, the state accurately reflects entire subtrees; see also Algorithm 1):</p><p>1. First, we employ an early-out strategy during octree traversal, using the concept of supercell IDs (see below) that are queried against the global filter in the same way as individual cell IDs are. In many cases, this already determines an occupancy state of false for an entire subtree, without having to continue tree traversal. 2. Where early-out fails, ultimately an octree leaf node is reached.</p><p>We then iterate over all cell IDs contained in the leaf node, and for each ID query the hash table comprising the global filter to obtain the occupancy state of the cell. This is an operation independent of D, and solely depends on the number k of hash functions used by the Bloom filter (see below). The occupancy state of an octree leaf node is then the bitwise OR of the states of the individual cells. The occupancy states of interior octree nodes are then computed by propagating the state of the leaf nodes up the tree, again performing a bitwise OR operation in each step.</p><p>The above two strategies are combined with standard view frustum and occlusion culling: Only subtrees/nodes that are within the view frustum and are not culled according to occlusion culling are visited. In total, this amounts to a lazy evaluation strategy combing two output-sensitive aspects: Individual cells are only queried if they are (1) potentially visible; and (2) early-out (depending on the query output) has failed. Supercells. The essential idea of supercells is that each corresponding supercell ID represents all full-resolution cells within the spatial extent of a given octree node, without corresponding to any multiresolution down-sampling. Despite this, supercell IDs are inserted into the local filters in almost the same way that regular cell IDs are. Nevertheless, this simple addition of supercell IDs to the filter hash tables allows a very efficient, conservative early-out from octree traversal, skipping processing for whole subtrees of the spatial hierarchy, without any false negatives in the query evaluation. See Sec. 4.2 for the details.</p><p>Eliminating false positives. For a completely accurate occupancy state, we have one remaining problem: The implementation of the global filter as a Bloom filter can produce false positives (see Sec. 3.3). That is, the state of cells, and due to propagation also that of octree nodes, can be true although it should be false. Moreover, due to binning in each local filter, false positives also arise from cells that are in a range bin that overlaps the query range, but that are in fact outside the query range (Fig. <ref type="figure" target="#fig_2">4</ref>). However, it also depends on the application whether this problem actually needs to be addressed explicitly:</p><p>• If our method is essentially used as a fast culling strategy, because cells are rendered via a transfer function that maps any cell outside the query range to full transparency, nothing needs to be done. • In the case where the query must be completely accurate, e.g., because no transfer function is used, or it is only applied to some but not all attributes in a query, and therefore all cells in the query result might be rendered, false positives need to be eliminated. We eliminate false positives by simply iterating over all cells contained in a visible octree leaf node with an occupancy state of true. We reevaluate the query by scanning each cell to accurately update the node's occupancy state. If no transfer function is used, at this time a bitmask containing the occupancy state of each individual cell in the leaf node can also be computed to cache which cells should not be rendered.</p><p>Because the set of these cells is already reduced drastically compared to the whole data set, this update strategy is usually fast. Furthermore, we can again employ a lazy evaluation strategy: We eliminate false positives progressively node by node, until all nodes have been updated. Each node also needs to be updated only once. Once the occupancy state is final, it is cached and re-used in all subsequent rendering frames.</p><p>For fast interaction, we can also consider the following property: It is interesting to note that, due to the random hashing that we employ, the spatial pattern of where cells corresponding to false positives are located appears similar to a white noise distribution. This makes it quite easy for the user to ignore visible false positives during interaction, while still being able to understand the essential characteristics of the data set without confusion. See Fig. <ref type="figure" target="#fig_4">5</ref> for an illustration of this effect.</p><p>Caching of occupancy state. Although we compute the occupancy states in the spatial hierarchy in a view-dependent, output-sensitive manner, once the final state of any node has been computed, it does not change for different views until the query itself, and thus the global filter, are changed. We therefore cache the occupancy state in each octree node, avoiding unnecessary re-computation. See Algorithm 1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Query Representation and Characteristics</head><p>We target general d-dimensional range queries (d ≤ D) consisting of a combination of specified ranges in each of d relevant attributes A i , where a given expression consisting of logical AND, OR, and NOT operations should be evaluated to determine which cells are members of the output result (set) of a query. Any more complicated expression can be built from simple building blocks. However, the major computational challenge is efficiently evaluating logical AND queries, because they (conceptually) must be evaluated jointly in d-dimensional attribute space, whereas logical OR queries are intrinsically one-dimensional.</p><p>Query result. The result of any query Q is a subset of cell IDs, of the total set of N possible cell IDs comprising the input data set. That is, N is the cardinality of the input, and we denote the cardinality of the subset comprising the query result by |Q| ≤ N. We target fullresolution query evaluation. That is, no down-sampled multi-resolution   aggregation of "lower-resolution" cells is used for query evaluation or to increase performance at a loss of accuracy. (For rendering, any multi-resolution approach can be used at the same time, if desired.)</p><p>AND queries. A cell ID is in the query result (set) of an AND query, as given by the global filter, when the count values of the k hash table entries (see below) corresponding to the cell ID all are equal to d, for a d-dimensional query in attribute space, with d ≤ D. (See Algorithm 1.)</p><p>OR queries. A cell ID is in the query result (set) of an OR query, as given by the global filter, when the count values of the k hash table entries (see below) corresponding to the cell ID all are non-zero.</p><p>NOT queries can be evaluated by inverting the desired range of a query, and building a composite query for the resulting attribute ranges.</p><p>Query characteristics and scalability. Although the query cardinality is only really limited by the data size, i.e., |Q| ≤ N, most meaningful queries result in a much smaller |Q| N. Moreover, |Q| typically grows slower than N with increasing data size. In particular, we especially target high-dimensional queries, and since logical AND operations correspond to set intersections, the higher the dimensionality d of a query is, the smaller the cardinality |Q| usually becomes. In our method this is reflected by the use of Bloom filters. Their size is determined by a fixed length m, which we choose according to the expected query size |Q|. Our approach therefore scales with |Q| instead of with N, essentially making it largely independent of the data size N.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Bloom Filters: Probabilistic Set Membership</head><p>A Bloom filter <ref type="bibr" target="#b9">[10]</ref> is a probabilistic representation of a set of elements, with probabilistic membership queries. Set elements are hashed into a hash table bit vector of length m bits. 8 A Bloom filter requires the choice of k hash functions, e.g., k = 2 or k = 3. Inserting an element into the filter is done by setting k bits, determined by applying the k hash functions to the element, to one. Set membership is queried by again hashing an element k times, and checking whether all corresponding k bits in the Bloom filter are set to one. Due to possible collisions, false positives can occur with a certain probability, depending on the choice of m and k, as well as on the number of inserted elements n (Eq. 2). A crucial property of Bloom filters in our context is that false negatives (an element is reported as not in the set, although it in fact is) are guaranteed to not occur. This makes Bloom filters very well suited for conservative culling: Skipping computation when set membership is guaranteed to be false, and at worst performing an unnecessary computation when set membership as given by the filter is true, although it in fact is false.</p><p>Bloom filters are very space efficient when the "universe" U of all possible elements-in our case all N possible cell IDs-is large, and the cardinality n of the set actually in the Bloom filter-in our case in particular the query result cardinality |Q|-is small. That is, when</p><formula xml:id="formula_2">n = |Q| N = |U|.</formula><p>(1)</p><p>The second case of importance in our context is the number of cell IDs in a given range bin of a local filter (see below). Probabilistically, the expected false positive rate of Bloom filters can be estimated by <ref type="bibr" target="#b10">[11]</ref> </p><formula xml:id="formula_3">r fp = 1 − e −k n/m k . (<label>2</label></formula><formula xml:id="formula_4">)</formula><p>8 For brevity, here we refer to a vector of m bits. In the case of a counting Bloom filter, such as our global filter, the vector consists of m integer counts.</p><p>Here, m is the length of the hash table bit vector, <ref type="foot" target="#foot_3">9</ref> k is the number of hash functions, and n is the number of inserted elements, e.g., n = |Q|. It is crucial that Eq. 2 is completely independent of the universe size |U|, which gives our approach the desired property that it depends on and scales with the expected query cardinality |Q|, instead of data size N.</p><p>We note that the expected false positive rate for set intersections is higher when Bloom filters of individual sets are combined, as we also do, compared to a direct Bloom filter computation from the exact (but for us unknown) intersected set <ref type="bibr" target="#b10">[11]</ref>. Thus, in our approach the probabilistic estimate for increasing d, and correspondingly decreasing |Q|, decreases less than given by Eq. 2 with n = |Q|. The false positive rate is bounded by the smallest set <ref type="bibr" target="#b10">[11]</ref>. The worst case thus is n = |Q i |, for the smallest query |Q i |. However, in practice we observe significantly decreasing false positive rates when d grows (see Table <ref type="table" target="#tab_6">3</ref> and Fig. <ref type="figure" target="#fig_9">12</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Local Filters: 1D Attribute Space Projections</head><p>Our approach employs 1D projections, where all D attribute dimensions are treated separately and independently. For each attribute A i , we build a local filter comprising multiple Bloom filters (Fig. <ref type="figure" target="#fig_5">6</ref>, left). In the pre-processing stage, for each local filter we split the value range of each attribute A i into a number of range bins, covering the entire range from minimum to maximum value of A i occurring in the data set. The width of each range bin is adaptively chosen such that the resulting cardinality of cells with an attribute value A i within the bin's range is roughly constant. We compute this in a hierarchical fashion, subdividing the query range at the median position approximated via cumulative histograms; then proceeding recursively for the subranges below and above the median, respectively. This approach seamlessly adapts to non-uniform cell attribute value distributions. In addition, we avoid exceeding a pre-scribed percentage of the total range for any bin.</p><p>After the bin boundaries have been chosen, one Bloom filter of size m bits is constructed for each range bin. For each attribute A i , all range bins together comprise the local filter of that attribute. In total, we pre-compute D local filters, each comprising b i Bloom filters (i ≤ D).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Global Filter: Set Intersection via Counting</head><p>Our global filter is a single counting Bloom filter. That is, the global filter comprises a single vector of m integer counts, irrespective of the query or data attribute dimensionalities d (≤ D) and D, respectively.</p><p>To compute the global filter for a given query Q, we sum the d values of each of the m local Bloom filter bits that result from the logical OR of all range bin bit vectors within the query range Q i , for all d attributes A i (i ≤ d), see Fig. </p><formula xml:id="formula_5">)<label>4</label></formula><p>We note that the size m is required to be the same for all our Bloom filters (global and local): The number of vector entries must match.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Cells in Supercell in query in query Supercell</head><p>Cell none in query Granularity in query Fig. <ref type="figure">7</ref>. Attribute co-occurrence granularity. Because joint queries depend on spatial locations where attribute values occur jointly, they depend on the granularity at which spatial "co-occurrence" is determined. Queries may give overly conservative answers depending on granularity: From single cell, to supercell granularity of 2 3l n 3 cells, l ≥ 0. Here, n = 2.</p><p>(Also note that we refer to 3D cell arrangements, but show only 2D here.)</p><p>Membership query. The summation above results in set membership information from which both AND as well as OR query results can be obtained: (1) A cell is in the joint d-dimensional query result of an AND query, if its count in the global filter at all k corresponding hash positions is equal to the dimensionality d: Set intersection results from counting dimensionalities (Fig. <ref type="figure" target="#fig_2">4</ref>). Counting also enables incremental filter updates (see below). ( <ref type="formula" target="#formula_3">2</ref>) A cell ID is in the query result of an OR query, if its count in the global filter at all k corresponding hash positions is non-zero, i.e., when each count is at least one.</p><p>Scalability. Because the number of hash functions k is a small constant (we use k = 2 or k = 3), this method is faster than scanning over d actual attribute values. The number of accesses is restricted to the constant number k, instead of increasing with query dimensionality d ≤ D. For Ñ cells in the PVS, only k • Ñ instead of D • Ñ checks are required. Thus, our scalability is independent of the dimensionality D. Moreover, checking d actual attributes requires accessing full attribute data in memory, whereas only querying the global filter repeatedly accesses the same hash table, which is beneficial for automatic memory cache utilization. All operations are also trivial to parallelize.</p><p>Query updates. Whenever the query is changed, the global filter is either computed from scratch or updated incrementally, by subtracting or adding the corresponding vector local filter i [] (Eq. 4) from the previous vector global filter[] (Eq. 3), i.e., the previous vector of counts.</p><p>It is important to note that our usage of a counting Bloom filter results in the same major properties as those of a regular Bloom filter (in particular, the false positive rate in Eq. 2), except that m integer counts are allocated instead of m bits, in contrast to the standard usage of counting Bloom filters <ref type="bibr" target="#b45">[46]</ref>. The major reason for this is that we increase or decrease counts by adding or subtracting an entire Bloom filter bit vector of some attribute A i to or from the global filter. In contrast, a standard counting Bloom filter adds or subtracts individual elements. Our "element" to add or subtract is an entire bit vector.</p><p>Counting global filter vs. counting Bloom filter. Instead of a regular Bloom filter, as used in all local filter range bins, for the single global filter we essentially employ a counting Bloom filter <ref type="bibr" target="#b45">[46]</ref>, but in detail with a different usage and corresponding properties. Counting enables us to perform incremental query updates: Any attribute dimension A i that has already been inserted into the global filter can also be subtracted out again, by simply subtracting the bit vector of an entire attribute A i . This subtraction is not possible in a standard Bloom filter, but, unlike in our global filter, can also incur problems such as false negatives in standard counting Bloom filters, where individual elements are removed. Together with the trivial addition of attributes (by adding the bit vector of an entire A i ), this enables arbitrary incremental changes to an already computed global filter for faster interactive updates.</p><p>Overall, our global filter has four crucial differences to the standard usage and corresponding properties of counting Bloom filters:</p><p>• Counting is done such that each attribute A i is treated together:</p><p>Individual elements (or range bins) of one A i cannot be removed from the global filter, but entire attributes can be removed exactly. Fig. <ref type="figure">8</ref>. Supercells. Each is assigned one supercell ID, but represents all 2 l n × 2 l n × 2 l n cells (l ≥ 0) in the spatial extent of a given octree node, for octree leaf nodes (l = 0) of n 3 cells (here, n = 2). Inserting supercell IDs into all local filters enables an early-out strategy during octree traversal, by performing conservative culling queries against the global filter. (Here: 3D data illustrated in 1D/2D/3D; only one supercell ID shown hashed.)</p><p>• The counts in the global filter are guaranteed to be bounded by the number d ≤ D (Fig. <ref type="figure" target="#fig_5">6</ref>, right). This allows a simple deterministic allocation of log D bits for storing each count value. • The false positive rate in our global filter is exactly the same as that of a regular Bloom filter (Eq. 2). This is not the case for the standard use of a counting Bloom filter <ref type="bibr" target="#b45">[46]</ref>.</p><p>Alternative non-counting global filter. If the capability for incremental global filter updates is not desired, each count could be substituted by a single bit, i.e., a regular Bloom filter could be used. In this case, the summation of local filter bits into counts becomes a simple bitwise AND. However, if this is done AND and OR queries cannot be fulfilled from the same global filter: Each such query requires a re-computation of the global filter. For these reasons, and because the storage corresponding to the count values of a single global filter is usually not a critical issue, we always employ a counting global filter.</p><p>Choice of Bloom filter size. We choose m (the number of counts in the global filter) according to the expected query cardinality |Q|, but always choose a size such that m N. Table <ref type="table" target="#tab_6">3</ref> illustrates the impact of different ratios between query size and Bloom filter size, in particular on the false positive rates. We note again that the same size m must also be used for all Bloom filters comprising the local filter range bins.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">SPATIAL HIERARCHY</head><p>Although the first two stages (Fig. <ref type="figure" target="#fig_0">2</ref>, left and center) of our approach can be used without visualization, our design is very much targeted toward the characteristics and requirements of visualization. That is, in particular, the traversal of a hierarchical space subdivision such as an octree, and the integration and interaction with visibility determination via view frustum and (progressive) occlusion culling. The third stage of our method therefore comprises octree traversal strategies that interact efficiently with query evaluation (checking the global filter hash table), and performing conservative culling, i.e., not visiting octree nodes that are guaranteed to be empty, but maybe visiting some nodes that turn out to be empty after all. In particular, recursive octree traversal must compute and update octree node occupancy states. See Algorithm 1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Attribute Co-Occurrence Granularity</head><p>A crucial issue of joint attribute queries is the spatial granularity at which the co-occurrence of 1 &lt; d ≤ D attribute values is determined. Exact co-occurrence would have to be determined for (infinitesimal) spatial points, as to some extent done by several methods, such as fiber surfaces <ref type="bibr" target="#b11">[12]</ref>. If, however, we consider it to be sufficient for each attribute value (range) to appear anywhere within a spatial region of finite extent, then the accuracy of co-occurrence determination depends on the region size (Fig. <ref type="figure">7</ref>). For example, two isosurfaces might come as close as the size of the region, but they might not actually intersect. We refer to this phenomenon as attribute co-occurrence granularity. <ref type="foot" target="#foot_4">10</ref>A crucial fact to note is that, even with finite granularity, queries can be evaluated conservatively at any granularity: If there is no cooccurrence within the region at some granularity, it is guaranteed that attribute values cannot co-occur down to the individual point level. (Interpolation issues are discussed in Sec. 5.3.) As illustrated in Fig. <ref type="figure">7</ref>, this means that conservative query answers can be exploited at different granularities: Because there can be no false negatives, we can use coarse-granularity checks for efficient early-out during octree traversal. We do this via regions of 2 3l n 3 cells (l ≥ 0, n const.) we call supercells.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Supercells</head><p>For conservative culling with reduced spatial granularity (Fig. <ref type="figure">7</ref>), we introduce the concept of supercells to enable an efficient early-out strategy in the recursive computation of spatial occupancy state. See Figs. 8, 9, 11, and Algorithm 1. For a regular grid, we assign a supercell ID to spatial regions of 2 l n × 2 l n × 2 l n cells, where l ≥ 0 determines the spatial granularity of the supercell. l = 0 refers to the finest granularity. In an octree, each supercell corresponds to one octree node. <ref type="foot" target="#foot_5">11</ref> Thus, the number of supercells equals the number of octree nodes. It is crucial that, although each node is assigned only a single supercell ID, the supercell corresponds to all attribute values of the 2 3l n 3 cells within the spatial extent of the node, where l = 0 for leaf nodes of size n 3 .</p><p>Projecting supercell IDs into the local filters. In the pre-processing stage, we insert all supercell IDs into all local filters as follows: Denoting the number of octree levels by , every cell corresponds to additional supercell IDs. (These IDs are not exclusive: Many other cells share the same supercell IDs.) We now simply compute, for every cell out of N cells, + 1 IDs (one cell ID, plus supercell IDs), and insert all of these IDs into all local filters, according to the cell's attribute values.</p><p>Different cells with the same supercell IDs will be inserted multiple times, but the bit vectors of the local Bloom filters will not have duplicates (there is no counting). In the worst case, a single supercell ID can end up in all bins of all local filters (but only once per bin at most). For real data, the "spread" of supercell IDs over attribute ranges will be much less. The supercell ID of the octree root node will end up in the largest number of bins of all supercells (typically in all bins). This approach essentially "links" the spatial domain and the attribute space.</p><p>Overhead of supercells. Any disadvantage of supercells during run time is negligible. For example, for a volume that is a cube of N = M 3 cells, with a power-of-two side length M = 2 L , L ≥ 0, i.e., M cells in each of the three spatial dimensions, and a leaf node size of n 3 cells (n a power of two), for the total number of supercells we obtain the bound</p><formula xml:id="formula_6">#supercells &lt; 8M 3 7n 3 = 8N 7n 3 . (<label>5</label></formula><formula xml:id="formula_7">)</formula><p>Considering false positives in Bloom filters, the false positive rate (Eq. 2) corresponds to the number of inserted IDs, and therefore inserting additional IDs increases the false positive rate. However, the above formula shows that the number of supercell IDs that will be inserted in addition to the N cell IDs is very low. For example, for octree leaf nodes with n 3 cells, for n = 4 the number of additional supercell IDs is 1.79% • N, for n = 8 it is 0.22% • N, and for n = 16 it is 0.028% • N.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Occupancy State Propagation</head><p>At run time, we can perform query evaluation and the corresponding determination of a binary occupancy state per node during recursive traversal of the spatial hierarchy (e.g., an octree). See Algorithm 1. Every visited octree node first checks whether its occupancy state is already valid, i.e., whether it has been computed and cached before. If this is not the case, then we perform a conservative test for a guaranteed false occupancy state update using the node's supercell ID. This is always correct: (1) Supercells cannot give false negatives (see above and Fig. <ref type="figure">7</ref>). <ref type="bibr" target="#b1">(2)</ref> The global filter also has guaranteed no false negatives. However, the test can be overly conservative due to supercell regions of 2 3l n 3 cells. Despite this, accuracy naturally increases exponentially, as supercell granularity decreases during octree traversal (l decreases).</p><p>Early-out with supercell IDs. Because there cannot be false negatives, for every node visited during octree traversal, before we visit Propagation up the tree. If the conservative check using the supercell ID did not provide a guaranteed negative answer, we need to traverse further. If the node is not a leaf node, all child nodes need to be visited, and the occupancy state of the current node is the logical OR of the states of all child nodes. If the node is a leaf node, recursive traversal stops, and all cells within the spatial extent of the node are queried against the global filter. The occupancy state of the node is then the logical OR of all individual cell states. See Algorithm 1.</p><p>Asynchronous cell queries. The individual cell queries for leaf nodes can be scheduled to be computed asynchronously. Once the asynchronous computation of a leaf node finishes, the node's occupancy state is known and cached. On the next octree traversal, the node's occupancy state will then be propagated up the tree.</p><p>Eliminating false positives. If a completely accurate (i.e., guaranteed no false positives) result is required, we can eliminate false positives by visiting leaf nodes and for each of the contained cells evaluate the exact query using scanning, i.e., by checking all attributes individually. This operation can also be scheduled to be computed asynchronously, progressively updating the occupancy state of tree nodes to eliminate false positives. We note that cached occupancy states in the tree that were already set to valid need to be invalidated for the part of the tree above each leaf node that is being updated (and whose occupancy state in fact changed due to false positive elimination).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RESULTS AND EVALUATION</head><p>We evaluate our method using the data sets listed in Table <ref type="table" target="#tab_5">2</ref>, consisting of two real data sets from different scientific domains (meteorology and oceanography), which use physical attributes such as temperature, humidity, pressure; and a synthetic test data set based on Perlin Noise <ref type="bibr" target="#b43">[44]</ref> with different frequencies and seed numbers per attribute. We also compare our results with other techniques for multivariate filtering.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Implementation</head><p>Our framework is implemented in C++ and OpenGL. All tests rely on our own implementations, using the C++ Standard Template Library, except for the R-tree, for which we used the fast template library by Guttman et al. <ref type="bibr" target="#b22">[23]</ref>, and the compression of Bloom filter bit vectors, for which we used the libraries by Lemire et al. <ref type="bibr" target="#b29">[30]</ref>. Our system supports data coming from different kinds of sources, and can be easily integrated into larger or more complex visualization systems.</p><p>All our results were measured on an Intel Xeon 6230R with 128 GB, and a NVIDIA RTX 3090 GPU, running Windows 10. To facilitate fair comparisons, for all performance tests we used only a single CPU core and no GPU implementation, except for standard OpenGL rendering.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Evaluation</head><p>In Table <ref type="table" target="#tab_5">2</ref>, we compare our technique, both with the use of supercells (SC) and without (BF; only for comparison purposes), with other techniques for multivariate filtering in visualization: (1) Scanning; checks each cell and attribute individually (also determines ground truth); (2) MinMax octree; uses an octree with fixed-size leaf nodes of 16 3 cells, testing a (min, max) value pair per attribute per node; and (3) an R-tree.</p><p>We evaluate three data sets with three queries each, of dimensions d = 1 (Q1), d = 2 (Q2), and d = 3 (Q3), respectively. The query cardinalities |Q| of each of these queries are given in Table <ref type="table" target="#tab_6">3</ref>.</p><p>Pre-processing. Table <ref type="table" target="#tab_5">2</ref> reports the times for building each basic data structure. For our method, this is the creation of the local filters. This pre-processing is an offline process that is done just once. For our data sets, it takes from several minutes to one or two hours. In our approach, the total Storage Size of all local filters, as well as the Pre-Processing time, depend directly on the number of range bins computed. However, query evaluation only has to load or stream the small subset of bins within the actual query range under consideration.</p><p>Query performance (global filter construction). Create GF in Table <ref type="table" target="#tab_5">2</ref> is the time to construct the global filter by summing all local filter range bins within the query ranges Q i , representing the query result set Q by the global filter. This is done only once for each new query, and takes from a few milliseconds for the Red Sea data set to a few seconds in the worst cases, which still facilitates user interaction.</p><p>Query performance (global filter querying). In Table <ref type="table" target="#tab_5">2</ref>, Query Time is the time for computing the occupancy state of all cells, which is the final query result. Query times include the time needed to eliminate false positives. (For comparison, SC times in parentheses are without false positive elimination.) In order to avoid confusing measurements for query evaluation with on-screen visibility, all reported numbers are for complete data set traversals without any PVS determination, i.e., for Ñ = N. We note, however, that this eliminates one clear advantage of our method: The spatial hierarchy traversal for query evaluation can be the same as the one that is already used for rendering and visibility culling, efficiently skipping all subtrees outside the PVS completely. Memory footprint. MinMax (with fixed-size blocks of 16 3 cells) stores only a small amount of data (2 • D floats per block), whereas an Rtree needs much more space. In contrast, our probabilistic approach is more than three times smaller than the R-tree (in terms of pre-computed local filter storage), and it scales better with the number of attribute dimensions D. The memory overhead of supercell IDs in (compressed) local filter storage is around 10%. In Table <ref type="table" target="#tab_5">2</ref>, Global Filter is the (uncompressed) size of the global filter, which is independent of D and only depends on the chosen Bloom filter hash table size m. Since the global filter is quite small, it is not compressed and therefore has the same size whether or not supercells are used. Although we have not implemented it, the global filter could easily be stored in GPU memory.</p><p>False positive rate evaluation. For concrete results, here we report measured false positive rates (Table <ref type="table" target="#tab_6">3</ref>, Fig. <ref type="figure" target="#fig_9">12</ref>) instead of probabilistic estimates (Eq. 2). The measured false positive rate is defined as</p><formula xml:id="formula_8">FPR = FP FP + TN . (<label>6</label></formula><formula xml:id="formula_9">)</formula><p>FP is the number of false positives, TN the number of true negatives, and FP + TN the total number of ground truth negatives; see Fig. <ref type="figure" target="#fig_8">11</ref>. Table <ref type="table" target="#tab_6">3</ref> reports how the Bloom filter size m influences the false positive rates for different queries, as well as how much the use of supercells decreases both the number of true negatives that are tested individually, as well as the false positive rate (see below). Fig. <ref type="figure" target="#fig_9">12</ref> visualizes these results. A more complete evaluation is provided in Table <ref type="table">6</ref> and in Figs. <ref type="bibr">13, 14, and 15</ref> in the supplementary appendices.</p><p>It is crucial to note that the use of our supercells with hierarchical traversal and early-out usually results in a significant decrease of the false positive rate. The reason for this is that in our early-out strategy a single supercell ID represents many cell IDs, incurring the false positive probability only once per supercell instead of once for each cell.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Discussion</head><p>Interaction use cases. In a typical user interaction scenario, only a small number of nodes will become visible whose occupancy state has not already been cached before. For this reason, while the timings given in Table <ref type="table" target="#tab_5">2</ref> are given for whole data sets, our approach is usually fully interactive. The creation of a new global filter is not always interactive, but can be made much faster by incremental changes from a previous query. However, even a full update is still faster than previous work.  Data interpolation. In this paper, we have focused on data attributes that are not interpolated. When attribute values should be interpolated to reconstruct a continuous field (e.g., interpolating from grid cell vertices), this has to be taken into account for accurate query results. One way to integrate interpolation into our method would be to treat this case similarly to how we compute supercells: Each cell with interpolated data corresponds to a (min, max) pair of values, and the cell's ID would have to be projected into all local filter range bins that overlap its (min, max) range. However, we leave this for future work.</p><p>Structured vs. unstructured grids. Since we treat individual cells as data points with a set of attribute values per point, our approach does not depend on the type of grid (structured or unstructured) that is used, and can also directly be applied to meshless (e.g., point-based) data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSIONS</head><p>Our probabilistic data structure and output-sensitive query method have several important benefits regarding scalability with data size and, in particular, the number of attribute dimensions. The main target of our framework are logical AND queries in high-dimensional attribute spaces. The major idea of our query method is that query evaluation should be as output-sensitive as possible. Regarding the query evaluation by itself, we achieve this by targeting scalability with the cardinality |Q| of the query result set Q, which is particularly useful for joint queries of many attributes. Moreover, our approach is also output-sensitive regarding the visible part of the data set in the visualization, by integrating directly with standard octree traversal or other hierarchical space subdivisions. The use of our concept of supercells is particularly useful to speed up query time, both for view-independent queries-where the supercells allow for efficient early-out during hierarchical query evaluation-as well as during rendering, where standard view frustum and occlusion culling can integrate directly with supercellbased skipping of whole subtrees of the hierarchical space subdivision.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>Fig. 2. Overview. Our approach consists of three main stages: (1) Given data with D attribute dimensions A i , a pre-processing stage computes D one-dimensional projections of the set of all cells into local filters. No D-dimensional data structure is used. Each local filter comprises multiple range bins, where each bin is implemented as a Bloom filter. (2) d-dimensional (d ≤ D) query evaluation at run time aggregates range bins of d local filters into a single global filter implemented as a counting Bloom filter. (3) During rendering, octree nodes query the global filter in visibility order to obtain a binary occupancy state per node. We use a supercell ID per node to speed up this process, and all states are cached for progressive query updates.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 .</head><label>3</label><figDesc>Fig. 3. False positives. The global filter representing the query result set is queried using probabilistic hashing. While this leads to some false positives (left; shown in red), they can be removed by scanning the already significantly reduced number of cells in the query result (right).</figDesc><graphic url="image-17.png" coords="3,63.91,72.66,231.49,108.07" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 4 .</head><label>4</label><figDesc>Fig. 4. Joint query as intersection of projections. Each cell in the input data (here, N = 15 cells) is a point in a D-dimensional (here, D = 2) attribute space (left). Our local filters store 1D projections, which are intersected by counting how often each cell is contained in a 1D projection (center right). For a d-dim. AND query (d ≤ D), only cells of total count d are in the query: They are in the intersection of d projections. Instead of storing N cell counts, we obtain a probabilistic count from the global filter, which is a counting Bloom filter of size m N (right; k = 2).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 2</head><label>2</label><figDesc>Fig.2depicts a visualization with false positives (Fig.2, top right image), and with false positives removed (Fig.2, bottom right image). We eliminate false positives by simply iterating over all cells contained in a visible octree leaf node with an occupancy state of true. We reevaluate the query by scanning each cell to accurately update the node's occupancy state. If no transfer function is used, at this time a bitmask containing the occupancy state of each individual cell in the leaf node can also be computed to cache which cells should not be rendered.Because the set of these cells is already reduced drastically compared to the whole data set, this update strategy is usually fast. Furthermore, we can again employ a lazy evaluation strategy: We eliminate false positives progressively node by node, until all nodes have been updated. Each node also needs to be updated only once. Once the occupancy state is final, it is cached and re-used in all subsequent rendering frames.For fast interaction, we can also consider the following property: It is interesting to note that, due to the random hashing that we employ, the spatial pattern of where cells corresponding to false positives are located appears similar to a white noise distribution. This makes it quite easy for the user to ignore visible false positives during interaction, while still being able to understand the essential characteristics of the data set without confusion. See Fig.5for an illustration of this effect.Caching of occupancy state. Although we compute the occupancy states in the spatial hierarchy in a view-dependent, output-sensitive manner, once the final state of any node has been computed, it does not change for different views until the query itself, and thus the global filter, are changed. We therefore cache the occupancy state in each octree node, avoiding unnecessary re-computation. See Algorithm 1.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 .</head><label>5</label><figDesc>Fig. 5. Spatial distribution of false positives. Due to probabilistic hashing, false positives occur randomly throughout space, making them easy to ignore during interaction. (Left) True and false positives; (center) false positives highlighted in red; (right) false positives eliminated.</figDesc><graphic url="image-18.png" coords="4,314.17,580.39,165.25,86.06" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 .</head><label>6</label><figDesc>Fig. 6. Bloom filter usage in local and global filters. (Left) Five example cell IDs are inserted into the Bloom filters comprising the range bins of the local filters. Each Bloom filter is a bit vector of size m N. (Center) At run time, only the bit vectors of bins in the query ranges Q i need to be accessed. (Right) Over each attribute A i in the query Q, a bitwise OR gives the probabilistic union of cell IDs in Q i . Finally, all Q i are summed into the global filter, a single counting Bloom filter of size m N. False positives can occur with probabilities determined by the Bloom filter configuration.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>6 .</head><label>6</label><figDesc>That is, we compute the global filter as global filter j = d ∑ i=1 local filter i j , for all j ∈ [1, m], (3) where local filter i j = OR b max b=b min local filter range bin i,b j . (</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 10 .</head><label>10</label><figDesc>Fig. 10. Multi-dimensional intersections. With growing number of attribute dimensions in an AND query, fewer and fewer cells are selected, i.e., the query cardinality |Q| gets smaller. From left to right, d = 1, 2, 3.</figDesc><graphic url="image-21.png" coords="8,63.92,72.66,231.49,71.58" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 11 .</head><label>11</label><figDesc>Fig. 11. True positives (TP), false positives (FP), true negatives (TN).The false positive rate is FPR = FP/(FP + TN), for FP + TN ground truth negatives. To eliminate all false positives (FP-Elim.), we only need to scan TP + FP cells, instead of all N = TP + FP + TN cells. Moreover, we use supercells with early-out to skip a significant part of TN (SC-Skip).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 12 .</head><label>12</label><figDesc>Fig. 12. Evaluation of false positives for different Bloom filter sizes. Stacked bar charts corresponding to Table 3; but here the results are grouped according to m = 50 %N, m = 25 %N, m = 15 %N (top to bottom).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 1 .</head><label>1</label><figDesc>Terminology used in this paper.</figDesc><table><row><cell>term</cell><cell>explanation</cell></row><row><cell cols="2">D # attribute dimensions A cell individual grid cell (regular grid: voxel), with cell ID.</cell></row><row><cell>local filter</cell><cell>one for each attribute A i ; comprises several range bins.</cell></row><row><cell>range bin</cell><cell>cells in subrange of specific A i ; Bloom filter per bin.</cell></row><row><cell cols="2">global filter one counting Bloom filter for all d ≤ D queried A i . N # cells in input data. Uniform 3D volume: N := M 3 .</cell></row><row><cell>Ñ</cell><cell># cells in view-dependent potentially visible set (PVS).</cell></row><row><cell>Q</cell><cell>query / query result set (an arbitrary set of cell IDs).</cell></row><row><cell>|Q|</cell><cell># cells in query: cardinality of query result set.</cell></row><row><cell>Q i m</cell><cell>attribute range [Q min i , Q max i # bits/counts in a Bloom filter (size of bit/count vector). ] of query for attribute A i .</cell></row><row><cell>k</cell><cell># hash functions for a Bloom filter.</cell></row><row><cell>node</cell><cell>node of spatial 3D subdivision (e.g., octree node).</cell></row><row><cell>supercell</cell><cell>all cells in a node are jointly assigned one supercell ID.</cell></row></table><note>i (e.g., temp., pressure, ...).d dimensionality d ≤ D of current query Q. A i attribute dimension i, with i ≤ D.One value per cell.</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head></head><label></label><figDesc>• Related to this fact, unlike standard counting Bloom filters, deletion of any attribute A i cannot result in false negatives to occur.</figDesc><table><row><cell>Supercell</cell><cell>+ + + + + +++ + + + + + + + +</cell><cell>+ + +</cell><cell>+ + + + + + + + + + +</cell><cell>+ + + + + +++ + + + + + + + +</cell><cell>+ + +</cell><cell>+ + + + + + + + + + +</cell></row><row><cell>Supercell</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Supercell</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Cells</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5"><head>Table 2 .</head><label>2</label><figDesc>Method comparisons. We compare our method without (BF) and with supercells (SC), respectively, with (1) Scanning d attributes, (2) MinMax (octree with 16 3 leaves; test d out of D min-max per node, (3) D-dimensional R-tree. Our results (BF, SC) use m = 25 %N, k = 2. Our query times include false positive elimination (SC times in parentheses without). BF query times are for comparison only; no hierarchy is used.</figDesc><table><row><cell></cell><cell></cell><cell cols="4">Scanning MinMax R-tree BF</cell><cell>SC</cell></row><row><cell cols="7">GFS Meteorology Prediction. 2,048x1,024x512 (N = 1,073,741,824), D = 8.</cell></row><row><cell cols="2">Pre-Processing [min]</cell><cell>-</cell><cell>8.75</cell><cell cols="2">194.76 25.33</cell><cell>231.66</cell></row><row><cell cols="2">Storage Size [MB]</cell><cell>-</cell><cell>31.99</cell><cell cols="2">79,591 18,814</cell><cell>20,363</cell></row><row><cell cols="2">Global Filter [MB]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>256</cell><cell>256</cell></row><row><cell>Q1</cell><cell>Create GF [s]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>3.96</cell><cell>4.11</cell></row><row><cell cols="3">(d=1) Query Time [s] 39.76</cell><cell>15.60</cell><cell cols="2">59.48 11.21</cell><cell>4.25 (3.44)</cell></row><row><cell></cell><cell>FPR [%]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>43.02</cell><cell>10.07</cell></row><row><cell>Q2</cell><cell>Create GF [s]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>7.13</cell><cell>7.04</cell></row><row><cell cols="3">(d=2) Query Time [s] 77.46</cell><cell>8.00</cell><cell cols="2">41.95 11.26</cell><cell>3.65 (2.19)</cell></row><row><cell></cell><cell>FPR [%]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>23.22</cell><cell>4.33</cell></row><row><cell>Q3</cell><cell>Create GF [s]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>7.24</cell><cell>7.77</cell></row><row><cell cols="3">(d=3) Query Time [s] 110.01</cell><cell>5.38</cell><cell cols="2">34.84 11.22</cell><cell>2.91 (1.43)</cell></row><row><cell></cell><cell>FPR [%]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>1.10</cell><cell>0.17</cell></row><row><cell cols="5">Red Sea. 500x500x50 (N = 12,500,000), D = 6.</cell><cell></cell><cell></cell></row><row><cell cols="2">Pre-Processing [min]</cell><cell>-</cell><cell>0.08</cell><cell cols="2">1.08 0.08</cell><cell>0.28</cell></row><row><cell cols="2">Storage Size [MB]</cell><cell>-</cell><cell>0.37</cell><cell cols="2">757.48 164</cell><cell>166</cell></row><row><cell cols="2">Global Filter [MB]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>2.98</cell><cell>2.98</cell></row><row><cell>Q1</cell><cell>Create GF [s]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>0.003</cell><cell>0.002</cell></row><row><cell cols="2">(d=1) Query Time [s]</cell><cell>0.48</cell><cell>0.08</cell><cell cols="2">0.31 0.14</cell><cell>0.04 (0.01)</cell></row><row><cell></cell><cell>FPR [%]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>2.76</cell><cell>0.18</cell></row><row><cell>Q2</cell><cell>Create GF [s]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>0.004</cell><cell>0.004</cell></row><row><cell cols="2">(d=2) Query Time [s]</cell><cell>0.91</cell><cell>0.07</cell><cell cols="2">0.37 0.16</cell><cell>0.03 (0.007)</cell></row><row><cell></cell><cell>FPR [%]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>1.48</cell><cell>0.07</cell></row><row><cell>Q3</cell><cell>Create GF [s]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>0.006</cell><cell>0.006</cell></row><row><cell cols="2">(d=3) Query Time [s]</cell><cell>1.24</cell><cell>0.07</cell><cell cols="2">0.26 0.12</cell><cell>0.02 (0.006)</cell></row><row><cell></cell><cell>FPR [%]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>0.19</cell><cell>0.02</cell></row><row><cell cols="7">Synthetic Perlin Noise. 512x512x512 (N = 134,217,728), D = 15.</cell></row><row><cell cols="2">Pre-Processing [min]</cell><cell>-</cell><cell>2.17</cell><cell cols="2">28.50 4.14</cell><cell>12.94</cell></row><row><cell cols="2">Storage Size [MB]</cell><cell>-</cell><cell>7.49</cell><cell cols="2">18,486 4,490</cell><cell>4,842</cell></row><row><cell cols="2">Global Filter [MB]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>32</cell><cell>32</cell></row><row><cell>Q1</cell><cell>Create GF [s]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>0.28</cell><cell>0.23</cell></row><row><cell cols="2">(d=1) Query Time [s]</cell><cell>5.14</cell><cell>4.53</cell><cell cols="2">6.32 2.02</cell><cell>1.25 (1.11)</cell></row><row><cell></cell><cell>FPR [%]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>29.82</cell><cell>20.96</cell></row><row><cell>Q2</cell><cell>Create GF [s]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>0.16</cell><cell>0.17</cell></row><row><cell cols="2">(d=2) Query Time [s]</cell><cell>9.59</cell><cell>0.40</cell><cell cols="2">2.68 1.44</cell><cell>0.23 (0.02)</cell></row><row><cell></cell><cell>FPR [%]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>0.21</cell><cell>0.10</cell></row><row><cell>Q3</cell><cell>Create GF [s]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>0.35</cell><cell>0.34</cell></row><row><cell cols="3">(d=3) Query Time [s] 14.36</cell><cell>0.30</cell><cell cols="2">1.73 1.40</cell><cell>0.23 (0.002)</cell></row><row><cell></cell><cell>FPR [%]</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>0.08</cell><cell>0.005</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6"><head>Table 3 . Evaluation of false positives for different Bloom filter sizes.</head><label>3</label><figDesc>Bloom filter size m, false positives (FP), true negatives (TN), and true negatives skipped by supercell early-out (SC-Skip) are given in % of the data size N. The false positive rate (FPR; Eq. 6) is in %. We compare our method without (BF) and with (SC) the use of supercells. See Fig.12.</figDesc><table><row><cell></cell><cell cols="5">m [%N] FP [%N] TN [%N] FPR [%] SC-Skip [%N]</cell></row><row><cell cols="6">GFS Meteorology Prediction. 2,048x1,024x512 (N = 1,073,741,824), D = 8.</cell></row><row><cell>BF SC BF |Q| = TP = SC Q1 (d=1)</cell><cell>50 25</cell><cell>14.82 2.16 37.29 8.73</cell><cell>71.86 84.51 49.39 77.95</cell><cell>17.10 2.50 43.02 10.07</cell><cell>74.06 66.41</cell></row><row><cell>13.3 %N BF SC</cell><cell>15</cell><cell>59.87 27.79</cell><cell>26.80 58.88</cell><cell>69.07 32.07</cell><cell>46.45</cell></row><row><cell>BF SC BF |Q| = TP = SC Q2 (d=2)</cell><cell>50 25</cell><cell>6.11 1.05 22.73 4.24</cell><cell>91.78 96.83 75.15 93.64</cell><cell>6.24 1.08 23.22 4.33</cell><cell>88.03 83.86</cell></row><row><cell>2.12 %N BF SC</cell><cell>15</cell><cell>49.01 15.43</cell><cell>48.87 82.46</cell><cell>50.07 15.76</cell><cell>69.22</cell></row><row><cell>BF SC BF |Q| = TP = SC Q3 (d=3)</cell><cell>50 25</cell><cell>0.19 0.03 1.10 0.16</cell><cell>99.77 99.93 98.86 99.79</cell><cell>0.19 0.03 1.10 0.17</cell><cell>93.28 90.92</cell></row><row><cell>0.03 %N BF SC</cell><cell>15</cell><cell>3.97 0.85</cell><cell>95.99 99.10</cell><cell>3.97 0.86</cell><cell>83.17</cell></row></table></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="1" xml:id="foot_0">We will refer to items to query mainly as cells, with D attributes each. In addition to geometric grid cells, the same applies to voxels and point samples.656</note>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="6" xml:id="foot_1">Without restricting generality, we use and refer to an octree as the spatial hierarchy used for rendering. Any other spatial subdivision would also work.</note>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="7" xml:id="foot_2">This always refers to individual cells, not to a less-accurate down-sampled (multi-resolution) representation. Our approach targets full-resolution accuracy.</note>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="9" xml:id="foot_3">In our global filter, the vector comprises m integer counts instead of bits. However, all other arguments, in particular the false positive rate, stay the same.</note>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="10" xml:id="foot_4">It is, however, crucial to note that this is the granularity of "grouping" full-resolution data. We do not consider down-sampled multi-resolution data.</note>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="11" xml:id="foot_5">We emphasize that this has nothing to do with multi-resolution rendering using octrees: For us, the octree just provides a hierarchical "spatial grouping." 6</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>This work was supported by King Abdullah University of Science and Technology (KAUST), and was also supported in part by a grant from Saudi Aramco (#3879).</p></div>
+			</div>
+
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>Percentages of nodes exiting on a given tree level (root is level 0). With increasing node size, memory consumption decreases, but query times and false positive rates increase. Here, the sweet spot is around n = 16. child nodes or individual cells (for leaf nodes), we first query the supercell ID against the global filter for a conservative test. If the ID is not in the global filter, we know that the occupancy state of the entire subtree starting with the current node is false. See Fig. <ref type="figure">9</ref>  </p></div>			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Optimizing queries on compressed bitmaps</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Amer-Yahia</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Very Large Data Bases (VLDB)</title>
+				<imprint>
+			<date type="published" when="2000">2000</date>
+			<biblScope unit="page" from="329" to="338" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Near-optimal hashing algorithms for approximate nearest neighbor in high dimensions</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Andoni</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Indyk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Foundations of Computer Science (FOCS)</title>
+				<imprint>
+			<date type="published" when="2006">2006</date>
+			<biblScope unit="page" from="459" to="468" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Byte-aligned bitmap compression</title>
+		<author>
+			<persName><forename type="first">G</forename><surname>Antoshenkov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Data Compression Conference (DCC)</title>
+				<imprint>
+			<date type="published" when="1995">1995</date>
+			<biblScope unit="page">476</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">The R*-Tree: An efficient and robust access method for points and rectangles</title>
+		<author>
+			<persName><forename type="first">N</forename><surname>Beckmann</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-P</forename><surname>Kriegel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Seeger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIGMOD Record</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="322" to="331" />
+			<date type="published" when="1990">1990</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Don&apos;t thrash: How to cache your hash on flash</title>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">A</forename><surname>Bender</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Farach-Colton</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Kraner</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><forename type="middle">C</forename><surname>Kuszmaul</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Medjedovic</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Montes</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Shetty</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><forename type="middle">P</forename><surname>Spillane</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Zadok</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">VLDB Endowment</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="1627" to="1637" />
+			<date type="published" when="2012">2012</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Multidimensional binary search trees used for associative searching</title>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">L</forename><surname>Bentley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="509" to="517" />
+			<date type="published" when="1975">1975</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Decomposable searching problems</title>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">L</forename><surname>Bentley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Processing Letters</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="244" to="251" />
+			<date type="published" when="1979">1979</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Data structures for range searching</title>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">L</forename><surname>Bentley</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">H</forename><surname>Friedman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computing Surveys</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="397" to="409" />
+			<date type="published" when="1979">1979</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Culling for extreme-scale segmentation volumes: A hybrid deterministic and probabilistic approach</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Beyer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Mohammed</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Agus</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">K</forename><surname>Al-Awami</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1132" to="1141" />
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Space/time trade-offs in hash coding with allowable errors</title>
+		<author>
+			<persName><forename type="first">B</forename><forename type="middle">H</forename><surname>Bloom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">7</biblScope>
+			<biblScope unit="page" from="422" to="426" />
+			<date type="published" when="1970">1970</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Network applications of Bloom filters: A survey</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Broder</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Mitzenmacher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Internet Mathematics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="485" to="509" />
+			<date type="published" when="2007">2007</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Fiber Surfaces: Generalizing isosurfaces to bivariate data</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Carr</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Geng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Tierny</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Chattopadhyay</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Knoll</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="241" to="250" />
+			<date type="published" when="2015">2015</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<author>
+			<persName><forename type="first">S</forename><surname>Chambi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Lemire</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">O</forename><surname>Kaser</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Godin</surname></persName>
+		</author>
+		<title level="m">Better bitmap performance with roaring bitmaps. Software: Practice and Experience</title>
+				<imprint>
+			<date type="published" when="2016">2016</date>
+			<biblScope unit="volume">46</biblScope>
+			<biblScope unit="page" from="709" to="719" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">An efficient bitmap encoding scheme for selection queries</title>
+		<author>
+			<persName><forename type="first">C.-Y</forename><surname>Chan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><forename type="middle">E</forename><surname>Ioannidis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIGMOD Record</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="215" to="226" />
+			<date type="published" when="1999">1999</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Efficient range distribution query for visualizing scientific data</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Chaudhuri</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">H</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">Y</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Peterka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium (PacificVis)</title>
+				<imprint>
+			<date type="published" when="2014">2014</date>
+			<biblScope unit="page" from="201" to="208" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Spectral Bloom filters</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Matias</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGMOD International Conference on Management of Data</title>
+				<imprint>
+			<date type="published" when="2003">2003</date>
+			<biblScope unit="page" from="241" to="252" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Bloofi: Multidimensional Bloom filters</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Crainiceanu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Lemire</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Systems</title>
+		<imprint>
+			<biblScope unit="volume">54</biblScope>
+			<biblScope unit="page" from="311" to="324" />
+			<date type="published" when="2015">2015</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Cuckoo filter: Practically better than Bloom</title>
+		<author>
+			<persName><forename type="first">B</forename><surname>Fan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">G</forename><surname>Andersen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kaminsky</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Mitzenmacher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM International on Conference on Emerging Networking Experiments and Technologies (CoNEXT)</title>
+				<imprint>
+			<date type="published" when="2014">2014</date>
+			<biblScope unit="page" from="75" to="88" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Summary Cache: A scalable wide-area web cache sharing protocol</title>
+		<author>
+			<persName><forename type="first">L</forename><surname>Fan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Almeida</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Broder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE/ACM Transactions on Networking</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="281" to="293" />
+			<date type="published" when="2000">2000</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">False-positive probability and compression optimization for tree-structured Bloom filters</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Biersack</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Model. Perform. Eval. Comput. Syst</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page">39</biblScope>
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Approximating multi-dimensional aggregate range queries over real attributes</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Gunopulos</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Kollios</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><forename type="middle">J</forename><surname>Tsotras</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Domeniconi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIGMOD Record</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="463" to="474" />
+			<date type="published" when="2000">2000</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">R-Trees: A dynamic index structure for spatial searching</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Guttman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIGMOD Record</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="47" to="57" />
+			<date type="published" when="1984">1984</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">R-Trees: a dynamic index structure for spatial searching</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Guttman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Stonebraker</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Douglas</surname></persName>
+		</author>
+		<ptr target="https://github.com/nushoin/RTree" />
+		<imprint>
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Sparse PDF maps for non-linear multi-resolution image operations</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Sicat</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Beyer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">31</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page">12</biblScope>
+			<date type="published" when="2012">2012</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Multi-dimensional range query for data management using Bloom filters</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Hua</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Feng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Xie</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE International Conference on Cluster Computing</title>
+				<imprint>
+			<date type="published" when="2007">2007</date>
+			<biblScope unit="page" from="428" to="433" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Approximate nearest neighbors: Towards removing the curse of dimensionality</title>
+		<author>
+			<persName><forename type="first">P</forename><surname>Indyk</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Motwani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Symposium on Theory of Computing (STOC)</title>
+				<imprint>
+			<date type="published" when="1998">1998</date>
+			<biblScope unit="page" from="604" to="613" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Visualization and Visual Analysis of Multifaceted Scientific Data: A Survey</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Kehrer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="495" to="513" />
+			<date type="published" when="2013">2013</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Efficient processing of narrow range queries in multi-dimensional data structures</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kratky</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Snasel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Pokorny</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Zezula</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Database Engineering and Applications Symposium (IDEAS)</title>
+				<imprint>
+			<date type="published" when="2006">2006</date>
+			<biblScope unit="page" from="69" to="79" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Worst-case analysis for region and partial region searches in multidimensional binary search trees and balanced quad trees</title>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">T</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">K</forename><surname>Wong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Acta Informatica</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="23" to="29" />
+			<date type="published" when="1977">1977</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">SIMD compression and the intersection of sorted integers</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Lemire</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Boytsov</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Kurz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Software: Practice and Experience</title>
+		<imprint>
+			<biblScope unit="volume">46</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="723" to="749" />
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Roaring bitmaps: Implementation of an optimized software library</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Lemire</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">O</forename><surname>Kaser</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Kurz</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Deri</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>O'hara</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Saint-Jacques</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Ssi-Yan-Kai</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Software: Practice and Experience</title>
+		<imprint>
+			<biblScope unit="volume">48</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="867" to="895" />
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Consistently faster and smaller compressed bitmaps with roaring</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Lemire</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Ssi-Yan-Kai</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">O</forename><surname>Kaser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Software: Practice and Experience</title>
+		<imprint>
+			<biblScope unit="volume">46</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="1547" to="1569" />
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Gaussian mixture model based volume visualization</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">A</forename><surname>Levine</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P.-T</forename><surname>Bremer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization (LDAV)</title>
+				<imprint>
+			<date type="published" when="2012">2012</date>
+			<biblScope unit="page" from="73" to="77" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Accelerated isosurface extraction approaches</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization Handbook</title>
+				<editor>
+			<persName><forename type="first">C</forename><forename type="middle">D</forename><surname>Hansen</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">C</forename><forename type="middle">R</forename><surname>Johnson</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Burlington</addrLine></address></meeting>
+		<imprint>
+			<publisher>Butterworth-Heinemann</publisher>
+			<date type="published" when="2005">2005</date>
+			<biblScope unit="page" from="39" to="55" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">A near optimal isosurface extraction algorithm using the span space</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="73" to="84" />
+			<date type="published" when="1996">1996</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">A compact multivariate histogram representation for query-driven visualization</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization (LDAV)</title>
+				<imprint>
+			<date type="published" when="2015">2015</date>
+			<biblScope unit="page" from="49" to="56" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Curve Complexity Heuristic KD-trees for Neighborhood-based Exploration of 3D Curves</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Isenberg</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C.-W</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">O</forename><surname>Deussen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">40</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="461" to="474" />
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">A data structure for orthogonal range queries</title>
+		<author>
+			<persName><forename type="first">G</forename><forename type="middle">S</forename><surname>Lueker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Foundations of Computer Science (SFCS)</title>
+				<imprint>
+			<date type="published" when="1978">1978</date>
+			<biblScope unit="page" from="28" to="34" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Wavelet-based histograms for selectivity estimation</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Matias</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">S</forename><surname>Vitter</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGMOD International Conference on Management of Data</title>
+				<imprint>
+			<date type="published" when="1998">1998</date>
+			<biblScope unit="page" from="448" to="459" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<author>
+			<persName><forename type="first">M</forename><surname>Mitzenmacher</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename></persName>
+		</author>
+		<title level="m">Probability and Computing: Randomized Algorithms and Probabilistic Analysis</title>
+				<imprint>
+			<publisher>Cambridge University Press</publisher>
+			<date type="published" when="2005">2005</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+		<title level="m" type="main">Randomized Algorithms</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Motwani</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Raghavan</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995">1995</date>
+			<publisher>Cambridge University Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Equi-depth multidimensional histograms</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Muralikrishna</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">J</forename><surname>Dewitt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIGMOD Record</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="28" to="36" />
+			<date type="published" when="1988">1988</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Model 204 architecture and performance</title>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">E</forename><surname>O'neil</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">High Performance Transaction Systems</title>
+				<editor>
+			<persName><forename type="first">D</forename><surname>Gawlick</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">M</forename><surname>Haynie</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">A</forename><surname>Reuter</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Berlin Heidelberg</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="1989">1989</date>
+			<biblScope unit="page" from="39" to="59" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">An image synthesizer</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Perlin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM SIGGRAPH Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="287" to="296" />
+			<date type="published" when="1985">1985</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Selectivity estimation</title>
+		<author>
+			<persName><forename type="first">E</forename><surname>Pitoura</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Encyclopedia of Database Systems</title>
+				<editor>
+			<persName><forename type="first">L</forename><surname>Liu</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">M</forename><forename type="middle">T</forename><surname>Özsu</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Boston, MA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2009">2009</date>
+			<biblScope unit="page">2548</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Improving counting Bloom filter performance with fingerprints</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Pontarelli</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Reviriego</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">A</forename><surname>Maestro</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Processing Letters</title>
+		<imprint>
+			<biblScope unit="volume">116</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="304" to="309" />
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Selectivity estimation without the attribute value independence assumption</title>
+		<author>
+			<persName><forename type="first">V</forename><surname>Poosala</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><forename type="middle">E</forename><surname>Ioannidis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Very Large Data Bases (VLDB)</title>
+				<imprint>
+			<date type="published" when="1997">1997</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Integral histogram: a fast way to extract histograms in Cartesian spaces</title>
+		<author>
+			<persName><forename type="first">F</forename><surname>Porikli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference on Computer Vision and Pattern Recognition (CVPR)</title>
+				<imprint>
+			<date type="published" when="2005">2005</date>
+			<biblScope unit="page" from="829" to="836" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">Kd-tree and quad-tree decompositions for declustering of 2D range queries over uncertain space</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Sayar</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Eken</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">O</forename><surname>Öztürk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Frontiers of Information Technology &amp; Electronic Engineering</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="page" from="98" to="108" />
+			<date type="published" when="2015">2015</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">The R + -Tree: A dynamic index for multi-dimensional objects</title>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">K</forename><surname>Sellis</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Roussopoulos</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Faloutsos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Very Large Data Bases (VLDB)</title>
+				<imprint>
+			<date type="published" when="1987">1987</date>
+			<biblScope unit="page" from="507" to="518" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Isosurfacing in span space with utmost efficiency (ISSUE)</title>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+				<imprint>
+			<date type="published" when="1996">1996</date>
+			<biblScope unit="page" from="287" to="294" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">Isosurface extraction and spatial filtering using persistent octree (POT)</title>
+		<author>
+			<persName><forename type="first">Q</forename><surname>Shi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Jaja</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1283" to="1290" />
+			<date type="published" when="2006">2006</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<analytic>
+		<title level="a" type="main">Sparse PDF volumes for consistent multi-resolution volume rendering</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Sicat</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2417" to="2426" />
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<analytic>
+		<title level="a" type="main">Multi-resolution bitmap indexes for scientific data</title>
+		<author>
+			<persName><forename type="first">R</forename><forename type="middle">R</forename><surname>Sinha</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Winslett</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Database Systems</title>
+		<imprint>
+			<biblScope unit="volume">32</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page">16</biblScope>
+			<date type="published" when="2007">2007</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<analytic>
+		<title level="a" type="main">Multidimensional range queries on modern hardware</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Sprenger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Schäfer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">U</forename><surname>Leser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Scientific and Statistical Database Management (SSDBM)</title>
+				<imprint>
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b55">
+	<analytic>
+		<title level="a" type="main">BB-tree: A main-memory index structure for multidimensional range queries</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Sprenger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Schäfer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">U</forename><surname>Leser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Data Engineering (ICDE)</title>
+				<imprint>
+			<date type="published" when="2019">2019</date>
+			<biblScope unit="page" from="1566" to="1569" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b56">
+	<analytic>
+		<title level="a" type="main">Query-driven visualization of large data sets</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Stockinger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Shalf</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Bethel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+				<imprint>
+			<date type="published" when="2005">2005</date>
+			<biblScope unit="page" from="167" to="174" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b57">
+	<analytic>
+		<title level="a" type="main">Evaluation strategies for bitmap indices with binning</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Stockinger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Shoshani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Database and Expert Systems Applications</title>
+				<editor>
+			<persName><forename type="first">F</forename><surname>Galindo</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">M</forename><surname>Takizawa</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">R</forename><surname>Traunmüller</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Berlin Heidelberg</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2004">2004</date>
+			<biblScope unit="page" from="120" to="129" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b58">
+	<analytic>
+		<title level="a" type="main">Analysis of large-scale scalar data using hixels</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Thompson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">A</forename><surname>Levine</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">C</forename><surname>Bennett</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P.-T</forename><surname>Bremer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Gyulassy</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">P</forename><surname>Pébay</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization (LDAV)</title>
+				<imprint>
+			<date type="published" when="2011">2011</date>
+			<biblScope unit="page" from="23" to="30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b59">
+	<analytic>
+		<title level="a" type="main">Isosurface extraction and view-dependent filtering from time-varying fields using persistent time-octree (PTOT)</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y.-J</forename><surname>Chiang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1367" to="1374" />
+			<date type="published" when="2009">2009</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b60">
+	<analytic>
+		<title level="a" type="main">Statistical visualization and analysis of large data using a value-based spatial distribution</title>
+		<author>
+			<persName><forename type="first">K.-C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T.-H</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium (PacificVis)</title>
+				<imprint>
+			<date type="published" when="2017">2017</date>
+			<biblScope unit="page" from="161" to="170" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b61">
+	<analytic>
+		<title level="a" type="main">Efficient local histogram searching via bitmap indexing</title>
+		<author>
+			<persName><forename type="first">T.-H</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C.-M</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Biswas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="81" to="90" />
+			<date type="published" when="2015">2015</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b62">
+	<analytic>
+		<title level="a" type="main">Efficient distribution-based feature search in multi-field datasets</title>
+		<author>
+			<persName><forename type="first">T.-H</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C.-M</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium (PacificVis)</title>
+				<imprint>
+			<date type="published" when="2017">2017</date>
+			<biblScope unit="page" from="121" to="130" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b63">
+	<analytic>
+		<title level="a" type="main">Volumetric attribute filtering and interactive visualization using the max-tree representation</title>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">A</forename><surname>Westenberg</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">B T M</forename><surname>Roerdink</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">H F</forename><surname>Wilkinson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Image Processing</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2943" to="2952" />
+			<date type="published" when="2007">2007</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b64">
+	<analytic>
+		<title level="a" type="main">Compressing bitmap indexes for faster search operations</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Otoo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Shoshani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Scientific and Statistical Database Management</title>
+				<imprint>
+			<date type="published" when="2002">2002</date>
+			<biblScope unit="page" from="99" to="108" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b65">
+	<analytic>
+		<title level="a" type="main">On the performance of bitmap indices for high cardinality attributes</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Otoo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Shoshani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Very Large Data Bases (VLDB)</title>
+				<imprint>
+			<date type="published" when="2004">2004</date>
+			<biblScope unit="page" from="24" to="35" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b66">
+	<analytic>
+		<title level="a" type="main">Optimizing bitmap indices with efficient compression</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><forename type="middle">J</forename><surname>Otoo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Shoshani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Database Systems</title>
+		<imprint>
+			<biblScope unit="volume">31</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="38" />
+			<date type="published" when="2006">2006</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b67">
+	<analytic>
+		<title level="a" type="main">Improving the quality of multiresolution volume rendering</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Younesy</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Carr</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics / IEEE VGTC Conference on Visualization (Eurovis)</title>
+				<imprint>
+			<date type="published" when="2006">2006</date>
+			<biblScope unit="page" from="251" to="258" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b68">
+	<monogr>
+		<title level="m" type="main">High-Dimensional Indexing: Transformational Approaches to High-Dimensional Range and Similarity Searches</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Yu</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002">2002</date>
+			<publisher>Springer</publisher>
+			<pubPlace>Berlin Heidelberg</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b69">
+	<analytic>
+		<title level="a" type="main">The PH-Tree: A spaceefficient storage structure and multi-dimensional index</title>
+		<author>
+			<persName><forename type="first">T</forename><surname>Zäschke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Zimmerli</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">C</forename><surname>Norrie</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGMOD International Conference on Management of Data</title>
+				<imprint>
+			<date type="published" when="2014">2014</date>
+			<biblScope unit="page" from="397" to="408" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b70">
+	<analytic>
+		<title level="a" type="main">Line-segment-based kd-tree for interactive exploration of large-scale timeseries data</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C.-W</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Moritz</surname></persName>
+		</author>
+		<author>
+			<persName><surname>Kd-Box</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="890" to="900" />
+			<date type="published" when="2022">2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

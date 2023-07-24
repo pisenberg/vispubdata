@@ -1,0 +1,790 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">A Generic and Scalable Pipeline for GPU Tetrahedral Grid Rendering</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joachim</forename><surname>Georgii</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rüdiger</forename><surname>Westermann</surname></persName>
+						</author>
+						<title level="a" type="main">A Generic and Scalable Pipeline for GPU Tetrahedral Grid Rendering</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:41+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<abstract>
+				<p>Recent advances in algorithms and graphics hardware have opened the possibility to render tetrahedral grids at interactive rates on commodity PCs. This paper extends on this work in that it presents a direct volume rendering method for such grids which supports both current and upcoming graphics hardware architectures, large and deformable grids, as well as different rendering options. At the core of our method is the idea to perform the sampling of tetrahedral elements along the view rays entirely in local barycentric coordinates. Then, sampling requires minimum GPU memory and texture access operations, and it maps efficiently onto a feed-forward pipeline of multiple stages performing computation and geometry construction. We propose to spawn rendered elements from one single vertex. This makes the method amenable to upcoming Direct3D 10 graphics hardware which allows to create geometry on the GPU. By only modifying the algorithm slightly it can be used to render per-pixel iso-surfaces and to perform tetrahedral cell projection. As our method neither requires any pre-processing nor an intermediate grid representation it can efficiently deal with dynamic and large 3D meshes.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION AND MOTIVATION</head><p>Although recent advances in graphics hardware have opened the possibility to efficiently render tetrahedral grids on commodity PCs, interactive rendering of large and deformable grids is still one of the main challenges in scientific visualization. Such grids are more and more frequently encountered in a number of different applications ranging from plastic and reconstructive surgery, virtual training simulators to fluid and solid mechanics.</p><p>The weakness of GPU-based volume rendering techniques for tetrahedral grids is, that these techniques do not effectively exploit the potential of recent GPUs. The reason therefore lies in the re-sampling process for tetrahedral elements. This process requires at every sample point the geometry of the element it is contained in. The geometry is used to compute the points position in the local coordinate space of the element. Most generally, an element matrix built from the elements vertex coordinates is used for this purpose.</p><p>For every element this matrix only has to be computed once and can then be used to re-sample the data at every sample point in its interior. To do so, a container storing the matrices of all elements has to be created on the GPU. It is clear that this approach significantly increases the memory requirements. Moreover, because the re-sampling is performed in the fragment stage, every fragment needs to be assigned the unique identifier of the element it is contained in to address the respective matrix. In scan-conversion algorithms this can only be done by issuing these identifiers as additional per-vertex attributes in the rendering of the tetrahedral elements. Unfortunately, because every vertex is shared by many elements in general, a shared vertex list can no longer be used to represent the grid geometry on the GPU. This causes an additional increase in memory.</p><p>To avoid the memory overhead induced by pre-computations, element matrices can be calculated in turn for every sample point. But then the same computations, including multiple memory access operations to fetch the respective coordinates, have to be performed for all sample points in the interior of a single element, thereby wasting a significant portion of the GPUs compute power. As before, identifiers are</p><p>• Joachim Georgii, E-mail: georgii@in.tum.de.</p><p>• Rüdiger Westermann , E-mail: westermann@in.tum. <ref type="bibr">de</ref> required to access vertex coordinates, and thus a shared vertex array cannot be used.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.1">Contribution</head><p>In this paper we present a GPU pipeline for the rendering of tetrahedral grids that avoids the aforementioned drawbacks. This pipeline is scalable with respect to both large data sets as well as future graphics hardware. The proposed method has the following properties:</p><p>• Per-element calculations are performed only once.</p><p>• Tetrahedral vertices and attributes can be shared in vertex and attribute arrays.</p><p>• Besides the shared vertex and attribute arrays nearly no additional memory is required on the GPU.</p><p>• Re-sampling of (deforming) tetrahedral elements is performed using a minimal memory footprint.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.2">System Overview</head><p>To achieve our goal we propose a generic and scalable GPU rendering pipeline for tetrahedral elements. This pipeline is illustrated in <ref type="figure" target="#fig_0">Figure  1</ref>. It consists of multiple stages performing element assembly, primitive construction, rasterization and per-fragment operations. To render a tetrahedral element the pipeline is fed with one single vertex, which carries all information necessary to assemble the element geometry on the GPU. This stage is described in Section 3.1. Assembled geometry is then passed to the construction stage where a renderable representation is built.</p><p>The construction stage is explicitly designed to account for the functionality on upcoming graphics hardware. With Direct3D 10 compliant hardware and geometry shaders <ref type="bibr" target="#b0">[1]</ref> it will be possible to create additional geometry on the graphics subsystem. In particular, triangle strips or fans composed of several vertices, each of which can be assigned individual per-vertex attributes, can be spawned from one single vertex. As the geometry shader itself can perform arithmetic and texture access operations, these attributes can be computed in account of the application specific needs. By using the aforementioned functionality the renderable representation can be constructed in turn without sacrificing the feed-forward nature of the proposed rendering pipeline. Section 3.2 gives in-depth details on this stage.</p><p>As hardware-assisted geometry shaders are not yet available on current GPUs we have implemented the proposed pipeline using the DirectX9 SDK. This SDK provides a software emulation of the entire Direct3D 10 pipeline, and it is available under the recent Microsoft Vista beta version. Unfortunately, neither does this emulation provide meaningful performance measures nor does it allow to estimate relative timings between the pipeline stages. Nevertheless, the implementation using this software emulation clearly demonstrates that the proposed pipeline concept can effectively be mapped onto upcoming GPUs in the very near future.</p><p>To verify the efficiency of the intended method we propose an emulation of the primitive construction step using the render-to-vertexbuffer functionality. The specific implementation will be discussed in Section 6. Although this emulation requires additional rendering passes it still results in frame rates superior to those that can be achieved by the fastest methods known so far.</p><p>The renderable representation is then sent to the GPU rasterizer. On the fragment level a number of different rendering techniques can be performed for each tetrahedron, including a ray-based approach, isosurface rendering and cell projection. The discussion in the remainder of this paper will be focused on the first approach, and we will briefly describe the other rendering variants in Sections 4 and 5.</p><p>The ray-based approach operates similar to ray-casting by sampling the data along the view rays. In contrast, however, it does not compute for each ray the set of elements consecutively hit along that ray, but it lets the rasterizer compute for each element the set of rays intersecting that element. The interpolation of the scalar field at the sample points in the interior of each element is then performed in the fragment stage, and the results are finally blended into the color buffer.</p><p>The approach as described requires the tetrahedral elements to be sampled in correct visibility order. To avoid the explicit computation of this ordering we first partition the eye coordinate space into spherical shells around the point of view. Each shell consists of a fixed number of spherical slices. <ref type="figure" target="#fig_2">Figure 3</ref> illustrates this partitioning strategy.</p><p>These shells are consecutively processed in front-to-back order, simultaneously keeping the list of elements overlapping the current shell. Intra-shell visibility ordering is then achieved by re-sampling the elements onto spherical slices positioned at equidistant intervals in each shell (see right of <ref type="figure" target="#fig_2">Figure 3</ref>). Elements smaller than the selected sampling rate can thus be missed. Tetrahedra overlapping more than one partition are stored in each of the respective lists, and they might thus be rendered multiple times. In every rendering pass, however, every element is only re-sampled onto the slices contained in the current partition. In Section 3.3 we will show how to efficiently perform the re-sampling using multiple render targets.</p><p>To minimize the number of arithmetic and memory access operations the re-sampling procedure is entirely performed in barycentric coordinate space of each element. This approach has some important properties: First, barycentric coordinates of sample points can directly be used to interpolate the scalar values given at grid vertices. Second, barycentric coordinates can efficiently be used to determine whether a point lies inside or outside an element. Third, by transforming both the point of view and the view rays into the barycentric coordinate space of an element, barycentric coordinates of sample points along the rays can be computed with a minimum number of arithmetic operations. Fourth, barycentric coordinates of vertices as well as barycentric coordinates of the view rays through the vertices can be issued as per-vertex attributes, which then get interpolated across the element faces during rasterization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.3">Related Work</head><p>Object-space rendering techniques for tetrahedral grids accomplish the rendering by projecting each element onto the view plane to approximate the visual stimulus of viewing the element. Two principal methods have been shown to be very effective in performing this task: slicing and cell projection.</p><p>Slicing approaches can be distinguished in the way the computation of the sectional polygons is performed. This can either be done explicitly on the CPU <ref type="bibr" target="#b28">[29,</ref><ref type="bibr" target="#b32">33]</ref>, or implicitly on a per-pixel basis by taking advantage of dedicated graphics hardware providing efficient vertex and fragment computations <ref type="bibr" target="#b21">[22,</ref><ref type="bibr" target="#b25">26,</ref><ref type="bibr" target="#b27">28]</ref>.</p><p>Tetrahedral cell projection <ref type="bibr" target="#b16">[17]</ref>, on the other hand, relies on explicitly computing the projection of each element onto the view plane. Different extensions to the cell-projection algorithm have been proposed in order to achieve better accuracy <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b30">31]</ref> and to enable post-shading using arbitrary transfer functions <ref type="bibr" target="#b15">[16]</ref>. GPU-based approaches for cell projection have been suggested, too <ref type="bibr" target="#b22">[23,</ref><ref type="bibr" target="#b24">25,</ref><ref type="bibr" target="#b31">32]</ref>.</p><p>The most difficult problem in tetrahedral cell projection is to determine the correct visibility order of elements. The most efficient way is PowerSort <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b7">8]</ref>, which exploits the fact that for tetrahedral meshes exhibiting a Delaunay property the correct order can be found by sorting the tangential distances to circumscribing spheres using any customized algorithm. As grids in practical applications are usually not Delaunay meshes this approach might lead to incorrect results and does not allow resolving topological cycles in the data.</p><p>A different alternative is the sweep-plane approach <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b18">19,</ref><ref type="bibr" target="#b26">27]</ref>. In this approach the coherence within cutting planes in object space is exploited in order to determine the visibility ordering of the available primitives. In addition, much work has been spent on accelerating the visibility ordering of unstructured elements. The MPVO method <ref type="bibr" target="#b29">[30]</ref>, and later extended variants of it <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b19">20]</ref>, were designed to take into account topological information for visibility ordering. Techniques using convexification to make concave meshes amenable to MPVO sorting have been proposed in <ref type="bibr" target="#b14">[15]</ref>. Recently a method to overcome the topological sorting of unstructured grids has been presented <ref type="bibr" target="#b1">[2]</ref>. By using an initial sorter on the CPU a small set of GPU-buffers can be used to determine the visibility order on a per-fragment basis. Based on the early work on GPU ray-casting <ref type="bibr" target="#b12">[13]</ref> a ray-based approach for the rendering of tetrahedral grids has been proposed in <ref type="bibr" target="#b23">[24]</ref>.</p><p>Besides the direct volume rendering of tetrahedral grids there has also been an ongoing effort to employ GPUs for iso-surface extraction in such grids <ref type="bibr" target="#b4">[5]</ref>. The calculation of the iso-surface inside the tetrahedral elements was carried out in the vertex units of programmable graphics hardware <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b13">14]</ref>. Significant accelerations were later achieved by employing parallel computations and memory access operations in the fragment units of recent GPUs in combination with new functionality to render constructed geometry without any read-back to the CPU <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b9">10]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">DATA REPRESENTATION AND TRANSFER</head><p>The tetrahedral grid is maintained in the most compact representation: a shared vertex array that contains all vertex coordinates and an index array consisting of one 4-component entry per element. Each component represents an index into the vertex array. While the index array only resides in CPU memory, the vertex array is stored on the CPU, and as a 2D floating point texture on the GPU. Additional per-vertex attributes like scalar or color values are only hold on the GPU.</p><p>By assigning to each vertex a 3D texture coordinate it is also possible to bind a 3D texture map to the tetrahedral grid. By one additional texture indirection the scalar or color values can then be sampled via interpolated texture coordinates from a 3D texture map. This strategy is in particular useful for the efficient rendering of deforming Cartesian grids. By deforming the geometry of a tetrahedral grid but keeping the 3D texture coordinates fix, the deformed object can be rendered at much higher resolution compared to just linear interpolation of the scalar field given at the displaced tetrahedra vertices.</p><p>To render a tetrahedral grid the CPU computes for each spherical shell the set of elements (active elements) overlapping this shell. Each time a shell is to be rendered the CPU uploads this active element list, represented as a 4-component index array. This list is then passed through the proposed rendering pipeline.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">TETRAHEDRAL GRID RENDERING</head><p>In this section we describe the rendering pipeline for tetrahedral grids, which is essentially a sampling of the attribute field at discrete points along the view rays through the grid. The sampling process effectively comes down to determining for each sampling point the tetrahedron that contains this point as well as the points position in local barycentric coordinates of this tetrahedron. Due to this observation we decided to rigorously perform the rendering of each element in local barycentric space, thus minimizing the number of required element and fragment operations. <ref type="figure" target="#fig_3">Figure 4</ref> shows a conceptual overview of the entire rendering pipeline for tetrahedral grids. For the sake of clarity, pseudo-code notation is given in Appendix A. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Element Assembly</head><p>For every shell to be rendered the active element list contains one vertex per element, each of which stores four references into the vertex texture. In the element assembly stage these indices are resolved by interpreting them as texture coordinates. Via four texture access operations the four vertices are obtained, and they are then transformed into eye coordinate space. Both the four indices as well as the transformed vertices are passed to the primitive construction stage.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Primitive Construction</head><p>The primitive construction stage generates all the information that is used in the upcoming stages but only needs to be computed once per element. First, for every element the matrix required to transform eye coordinates into local barycentric coordinates is computed. The vertices, given in homogeneous eye coordinates, are denoted by v i , i ∈ {0, 1, 2, 3}. The transformation matrix can then be computed as</p><formula xml:id="formula_0">B = v 0 v 1 v 2 v 3 −1 .</formula><p>Next, for every element the eye position v eye = (0, 0, 0, 1) T is transformed into its barycentric coordinate space: b eye = B v eye . It is important to note that only the last column of B is required thus significantly reducing the number of arithmetic operations to be performed. The barycentric coordinates of each of the vertices v i are given by the canonical unit vectors e i . Finally, the directions of all four view rays passing through the element vertices are transformed into barycentric coordinates via b i = e i − b eye . As the mapping from eye coordinate space to barycentric coordinate space is affine, these directions can later be interpolated across the element faces. In addition, the length of the view vector, l i = ||v i − v eye || 2 , is computed for every vertex in the primitive construction stage. It is used in the fragment stage to normalize the barycentric ray directions b i .</p><p>Once the aforementioned per-element computations have been performed, each tetrahedron is rendered as a triangle strip consisting of four triangles. These strips are composed of the six element vertices, which are first transformed to normalized device coordinates. To each of these vertices the respective b i , the barycentric eye position b eye and the length of the view vector l i are assigned as additional per-vertex attributes, i.e. texture coordinates. Moreover, four per-element indices into the GPU attribute array are assigned to each vertex. These indices are later used in the fragment stage to access the scalar field or the 3D texture coordinates used to bind a texture map.</p><p>The rasterizer generates one fragment for every view ray passing through a tetrahedron, and it interpolates the given per-vertex attributes. To reduce the number of generated fragments only front-faces are rendered using API built-in culling functionality.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Fragment Stage</head><p>When rendering the primitives composed of attributed vertices as described, the rasterizer interpolates the b i and l i and generates for every fragment a local barycentric ray direction b as well as its length l in eye coordinates. By using the barycentric coordinates of the eye position b eye , the view ray in local barycentric space can be computed for every fragment as (t denotes the ray parameter)</p><formula xml:id="formula_1">b l • t + b eye , t &gt; 0.</formula><p>This ray is sampled on a spherical slice with distance z s from the eye point. The barycentric coordinate of the sample point is obtained by setting t as the depth of the actual spherical slice, z s .</p><p>It is now clear that a fragment has all the information to determine the barycentric coordinates of multiple sample points along the ray passing through it. If an equidistant sampling step size ∆z s along the view rays is assumed, the coordinates of every point are determined as</p><formula xml:id="formula_2">b k = b l • (z s + k • ∆z s ) + b eye , k ∈ {0, 1, . . . , n − 1}.<label>(1)</label></formula><p>where n is the number of samples. The fragment program obtains the depth z s of the first sample point and the sample spacing ∆z s as constant parameters.</p><p>A fragment can trivially decide whether a sample point is inside or outside the tetrahedron by comparing the minimum of all components of b k with zero. A minimum greater or equal to zero indicates an interior point. In this case the sample point is valid and thus has a contribution to the accumulated color along the ray. Otherwise, the sample point is invalid and has to be discarded.</p><p>The barycentric coordinates are directly used to interpolate per-vertex attributes. This can be scalar values that are first looked up from the attribute texture via the issued per-vertex indices, or it can be a 3D texture coordinate that is then used to fetch a scalar value from a texture map. Finally, each fragment has determined one scalar value for each of its n samples.</p><p>Once the scalar field has been re-sampled onto a number of sample points along the view-rays these values can in principle be directly composited in the fragment program. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Blending Stage</head><p>In the final stage up to four texture render targets are blended into the frame buffer. In each of its four components these textures contain the sampled scalar values on one spherical slice of the shell. The blending stage now performs the following two steps in front-to-back order. First, scalar values are mapped to color values via a user-defined transfer function. Second, a simple fragment program performs the blending of the color values via alpha-compositing and finally outputs the results to the frame buffer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">ISO-SURFACE RENDERING</head><p>To avoid explicit construction of geometry on the GPU, per-pixel iso-surface rendering can be integrated into our proposed rendering pipeline easily. Instead of sampling all the values along the view-rays only the intersection points between these rays and the iso-surface are determined on a per-fragment basis. Thereby, the primitive assembly and element construction stage remain unchanged, and only the fragment stage needs minor modifications.</p><p>Given an iso-value s iso , the view-ray passing through a fragment intersects the iso-surface at depth</p><formula xml:id="formula_3">t iso = s iso − ∑ 4 i=0 s i • (b eye ) i ∑ 4 i=0 s i • (b) i</formula><p>This formula is derived from the condition that the scalar value along the ray (given in local barycentric coordinates) should equal the isovalue. It is worth noting that t iso is undefined if the denominator is zero. In this case the interpolated scalar values along the ray are constant, and we can either choose any valid value for t iso if the scalar value is equal to s iso or the ray has no intersection with the iso-surface.</p><p>The computed barycentric coordinate b • t iso + b eye of the intersection point is tested against the tetrahedron as described above. Only if the point is in the interior of the element an output fragment is generated. Otherwise the fragment is discarded.</p><p>In this particular rendering mode the data representation stage has to be modified slightly. Instead of building an active element list for every shell, only one list that contains all elements being intersected by the iso-surface is built. These tetrahedra can then be rendered in one single pass, or in multiple passes if more elements are intersected by the surface than can be stored in a single texture map. The blending stage becomes obsolete and can be replaced by the standard depth test to keep the front-most fragments in the frame buffer. A fragments' depth value is set to the depth of the intersection point in the fragment program. Finally, it should have become clear from the above description that per-element gradients can be computed in the primitive construction stage as well. Gradients are assigned as additional per-vertex attributes to the fragment stage for lighting calculations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">CELL PROJECTION</head><p>Tetrahedral cell projection is among the fastest rendering techniques for unstructured grids as every element is only rendered ones. However, it requires a correct visibility ordering of the elements, and it can be time consuming to achieve such an ordering in general. To demonstrate tetrahedral cell projection we employ the tangential distance or power sort <ref type="bibr" target="#b7">[8]</ref> on the CPU to determine an approximate ordering.</p><p>Tetrahedral cell projection can be achieved by a slight modification of the fragment stage. Given the fragments' depth z in , the barycentric coordinates of this fragment can be computed as</p><formula xml:id="formula_4">b in = b/l • z in + b eye .<label>(2)</label></formula><p>The intersection with each of the faces of the corresponding tetrahedron can be calculated by using the ray equation b out = b/l •t + b eye in barycentric coordinates. To compute b out , four candidate parameters t l , l ∈ {0, 1, 2, 3} are obtained by alternately setting the components of b out to zero. As the ray parameter t = z in corresponds to the entry point of the ray, the value of t at the exit points is determined by</p><formula xml:id="formula_5">z exit = min{t l : t l &gt; z in }.</formula><p>The barycentric coordinate of the exit point can then be derived according to equation <ref type="bibr" target="#b1">(2)</ref>.</p><p>From the barycentric coordinates of the entry and exit point the length of the ray segment being inside the tetrahedron can be calculated. This information is required to compute a correct attenuation value for every fragment <ref type="bibr" target="#b16">[17]</ref>. The barycentric coordinates are used to obtain scalar values at the entry and exit point, which are then integrated along the ray.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">IMPLEMENTATION</head><p>As current graphics hardware does not support geometry shaders to construct geometry on the GPU, the primitive assembly stage and the primitive construction stage are simulated via multiple rendering passes.</p><p>Once the CPU has uploaded the index texture to the GPU (see Section 2), a quad covering four times as many fragments as active elements is rendered. Every fragment reads the respective index and performs one dependent texture fetch to get the corresponding vertex coordinate. The 4th component of each vertex is used to store the element index. This index is used in the final fragment stage to fetch the barycentric transformation matrix. The vertex coordinates are written to a texture render target, which is either copied into a vertex array (on NVIDIA cards) or directly used as a vertex array (on ATI cards). In this pass, the transformation of vertices into eye coordinates can already be performed.</p><p>In a second pass, each active tetrahedron reads its four vertices as described and computes the last row of the barycentric transformation matrix, b eye , which is stored in a RGBA float texture. Due to the fact that only one index per tetrahedron can be stored, we also built a RGBA texture that stores for every active element the four attached scalar values in one single texel. If 3D texture coordinates are required they are stored analogously in three RGBA textures.</p><p>We then use an additional index array to render the tetrahedral faces. We either use 7 indices per tetrahedron to render a triangle strip followed by a primitive restart mark (on NVIDIA cards only) or we use 12 indices to render the tetrahedral faces separately. Note that the index array does not change and can be kept in local GPU memory.</p><p>Finally, the fragment stage has to be modified such that every fragment now fetches b eye and performs all operations required to sample the element along the view-rays in local barycentric space. Although this increases the number of arithmetic and memory access operations considerably, we will show later that the implementation already achieves impressive frame rates on recent graphics hardware. In the following we present some results of our algorithm, and we give timings for different parts of it. All test were run on a single processor Pentium 4 equipped with an NVIDIA 7900 GTX graphics processor. The size of the viewport was set to 512 × 512.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">RESULTS</head><p>We have tested the tetrahedral rendering pipeline for both static and deformable meshes. For the simulation of physics-based deformations we have employed the Multigrid framework proposed in <ref type="bibr" target="#b5">[6]</ref>. The GPU render engine receives computed displacements and updates the geometry of a volumetric body accordingly. While the simulation engine consecutively displaces the underlying finite element grid, the render engine subsequently changes the geometry of the volumetric render object. It is worth noting, on the other hand, that all timings presented in this paper exclude the amount of time required by the simulation engine. In all our examples the time required to send updated vertices to the GPU is below 3% of the overall rendering time.</p><p>The proposed technique for direct volume rendering of unstructured grids is demonstrated in <ref type="figure" target="#fig_4">Figures 5 to 8</ref>. <ref type="table">Table 1</ref> shows performance rates on our target architecture implementing the rendering pipeline described in Section 6. Timing statistics for alternative rendering modes are given in <ref type="table">Table 2</ref>. Volume rendered imagery using cell projection and iso-surface rendering is shown in <ref type="figure" target="#fig_0">Figures 9 and 10</ref>.</p><p>The first four rows of <ref type="table">Table 1</ref> show the number of tetrahedral mesh elements, the number of sample points per ray, the number of samples per shell and the total number of elements being rendered. As elements are likely to overlap more than one shell, this number is approximately 2 times higher than the mesh element count. Next, GPU memory requirements (excluding 3D texture maps) are shown. The memory required by the vertex, scalar and blend textures is listed. Ad- <ref type="figure">Fig. 6</ref>. Close-up view of the bluntfin data set. ditional memory that is due to the emulation of the construction stage on current GPUs is summarized in the next row.</p><p>As can be seen, the proposed rendering pipeline exploits the limited GPU memory very effectively. On the other hand, even if the mesh does not fit into local GPU memory the method can still be used very efficiently. One possibility is to partition the grid, and thus the vertex and attribute textures, into equally sized blocks. These blocks can then be rendered in multiple passes, which only requires a separate active element list for each partition and shell.</p><p>The upcoming rows in <ref type="table">Table 1</ref>  From the timing statistics the following can be perceived: Although the current implementation introduces a significant overhead in terms of arithmetic and memory access operations and requires additional memory on the GPU, performance rates similar to the fastest techniques so far can be achieved. A maximum throughput of 1.8M tetrahedra/sec has been reported recently by Cahallan et. al. <ref type="bibr" target="#b1">[2]</ref> on an ATI Radeon 9800. In comparison our pipeline already achieves a peak rate that is over a factor of three higher. In particular it can be seen that one of the drawbacks of slice-based techniques, i.e. multiple rendering of elements, can significantly be reduced due to the simultaneous evaluation of multiple sample points. It is clear, however, that in case of elements that overlap only a very few slices some of these evaluations might be wasted. For this reason we have chosen data dependent numbers of slices as shown in <ref type="table">Table 1</ref>.</p><p>The examples given in <ref type="figure" target="#fig_5">Figures 7 and 8</ref> show the visualization of deformable tetrahedral grids to which a 3D texture map is bound. Every vertex stores coordinates into a 3D texture map, which are interpolated in the fragment stage. Interpolated coordinates are finally used to fetch the data from the texture map. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">CONCLUSION</head><p>In this paper we have described a generic and scalable rendering pipeline for tetrahedral grids. The pipeline is designed to facilitate its use on recent and upcoming graphics hardware and to accommodate the rendering of large and deformable grids. In particular we have shown, that our concept supports upcoming features on programmable graphics hardware and thus has the potential to achieve significant performance gains in the very near future.</p><p>The rendering pipeline we propose is ray-based in that it performs the sampling of tetrahedral elements along the view rays. It maps on a feed-forward pipeline that is spawned by one single vertex. Perelement calculations have to be performed only once, and the rasterizer is efficiently utilized to minimize per-fragment operations. As the sampling is entirely performed in local barycentric coordinates of <ref type="figure">Fig. 9</ref>. Our method can efficiently be applied to visualize internal states of deforming volumetric bodies. In the example, the internal stress of the model under gravity is visualized in red using the cell projection method.</p><p>each element it requires minimum arithmetic and texture access operations on the GPU. By enabling the evaluation of multiple samples per element, we can significantly reduce the number of rendered elements, because the number of elements that overlap more than one shell decreases. As no pre-processing of the grid data is required, it is perfectly suited for the rendering of deformable meshes. Additional rendering modes like iso-surface rendering and cell projection can be integrated into this pipeline in a straight forward way.</p><p>Besides the verification of our current results on future Direct3D 10 graphics hardware we will investigate the integration of acceleration techniques for volume ray-casting into the current approach. In particular, early-ray-termination as proposed for texture-based volume raycasting <ref type="bibr" target="#b10">[11]</ref> seems to be a promising acceleration strategy that perfectly fits into our dedicated rendering pipeline.    The tetrahedral mesh was adaptively refined to recover the skin and bone structures, and it consists of 5.1 million elements. Per-vertex scalar values were re-sampled from the original 3D data set. To smoothshade the iso-surface, per-vertex gradients are first accumulated in every frame on the GPU, and they are finally interpolated in the fragment stage via barycentric coordinates.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A PSEUDO-CODE SNIPPETS FOR RAY-BASED GPU TETRAHE</head><formula xml:id="formula_6">v i = Modelview * v i ; return(index, v 0 , v 1 , v 2 , v 3 ); primitiveConstruction (index, v 0 , v 1 , v 2 , v 3 ) B = inverse ((v 0 , v 1 , v 2 , v</formula><formula xml:id="formula_7">v i = Pro jection * v i ; Rasterize strip   v 0 b 0 l 0   ,   v 1 b 1 l 1   ,   v 2 b 2 l 2   ,   v 3 b 3 l 3   ,   v 0 b 0 l 0   ,   v 1 b 1 l 1   return(</formula></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 .</head><label>1</label><figDesc>Overview of the GPU rendering pipeline.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 .</head><label>2</label><figDesc>Our rendering technique for tetrahedral grids can handle large and deformable objects and it supports recent and future graphics hardware. The examples show tetrahedral grids consisting of 3.8 (left) and 5.1 (right) millions of deforming elements. On current GPUs our technique renders each of these images in less than 1.1 seconds onto a 512 2 viewport.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 3 .</head><label>3</label><figDesc>Ray-based tetrahedra sampling: Tetrahedral elements are resampled onto spherical slices around the point of view.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 .</head><label>4</label><figDesc>Data stream overview</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 .</head><label>5</label><figDesc>Direct volume rendering of the bluntfin data set.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 7 .</head><label>7</label><figDesc>Direct volume rendering of the deformable visible human data set. The tetrahedral mesh consists of 3.8 million elements, and it is textured with a 512 2 × 302 3D texture map.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 8 .</head><label>8</label><figDesc>These images show direct volume rendering of a tetrahedral mesh consisting of 1600k elements. A 3D texture of size 256 2 × 110 storing the engine data set is bound to the mesh.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head></head><label></label><figDesc>for i = 0, . . . , 3 v i = texture (vertexTex, index i );</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head></head><label></label><figDesc>3 )); b eye = B * (0, 0, 0, 1) T ; for i = 0, . . . , 3l i = length (v i − (0, 0, 0, 1) T ); b i = e i − b eye ;</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head></head><label></label><figDesc>index, b eye ); fragmentStage(interpol. v, interpol. b, interpol. l, index, b eye , const z s , const ∆z s ) for i = 0, . . . , 3 s[i] = texture (scalarsTex, index i ); for k = 0, . . . , n bc = b eye + b/l * (z s + k * ∆z s ); if min (bc[0], bc[1], bc[2], bc[3]) &lt; 0 out[k] = 0; else out[k] = dot (s, bc); return(out);</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 10 .</head><label>10</label><figDesc>Iso-surface rendering of the deformed visible male data set.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>APIs allow for the simultaneous rendering into multiple render targets. This means that up to four times the number of render targets spherical slices can be re-sampled by one single fragment. Sampled values are rendered into the respective component and render target using a max blend function. If a sample point is outside the element, a zero value is written into the texture component and the sample is ignored. As no two tetrahedra can contain the same sample point along either ray, erroneous results are avoided.The number of samples that can be processed efficiently at once is restricted by the output bandwidth of the fragment program. Because up to 128 bits can be rendered simultaneously on recent GPUs, up to 16 slices can be processed at once if 8 bit scalar values are assumed. This implies that every spherical shell is as thick as to contain exactly 16 slices with regard to the current sampling step size. In account of this number, four additional texture render targets have to be used to keep intermediate sampling results. Without utilizing the multiple render target extension, still four samples can be processed at once.</figDesc><table /><note>Unfortunately, as the elements within one spherical cell have not been rendered in correct visibility order this would lead to visible artifacts. On the other hand we can write four scalar values at once into a RGBA render target. Moreover, recent graphics</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 1 .Table 2 .</head><label>12</label><figDesc>give detailed timings of the different rendering modes. All timings are given in milliseconds. Starting with the time required by the CPU to calculate the active element sets and to transfer all required data to the GPU, timings for GPU primitive assembly and construction as well as per-fragment computations are given. Element, memory and timing statistics for various data sets. Timing statistics for different rendering modes.</figDesc><table><row><cell cols="5">scene horse bluntfin engine vmhead</cell></row><row><cell># Tetrahedra</cell><cell>50k</cell><cell>190k</cell><cell>1600k</cell><cell>3800k</cell></row><row><cell># Samples / ray</cell><cell>300</cell><cell>400</cell><cell>500</cell><cell>600</cell></row><row><cell># Samples / shell</cell><cell>4</cell><cell>8</cell><cell>8</cell><cell>8</cell></row><row><cell cols="2"># Tets rendered 133k</cell><cell>434k</cell><cell>3438k</cell><cell>6618k</cell></row><row><cell>vertices/scalars [MB]</cell><cell>0.27</cell><cell>1.1</cell><cell>17</cell><cell>17</cell></row><row><cell>blend textures [MB]</cell><cell>1</cell><cell>2</cell><cell>2</cell><cell>2</cell></row><row><cell>intermediate [MB]</cell><cell>3.3</cell><cell>13</cell><cell>13</cell><cell>13</cell></row><row><cell>GPU memory [MB]</cell><cell>4.6</cell><cell>16.1</cell><cell>32</cell><cell>32</cell></row><row><cell>CPU [ms]</cell><cell>4</cell><cell>12</cell><cell>101</cell><cell>244</cell></row><row><cell>GPU Geometry [ms]</cell><cell>11</cell><cell>12</cell><cell>65</cell><cell>135</cell></row><row><cell>GPU Fragments [ms]</cell><cell>43</cell><cell>85</cell><cell>445</cell><cell>732</cell></row><row><cell>Total time [ms]</cell><cell>58</cell><cell>109</cell><cell>611</cell><cell>1111</cell></row><row><cell cols="5">scene horse bluntfin engine vmhead</cell></row><row><cell>Iso-Value</cell><cell>0.5</cell><cell>0.2</cell><cell>0.5</cell><cell>0.27</cell></row><row><cell>Iso-Surface [ms]</cell><cell>4.6</cell><cell>5.7</cell><cell>51</cell><cell>124</cell></row><row><cell>Cell Projection [ms]</cell><cell>19</cell><cell>54</cell><cell>341</cell><cell>1176</cell></row></table><note></note></figure>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">DirectX and Windows Vista Presentations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Balaz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Glassenberg</surname></persName>
+		</author>
+		<ptr target="http://msdn.microsoft.com/directx/archives/pdc2005/" />
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Hardware-assisted visibility sorting for unstructured volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Callahan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ikits</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Comba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">On the optimization of projective volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cignoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Montani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Sarti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopigno</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EG Workshop, Scientific Visualization in Scientific Computing</title>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Fast polyhedral cell sorting for interactive rendering of unstructured grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Comba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Klosowsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mitchell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Willians</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of Eurographics</title>
+		<meeting>of Eurographics</meeting>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">An efficient method of triangulating equi-valued surfaces by using tetrahedral cells</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Doi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Koide</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEICE Transactions Commun. Elec. Inf. Syst</title>
+		<imprint>
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">A multigrid framework for real-time simulation of deformable volumes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Georgii</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Workshop On Virtual Reality Interaction and Physical Simulation</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Volume visualization of sparse irregular meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Giertsen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Comput. Graph. Appl</title>
+		<imprint>
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Visualization of three-dimensional delaunay meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Karasick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lieber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Nackman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Rajan</surname></persName>
+		</author>
+		<editor>Algorithmica</editor>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">GPU construction and transparent rendering of iso-surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kipfer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Vision, Modeling and Visualization &apos;05</title>
+		<meeting>Vision, Modeling and Visualization &apos;05</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Hardware-accelerated Reconstruction of Polygonal Isosurface Representations on Unstructured Grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Stegmaier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Pacific Graphics &apos;04</title>
+		<meeting>Pacific Graphics &apos;04</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="186" to="195" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Acceleration techniques for GPU-based volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Isosurface computation made simple: Hardware acceleration, adaptive refinement and tetrahedral stripping</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of IEEE TCVG Symp. on Visualization</title>
+		<meeting>of IEEE TCVG Symp. on Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Ray tracing on programmable graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Purcell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Buck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Mark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Computer Graphics (Proc. SIG-GRAPH &apos;02)</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Realtime isosurface extraction with graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Reck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Dachsbacher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Grosso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Greiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Stamminger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics Short Presentations</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Cell projection of convex polyhedra</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Röttger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Eurographics/IEEE TVCG Workshop Volume Graphics &apos;03</title>
+		<meeting>Eurographics/IEEE TVCG Workshop Volume Graphics &apos;03</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Hardware-accelerated volume and isosurface rendering based on cell-projection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Röttger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization &apos;00</title>
+		<meeting>IEEE Visualization &apos;00</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="109" to="116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">A Polygonal Approximation to Direct Scalar Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Shirley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tuchman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIGGRAPH &apos;90</title>
+		<meeting>SIGGRAPH &apos;90</meeting>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="63" to="70" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">The Lazy Sweep Ray Casting Algorithm for Rendering Irregular Grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mitchell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<date type="published" when="1997-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Fast Rendering of Irregular Grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mitchell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symp. on Volume Visualization</title>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">An exact interactive time visibility ordering algorithm for polyhedral cell complexes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mitchell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VVS &apos;98: Proceedings of the 1998 IEEE symposium on Volume visualization</title>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Sorting and hardware assisted rendering for volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Stein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Becker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Symposium on Volume Visualization &apos;94</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="83" to="90" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Hardware-Software-Balanced Resampling for the Interactive Visualization of Unstructured Grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization &apos;01</title>
+		<meeting>IEEE Visualization &apos;01</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Hardware-based view-independent cell projection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VolVis</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Hardware-Based Ray Casting for Tetrahedral Meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Merz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Procceedings IEEE Visualization</title>
+		<meeting>ceedings IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Hardware-Based View-Independent Cell Projection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Merz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">The rendering of unstructured grids revisited</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EG/IEEE TCVG Symposium on Visualization (VisSym &apos;01)</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">The VSBUFFER: Visibility Ordering unstructured Volume Primitives by Polygon Drawing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;97</title>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="35" to="43" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Efficiently using graphics hardware in volume rendering applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH 1998</title>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Hierarchical and parallelizable direct volume rendering for irregular and multiple grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Tarantino</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gibbs</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;96</title>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Visibility Ordering Meshed Polyhedra</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="102" to="126" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">A high accuracy volume renderer for unstructured data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Williams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Stein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Tetrahedral projection using vertex shaders</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Wylie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Moreland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Fisk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Crossno</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VVS &apos;02: Proceedings of the 2002 IEEE</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Hardware assisted volume rendering of unstructured grids by incremental slicing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Reed</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Law</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Shih</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VVS &apos;96: Proceedings of the 1996 symposium on Volume visualization</title>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

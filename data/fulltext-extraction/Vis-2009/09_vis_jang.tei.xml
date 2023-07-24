@@ -1,0 +1,876 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Interactive Volume Rendering of Functional Representations in Quantum Chemistry</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Yun</forename><surname>Jang</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ugo</forename><surname>Varetto</surname></persName>
+						</author>
+						<title level="a" type="main">Interactive Volume Rendering of Functional Representations in Quantum Chemistry</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:52+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Quantum Chemistry</term>
+					<term>GTO</term>
+					<term>Volume Rendering</term>
+					<term>GPU</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Simulation and computation in chemistry studies have been improved as computational power has increased over decades. Many types of chemistry simulation results are available, from atomic level bonding to volumetric representations of electron density. However, tools for the visualization of the results from quantum chemistry computations are still limited to showing atomic bonds and isosurfaces or isocontours corresponding to certain isovalues. In this work, we study the volumetric representations of the results from quantum chemistry computations, and evaluate and visualize the representations directly on the GPU without resampling the result in grid structures. Our visualization tool handles the direct evaluation of the approximated wavefunctions described as a combination of Gaussian-like primitive basis functions. For visualizations, we use a slice based volume rendering technique with a 2D transfer function, volume clipping, and illustrative rendering in order to reveal and enhance the quantum chemistry structure. Since there is no need of resampling the volume from the functional representations, two issues, data transfer and resampling resolution, can be ignored, therefore, it is possible to interactively explore large amount of different information in the computation results.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Quantum chemistry applies quantum mechanics and field theory concepts to give a complete and detailed description of the electronic structure of a chemical system. Detailed electronic structure information is key in understanding chemical reactions and, in general, the physical properties of materials. Applications of quantum chemistry include predicting or confirming radiation spectra, studying chemical reaction to understand how two molecules (e.g., possible drug with enzymes) can interact, molecular design, and computational materials science. Quantum chemistry is based on the Schrödinger equation in which electrons are considered as wave-like particles whose behavior is mathematically represented by a set of wavefunctions obtained by solving the Schrödinger equation that defines the state of a physical system at atomic scale. The time-independent Schrödinger equation for a one particle system is defined as −h 2 8π 2 m ∇ 2 + V ψ(r) = Eψ(r)</p><p>where h is Planck's constant, m is the mass of the particle, V is the potential energy, E is the total energy and r represents a position in 3-D space. The quantity |Ψ( r)| 2 , where Ψ( r) is a solution to Equation 1, gives the probability of finding the particle at position r. Analytical solutions to Equation 1 are only available for very simple systems. Quantum chemistry computations focus on finding approximated solutions to the Schrödinger equation for multi-atom systems. Solutions to Equation 1 are used to define properties, represented as scalar fields, such as electron density, electrostatic potential and molecular orbitals.</p><p>To properly analyze the output of quantum chemistry computations, 3D visualizations of atomic orbitals (AOs), molecular orbitals (MOs), electron and spin density, and electrostatic potential are required. Visualization tools currently available in programs like Molden <ref type="bibr" target="#b25">[26]</ref> or Molekel <ref type="bibr" target="#b19">[20]</ref> display scalar fields by first sampling the solutions, which are functional representations, on 3D regular grids and then building isosurfaces using triangulations for specific isovalues. The resampling process prior to the volume rendering of molecular data raises the following challenges: data storage, data transfer, and eval- uation speed of the functional representations. Since there are multiple atomic and molecular orbitals, it is almost impossible to interactively render all combinations of these atomic and molecular orbitals for atomic and molecular structures. For example, the C 2 H 5 molecule is one of our simplest Gaussian type orbital (GTO) data and it has 40 different atomic orbitals and 38 different molecular orbitals. Exploring all different combinations is a daunting task because of the 2 40 × 38 resampling processes required.</p><p>In this work, we present a novel method to perform interactive evaluation and volumetric rendering of atomic and molecular orbitals directly on graphics hardwares without resampling. Since the approximate solutions to the Schrödinger equation are sums of basis functions, we evaluate the functional representations on the fly in a fragment program by storing all parameters and coefficients in textures. We apply general volume rendering, volumetric isosurface rendering, illustrative rendering, and volume clipping techniques in order to visualize the atomic and molecular structures. <ref type="figure" target="#fig_0">Figure 1</ref> shows our system overview. We extend conventional slice-based volume rendering <ref type="bibr" target="#b31">[32]</ref>. Our contributions from this work are presented as follows.</p><p>• Direct evaluation of the functional representation for molecular data on graphics hardware -computing accurate gradients and avoiding data transfers from CPU to GPU</p><p>• Interactive volume rendering of molecular data without resampling on grid structures -discarding an expensive intermediate process for volume rendering</p><p>• Illustrative and volume clipping rendering to show nested volumetric atomic and molecular structures -multiple isosurfaces</p><p>In this work, we use two types of basis functions. One is pure Gaussian and the other is Gaussian type orbital (GTO). Gaussian type orbital has been used widely because of its easy shape change according to the orbital, whereas, pure Gaussian is newly proposed because of its simplicity in quantum chemistry computation. However, the proposed technique can further be extended to perform interactive evaluation and rendering of any dataset functionally represented. We first review previous work in Section 2 and describe data from quantum chemistry computation in Section 3. We then introduce details of our interactive evaluation and visualization of the molecular data and present results produced by our system in Section 4 and 5. Finally conclusion and future directions are described in Section 6.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">PREVIOUS WORK</head><p>In the molecular research area, there are many visualization studies from drawing simple atoms to rendering volumetric representations. One approach to show molecular surfaces is to use triangular meshes. Cheng and Shi <ref type="bibr" target="#b3">[4]</ref> propose the Restricted Delaunay Triangulation to extract high quality smooth molecular skin surfaces. Another molecular surface representation is studied by Cipriano and Gleicher <ref type="bibr" target="#b4">[5]</ref> and they show the abstracted molecular surfaces to provide the boundary of a molecule and the physical and chemical properties at the boundary by extracting the surface abstract from input triangular meshes. Lampe et al. <ref type="bibr" target="#b13">[14]</ref> present protein dynamics by a two-level rendering approach. They generate geometry residues on the fly to show interactive protein dynamics with balls and sticks for atoms and bonds. When there are many atoms in the visualization, it is difficult to see the overall molecular structure with direct illumination. To enhance visual perception, Tarini et al. <ref type="bibr" target="#b29">[30]</ref> present ambient occlusion and edge cueing.</p><p>Volume visualization is also applied to molecular data for volumetric structures. Hu et al. <ref type="bibr" target="#b9">[10]</ref> present direct volume rendering of protein data and they study an improved transfer function to show various data ranges in the data. In their work, they resample scalar data to 3D regular grids. Lattice-based volume visualization is presented by Qiao et al. <ref type="bibr" target="#b21">[22]</ref>. They store all lattice information from quantum dot simulations and visualize electron orbitals in a volume. Their work is based on the sampled lattices which is already provided from the computation, which is a discrete form of data, whereas our approach is to handle the continuous data form. Network based visualization of nanotechnology applications is studied in <ref type="bibr" target="#b22">[23]</ref> and electron particles are visualized with volume rendering of electron density volume.</p><p>Several researchers present physical and chemical properties of molecular data using visualizations. Lee and Varshney <ref type="bibr" target="#b14">[15]</ref> represent thermal vibrations and uncertainty on the molecular surfaces and visualize the fuzzy molecular surfaces to provide more informative display for a better understanding of protein structure and function. Mehta et al. <ref type="bibr" target="#b18">[19]</ref> detect anomalous structures in lattice-based molecular simulation data on regular grid and show and verify the detection with visualization. Similar research is presented by Mehta and Jankun-Kelly <ref type="bibr" target="#b17">[18]</ref> on unstructured models of nematic liquid crystals. Another study on cluster detection of molecular dynamics is presented by Grottel et al. <ref type="bibr" target="#b7">[8]</ref> with visual verification and analysis. Schmidt-Ehrenberg et al. <ref type="bibr" target="#b26">[27]</ref> present molecular conformations by visualizing regular grid molecular data.</p><p>In order to emphasize the molecular structures, chemists use different primitives, such as balls and sticks, helices and ribbons. Liu et al. <ref type="bibr" target="#b15">[16]</ref> present interactive molecule construction on GPU. They reconstruct atoms with spheres interactively with GPU acceleration for the educational purpose. Bajaj et al. <ref type="bibr" target="#b1">[2]</ref> study the primitives reconstructed on programmable graphics units by 3D image based rendering. Recently, Stone et al. <ref type="bibr" target="#b27">[28]</ref> propose a fast way to resample results of quantum chemistry computation using GPUs and multi-core CPUs. This work is motivated by heavy computation for visualizations of results  <ref type="bibr" target="#b30">[31]</ref> use a similar approach using GPUs to evaluate the results without rendering capability, whereas our approach combines both the evaluation and the rendering. Volume rendering is widely used and the techniques vary according to input grid structures. Jang et al. <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b11">12]</ref>, however, present reconstruction of volumetric functional representations using graphics hardware without resampling on grid structures. Ebert et al. <ref type="bibr" target="#b6">[7]</ref> show procedural textures which are continuous and can be evaluated easily in a volume. Since the quantum chemistry computations generate functional representations of atomic and molecular orbitals, their work motivates our volumetric visualizations of molecular data. Volume illustration is another technique to enhance the visual understanding of volumetric data and it shows enhanced understanding of medical and flow data <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b28">29]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">DATA IN QUANTUM CHEMISTRY</head><p>Most quantum chemistry programs find an approximated solution to the Schrödinger equation then generate data containing a description of the electron structure of the system under analysis in terms of coefficients to be applied to a set of basis functions as the following.</p><formula xml:id="formula_1">φ (x, y, z) = a f t e −b r 2<label>(2)</label></formula><p>where a and b are real values and f t (x, y, z) is a polynomial function. r is the distance between the center of basis function and (x, y, z). f t (x, y, z) varies depending on orbital types and computation methods.</p><p>Based on the basis function φ (x, y, z), atomic and molecular orbitals are reconstructed as described in the following sections.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Atomic orbitals</head><p>An atomic orbital is a mathematical function that describes the behavior of an electron in an atom. This function can be used to calculate the probability of finding any electron of an atom in a region of space surrounding the atom's nucleus. The term may also refer to the region of 3D space where the electron is most likely to be. Each atomic orbital is approximated with a sum of basis functions of the form described in Equation 2 as the following.</p><formula xml:id="formula_2">χ(x, y, z) = M ∑ i=1 φ i (x, y, z) = M ∑ i=1 a i f t (x, y, z) e −b i r 2 i (3)</formula><p>where M is the number of basis functions used to define an orbital and f t (x, y, z) is a polynomial function defined according to the orbital types (s, sp, p, d, f ). The polynomial functions ( f t ) for most common orbitals, s, p, and d are summarized in <ref type="table" target="#tab_1">Table 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Molecular orbitals</head><p>Molecular orbitals are defined as mathematical functions which do not represent any physical quantity; they are very useful in the qualitative description of bonding and in studying chemical reactions. The molecular orbital is represented with a linear combination of atomic orbitals as the following.</p><formula xml:id="formula_3">ψ(x, y, z) = N ∑ j=1 g j χ j (x, y, z) (4)</formula><p>where g j is a real value (molecular orbital coefficient) and χ j (x, y, z) is an atomic orbital introduced in Equation 3. N is the number of the atomic orbitals.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Data Structure</head><p>As mentioned in Section 1, we use two different basis functions in this work. In the case of Gaussian basis functions, data are stored as sets of center (x, y, z), exponent (b), and coefficient (a). Since the Gaussian basis function has one polynomial function shown in <ref type="table" target="#tab_1">Table 1</ref> it is not possible to represent different types of atomic orbitals with one common center of a basis function for different atomic orbitals. Therefore, each Gaussian has its own center. Note that there is no molecular orbital coefficient in the Gaussian data format. On the other hand, data represented with Gaussian type orbitals (GTOs) has common centers only at the atom centers since the orbital types can be represented by the polynomial functions shown in <ref type="table" target="#tab_1">Table 1</ref>. The other parameters (b's and a's) and orbital types are stored afterward followed by molecular orbital coefficients (g's). The number of molecular orbital coefficients corresponds to the number of atomic orbitals. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Data Preprocessing</head><p>The coefficients a i and b i of atomic orbitals, together with orbital types and the coefficients g i of the molecular orbitals are read from the output of popular quantum chemistry packages such as Gaussian and GAMESS, and used to reconstruct the molecular orbitals functions as described in Equation 4. Coefficients are properly normalized to ensure that the probability of finding each electron in the system in the entire 3D space is always equal to 1. We also find the bond structures among atoms when the data is read and they are sent to the GPU to evaluate ball and sticks for atoms and bonds. Since it is still difficult to find the solution of the Schrödinger equation for molecules with many atoms, we are generally dealing with small number of atoms. Therefore, we can afford to compute distances for all pairs of atoms in a 2D square array on the CPU and compare the distance with the covalent radius <ref type="bibr" target="#b0">[1]</ref>. If the distance between two atoms is less than the covalent radius, there is a bond between them.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">INTERACTIVE VISUALIZATION OF MOLECULAR DATA</head><p>As described in Section 3, the molecular data in quantum chemistry is modeled as a sum of basis functions, such as Gaussians and Gaussian type orbitals (GTOs). The molecular data file contains sequences of basis function parameters including centers, coefficients, exponents, etc.. Some basis functions, such as GTOs, imply different reconstruction equations depending on the orbital types. The reconstruction (resampling) of data values in a certain volume would require timeconsuming computations proportional to the selected grid resolutions and the visualization of the reconstructed volume would incur high computational preprocessing with conventional direct volume rendering techniques. Seeing the details of molecular structures requires many combinations of orbitals, which makes it impossible to precompute and store the resampled volumes.</p><p>Avoiding completely this resampling approach used for most of molecular visualization research, we reconstruct the volume directly on GPUs by storing the basis function parameters in textures. With our approach, it is possible to show the volumetric molecular structures without transferring massive volumetric data.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Volume Rendering on GPU</head><p>Volume rendering in visualization is a common technique and there are many approaches depending on underlying grid structures. In this molecular visualization, the data does not lie on a specific grid structure. We, therefore, chose the slice-based volume rendering technique, and we evaluate fragments on each slice in a fragment program. The slices are rendered from back to front, so that the color and opacity are properly displayed. The slices are generated by computing intersections between a bounding box and planes in a vertex program proposed in <ref type="bibr" target="#b23">[24]</ref>. The number of slices can be adjusted by our user interface. Using this volume rendering base, a 2D transfer function is used to explore the interesting data values in the volume.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Texture Layouts For Molecular Data</head><p>Currently we use two different types of molecular data from quantum chemistry computations. One is formed with all Gaussians and the other is formed with Gaussian type orbitals (GTOs). The Gaussian basis functions have centers, exponents, and coefficients of Gaussians as parameters. On the other hand, GTOs have centers of atoms, exponents and coefficients of atomic orbitals, and coefficients of molecular orbitals. In this work, we focus on two different types of orbitals, namely atomic and molecular orbitals. For the atomic orbitals, only basis function parameters are needed for the reconstruction, whereas the molecular orbitals require one additional parameter, which is the molecular orbital coefficient. We store all these basis function parameters and corresponding coefficients in 2D textures and fetch the texture values in a fragment program to evaluate data values and gradients of the functional representations. In order to evaluate the functional representation efficiently in a fragment program, we encode all parameters and coefficients as shown in <ref type="figure" target="#fig_5">Figure 2</ref>. Since we use two types of basis functions, we introduce two different texture layouts, one for Gaussians and the other for GTOs.</p><p>The top layout in <ref type="figure" target="#fig_5">Figure 2</ref> shows how we encode the texture for Gaussian basis functions. Since Gaussian basis function does not imply different polynomial functions according to atomic orbital types, we simply store the centers (x i , y i , z i ) and exponents b i in one texture, and coefficients a i in another texture. Therefore, simple fetching the texture values in a fragment program is possible in order to obtain the sum of all basis functions. Note that there is no molecular orbital coefficient in our molecular data.</p><p>In the evaluation of GTOs shown in Equation 3, there is a polynomial term f t (x, y, z), which is defined according to the atomic orbital type. There is only one common center with different atomic orbital parameters for the different atomic orbital types in one atom. The shape of an orbital is defined by the polynomial term and the polynomial terms can be multiple functions for p, sp, d, and f . For example, the p-orbital has 3 polynomial terms (p x , p y , p z ) and the d-orbital has 6 polynomial terms <ref type="figure">(d xx , d yy , d zz , d xy , d xz , d yz )</ref>. Each polynomial term has its own molecular orbital coefficient. The bottom in <ref type="figure" target="#fig_5">Figure 2</ref> is an example of the texture layouts for the atomic orbitals and molecular orbitals with 2 GTO basis functions. In the example, there are 2 atoms, 9 atomic orbital types with 16 sets of parameters, and 2 sets of molecular orbital coefficients for 36 atomic orbitals. There are multiple basis functions for one orbital type. In this example, the first s-orbital (s1) for Atom 1 has 2 sets of parameters and the first d-orbital for Atom 2 (d1) has also 3 sets of parameters. The number 36 is calculated as 1 (s1) + 3 (p1) + 3 (p2) + 6 (d1) + 10 ( f 1) + 1 (s1) + 3 (p1) + 3 (p2) + 6 (d1) . As shown in the figure, we put the atom centers and the number of orbital types in the texture 1. Texture 2 is composed of exponents, coefficients, orbital types for atomic orbitals. Then we store the molecular orbital coefficients in the texture 3. Texture 1 and 2 are organized in the order of parameters, whereas, texture 3 is designed according to the orbital type. For example, since the s-orbital has only one polynomial term, there is one molecular orbital coefficient, which is stored in R out of RGBA. the p-orbital has 3 polynomial terms, therefore, we place three molecular orbital coefficients in one RGB in order to reduce the texture fetch. In the same way, for the d-orbital, we use two RGB's for the 6 molecular orbital coefficients.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Per-Fragment Reconstruction</head><p>In order to evaluate fragments, we use a high level language, NVIDIA Cg <ref type="bibr" target="#b20">[21]</ref>, and the Cg code is compiled on the fly after the molecular data is read. With the support of Cg language, we use if statement to choose the appropriate fragment program for the functional evaluations depending on the basis functions. Since we have two different basis functions, we show two different fragment programs according to the basis functions. The functional values as well as gradients are evaluated at the same time.</p><p>For Gaussian basis functions two textures, as shown in the top of   For the GTO basis functions, each fragment is evaluated by computing either Equation 3 for the atomic orbitals or Equation 4 for the molecular orbitals. The atomic orbitals are computed by two texture lookups (Texture 1 and Texture 2 from GTOs texture layout in <ref type="figure" target="#fig_5">Figure  2</ref>). We fetch Texture 1 for the atom centers and the number of atomic orbital types. Then we fetch Texture 2 for the exponents, coefficients and atomic orbital types of each atomic orbital. Once we have all parameters, Equation 3 is evaluated with the polynomial functions shown in <ref type="table" target="#tab_1">Table 1</ref> in the for loop.</p><p>On the other hand, the molecular orbital evaluation needs one more computation based on the atomic orbital evaluation as described in the previous paragraph. We fetch one more texture (Texture 3) for the molecular orbital coefficients and multiply the coefficients right after the atomic orbital evaluation. <ref type="figure">Figure 4</ref> shows a pseudo Cg fragment program for this molecular orbital evaluation. Specifically we show the functional value and gradient calculation with p-orbital in order to show the efficiency of our texture layout (Texture 3 from GTOs texture layout in <ref type="figure" target="#fig_5">Figure 2</ref>). As shown in the Cg code, we can evaluate 3 different p-orbitals (p x , p y , p z ) at the same time by fetching 3 molecular coefficients by one texture lookup. Similar computation is applied to d and f orbitals.</p><p>Once the value and gradient of a fragment are computed, we fetch the transfer function texture for color and opacity. Then we apply illumination, illustrative rendering techniques, and volume clipping technique in the fragment program. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Ball and Stick Rendering</head><p>Most of molecular visualizations provide drawing of the atoms and bonds between atoms and common primitives to draw atoms and bonds are balls and sticks. Many molecular visualization tools represent balls and sticks with triangular meshes and render the meshes with other features, such as isosurfaces. In order to render the meshed balls and sticks together with the volumetric representation, however, visibility test with sorting is necessary for proper rendering results with a single rendering pass. In this work, we avoid the visibility test by evaluating the balls and sticks as functional forms. Balls are represented as spheres and sticks are represented as cylinders. The sphere and cylinder equations are evaluated as solid volume prior to the evaluation of the functional representations. If a fragment is inside either a sphere or a cylinder, then we avoid the expensive evaluation of the functional representation.</p><p>The ball radius is read from an atom element table <ref type="bibr" target="#b2">[3]</ref>, which is the van der Waals radius, and the radius varies depending on atomic numbers. The stick radius is set as a half of hydrogen's van der Waals radius, which is the smallest in the table. We also provide a control of both radii in our user interface, so that users can change the relative size. The atom color is also read from the atom element table, so that chemists understand the molecular structures easily as they have been seeing.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Transfer Function and Illustrative Rendering</head><p>In this volume rendering of quantum chemistry data, multiple isovalues are preferable since more isovalues show detail of the molecular structures. However, the higher absolute isovalues are nested in the lower absolute isovalues in the molecular data. In order to show the internal structures of a molecule clearly, we design 5 different 2D transfer functions (TFs), including uniform, Gaussian, left half of Gaussian, and right half of Gaussian, sinusoidal as shown in <ref type="figure" target="#fig_7">Figure 5 (a)</ref>. The uniform TF is appropriate to render isosurfaces and the Gaussian TF is used for the volume rendering of the molecules. Specifically the right and left half of Gaussian TF are preferable to see the nested orbital structures since the highest or lowest values, which are found mostly at the cores of atoms, are inside outer shells. The right half of Gaussian TF is used for the negative values and the left half of Gaussian TF is used for the positive values. <ref type="figure" target="#fig_7">Figure 5 (b)</ref> and (c) present the transfer function comparison of the right half of Gaussian TF and whole Gaussian TF with one of GTO basis function data (C H 6 ). The right half of Gaussian TF shows the core of orbital, whereas, whole Gaussian TF hides the internal structures. We also apply illustrative rendering techniques to the molecular data visualization, such as enhancing boundaries with the sinusoidal TF proposed in <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b28">29]</ref>. Note that we refer to the works in <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b28">29]</ref> for the detail. The sinusoidal TF is used to show multiple isovalues (e.g., contour volume) in order to see the atomic and molecular orbital structures. Since visualizing more isovalues at the same time is preferable, the sinusoidal TF with boundary enhancements is used to show the contour volume in an illustrative way, so that we can provide more isovalues and structures in the volume. <ref type="figure">Figure 6</ref> shows rendering results of the 27 th molec- ular orbital with GTO basis function data (C 4 H 2 CH 2 CH 2 CH 4 ). Note that warm color (orange) indicates positive values and cool color (sky blue) represents the negative values of the molecular orbital (Equation 4). In the <ref type="figure">figure, (a)</ref> shows a volume rendering of the molecular orbital and (b) presents a volume rendering with contours using the sinusoidal TF. (c) is a rendering result of sinusoidal TFs with the boundary enhancement technique. (d) shows an isosurface rendering. Especially the boundary enhancement with the sinusoidal TF produces very clear multiple isovalue structures of the nested molecular data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.6">Volume Clipping</head><p>Volume clipping is a technique to hide unimportant parts in the volume rendering. In Section 4.5, we mention that visualizing multiple isovalues is preferable to show the molecular structures. The left image in <ref type="figure">Figure 7</ref> shows our volume clipping rendering with Gaussian basis function data (BeO) and the atomic orbital structure in the middle of the volume is clearly shown by clipping a half of the volume out. Users can adjust our clipping plane in arbitrary normal direction and place the clipping plane where they are interested. We decide whether a subvolume is visible or not by evaluating the clipping plane equation and the subvolume location in our fragment program. Then we use clip function from Cg library to remove unwanted subvolumes. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.7">User Interface</head><p>In our system, there are mainly four parts of user interfaces including data loader, colormap loader, transfer function control and rendering control. Data loader and colormap loader parts are simple file loading interfaces. In the transfer function control, we design the user interface to control multiple transfer functions with 5 different transfer function modes, which is described in Section 4.5. Also data values, such as minimum and maximum, can be adjusted for various data ranges over many atomic and molecular orbitals in the same data. In the rendering control, we can select lighting modes, illustrative rendering mode, specific atomic orbitals, and molecular orbitals, and control the clipping plane for the volume clipping. Especially the atomic orbital and molecular orbital selection interfaces can be used to explore the various atomic and molecular orbitals interactively. <ref type="figure">Figure 8</ref> presents our atomic and molecular orbital interfaces. Users can select any of atomic orbitals (a) and also choose any of molecular orbitals based on the information shown in (b).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RESULTS AND DISCUSSION</head><p>We have implemented our system on Core 2 Quad CPU 2.4GHz processor with NVIDIA GeForce GTX 260 graphics hardware. We have extended our slice-based volume rendering system by evaluating the functional values directly on GPU. Ray casting <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b12">13,</ref><ref type="bibr" target="#b24">25]</ref> could be also used for this application and easily integrated into our system since the ray casting has advantages such as adaptive sampling. One issue in our slice-based volume rendering is the number of slices to reveal all properties of quantum chemistry study. However, the resampling with very high resolution takes up to several hours and it is difficult to visualize the high resolution data on a desktop PC. In this sense, changing the number of slices in our system is much easier and faster than resampling and transferring the resampled data.</p><p>We have tested various datasets summarized in <ref type="table" target="#tab_5">Table 2 and 3</ref>. We specify the number of basis functions with the number of corresponding parameters.</p><p>BeO, HF, and LiH are datasets using Gaussian basis functions. BeO is presented in <ref type="figure">Figure 7</ref> (a) with multiple isosurfaces and vol-   <ref type="figure" target="#fig_0">Figure 10</ref> shows the 3 rd and 21 st molecular orbitals with contour volumes. The energy level of the 3 rd molecular orbital is -0.7074 with two occupation and Alpha spin, whereas the energy level of the 21 st molecular orbital is 0.9449 with zero occupation and Alpha spin. C 2 H 6 data is used in <ref type="figure" target="#fig_0">Figure 11</ref> compared to the results of Molekel. (a) and (b) of the figure are isosurface rendering of isovalues (±0.05) with different grid resolutions. The grid resolution of (a) is 31x24x24 and that of (b) is 170x128x137. The computation timings for (a) and (b) in Molekel are 0.22 seconds and 32.49 seconds. As seen in (a), the low resolution isosurface shows artifacts on the surface due to the low resolution of resampling. <ref type="figure" target="#fig_0">Figure 11 (c)</ref> is the isosurface rendering using our system. Our system does not produce any artifact since we perform per-fragment evaluation of the functional representations. <ref type="figure" target="#fig_0">Figure 12</ref>  </p><formula xml:id="formula_4">N 2 C 4 O 2 H 4 N 2 C 4 O 2 H 4 .</formula><p>The molecule is very complicated but both images show the molecular orbital structures in the volume.</p><p>We also measure performances on a viewport of 600×517 with 256 slices. The performances and storages of datasets are summarized in <ref type="table">Table 4</ref>. Datasets with GTO basis functions are compared with the performances using Molekel. The performance for our system indicates the evaluation and rendering speed, whereas, the performance   <ref type="table">Table 4</ref> indicate the data sizes, which need to be transferred to GPU. Since we evaluate data values on the fly, only parameters and coefficients of the basis functions are required. The storage in Molekel, however, is the size of the resampled data, which could be used in generic volume renderers to generate similar images to our system. Our system has enabled scientists to interactively analyze atomic and molecular orbitals that give a clear idea of intra-molecular bonding properties such as the sites where bonds are more likely to form (bonding sites) and the sites where bonds are not likely to form (antibonding sites). This is achieved by applying a sinusoidal transfer function which results in the rendering of multilevel (i.e. multiple isovalues) colored surface where the intensity of the color can be set to match the probability of finding electrons at a specific point in space. Especially, <ref type="figure" target="#fig_0">Figure 10</ref> (a) presents the probability of finding electrons clearly. There is a strong bond between two carbon atoms and there is a weak bond between two hydrogen atoms on the right side, which is not found on the left side of the molecule. The peanut shape of the strong bond was difficult to visualize due to the lack of interactivity in generating many isosurfaces. Also the weak bond is not clearly shown without multiple isovalues. <ref type="figure" target="#fig_0">Figure 12 (a)</ref> and (b) show how different two molecular orbitals are according to the energy. Our approach also proves usefulness for divulgation purposes by giving an intuitive idea of how atoms might bond or not bond to each other by simply looking at the intensity of the colors. Note that this visualization can only be achieved with proper support for transparency when one has triangulated meshes since the sites where bonds are created are found in the innermost part of the orbital volumes. It is therefore impor- tant to show lighter outer areas and inner darker volumes of space at the same time. When applying mesh-based techniques multiple passes are required for correct rendering of overlapping transparent surfaces. Another issue that scientists meet is the performance in the analysis tool. In order to perform the required analysis, scientists must be able to quickly generate a number of molecular orbitals while varying parameters such as isovalues, bounding box, color and transparency, to help in understanding inter-and and intra-molecular bonding properties; this is simply impossible with the currently available tools which may take hours as compared to tenths of seconds with our approach to generate the entire set of orbitals.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>CONCLUSION AND FUTURE DIRECTION</head><p>We have presented our interactive volume rendering of molecular data by evaluating the functional representations on the GPU. Our system does not require the resampling on grid structures for the volume rendering therefore, there is no data transfer issue for the high grid resolution. Direct per-fragment evaluation of the functional representation in our fragment program allows us to interactively explore the functional representations of molecular data and generate images without artifacts, which are often seen in grid structures. We also use illustrative rendering techniques to show the nested atomic and molecular structures and our user interface enable us to select any of interesting atomic and molecular orbitals. As seen in <ref type="table">Table 4</ref>, the performance is degraded as the number of basis functions and parameters increases. A possible solution is to use hierarchical spatial structures proposed in <ref type="bibr" target="#b11">[12]</ref>. We will investigate the spatial data structures of the molecular data and we also would like to compare the evaluation quality and the performance with the ray casting as an extension of the spatial structure study in the future. Another future work is related to computing electron density and electrostatic potential. In this work, the atomic and molecular orbitals are computed on the fly. The computation of electron density and electrostatic potential, however, requires many redundant processes. In order to improve the performance for electron density and electrostatic potential, it could be better to use multi-level rendering, so that we can reduce the large amount of redundant computations. Moreover, we would like to study our ball and stick rendering with this multi-level rendering because the computation of our visibility test is expensive when we have more atoms and bonds and investigate the surface rendering proposed by Loop and Blinn <ref type="bibr" target="#b16">[17]</ref>. Since we can evaluate the scalars and gradients in our fragment program, we are also interested in interactively exploring vector fields in the molecular data, such as topological structures of orbitals and directions of orbital gradient fields.  <ref type="table">Table 4</ref>. Comparison of performance and data storage required between our system and Molekel. Evaluation and rendering performance for our system is measured on a viewport of 600 × 517 with 256 slices whereas performance for Molekel is measured on a regular grid, 122 × 97 × 97 only for resampling and triangulation of one isosurface. The storage indicates the data size to be transfered to GPU. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dataset</head></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 .</head><label>1</label><figDesc>Overview of our interactive visualization system. Two types of data are stored in textures and evaluated and visualized on our volume rendering. Different rendering results, such as volume rendering, isosurface rendering, illustrative rendering, and volume clipping rendering, are produced using our system.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head></head><label></label><figDesc>For example, let us assume that there are 2 s-orbitals, 3 p-orbitals, and 2 d-orbitals. The total number of atomic orbitals (the number of molecular orbital coefficients) is 2 × 1 (s) + 3 × 3 (p) + 2 × 6 (d) = 23 since there are 3 orbitals in the p-orbital and 6 orbitals in the d-orbital.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 3 .</head><label>3</label><figDesc>for(i = 0; i &lt; NumOfOrbitalTypes; i++){ if(ithOrbitalDraw){ for(j = ithOrbitalStart; j &lt; ithOrbitalEnd; j++){ // for x,y,z, and exponent texValue1 = texRECT(Texture1, texpos(j)); // for coefficient texValue2 = texRECT(Texture2, texpos(j)); r = inpos.xyz -texValue1.xyz; // Data value f = texValue2.w * exp((-1.0) * texValue1.w * dot(r, r)); // Gradient df = (-2.0) * texValue1.w * f * r; val += float4(df, f); }}} Main loop of pseudo Cg fragment program for the evaluation of the atomic orbital with Gaussian basis functions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>n = 0 Fig. 4 .</head><label>04</label><figDesc>; for(i = 0; i &lt; NumAtoms; i++){ // for x,y,z and number of orbital types texValue1 = texRECT(Texture1, texpos(i)); r = inpos.xyz -texValue1.xyz; for(j = start(i); j &lt; start(i)+texValue1.w; j++){ for(k = jthOrbitalStart; k &lt; jthOrbitalEnd; k++){ // for exponent, coefficient, orbital type texValue2 = texRECT(Texture2, texpos(k));// for s orbital ...... // for p orbital else if(texValue2.z == 3){ if(k == jthOrbitalStart){ //for 3 molecular orbital coefficients texValue3 = texRECT(Texture3, texpos(n)); // increase offset for Texture 3 n += 1; } tmp1 = dot(r, texValue3.xyz); tmp2 = texValue2.y * exp((-1.0) * texValue2.x * dot(r, r)); // Data value f = tmp1 * tmp2; // Gradient df = texValue3.xyz * tmp2 -2.0 * texValue2.x * r * f; val += float4(df, f); } // for d orbital ...... }}}} Main loop of pseudo Cg fragment program for the evaluation of the molecular orbital with GTO basis functions. In this code, only p-type molecular orbital computation is shown because it shows the efficiency of our texture layout for the molecular orbital coefficients.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 2 ,</head><label>2</label><figDesc>are fetched for all parameters including the centers of basis functions and the atomic orbitals are evaluated using Equation 3.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 3</head><label>3</label><figDesc>presents a pseudo Cg code for the reconstruction of Gaussian basis functions. In the Cg code, ithOrbitalDraw is connected to our user interface, therefore, we can select/deselect any orbitals on the fly.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 5 .</head><label>5</label><figDesc>Transfer function (TF) comparison. (a) presents our five different transfer functions (uniform, Gaussian, the right half of Gaussian, the left half of Gaussian and sinusoidal from the left). (c) shows our 2D TF setting to generate an image in (b). The right half of Gaussian TF (sky blue) is compared with simple Gaussian TF (orange). It is possible to see the nested orbital structures at the core of atom with the right half of Gaussian TF.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 6 .Fig. 7 .</head><label>67</label><figDesc>Volume rendering of the molecular orbital for C 4 H 2 CH 2 CH 2 CH 4 . Warm color represents positive values and cool color represents negative values. (a) is a conventional volume rendering with local illumination and (b) is a volume rendering with the edge coloring using the sinusoidal TF without illumination. (c) shows a boundary enhanced contour volume rendering with the sinusoidal TFs and (d) presents an isosurface rendering with local illumination. (a) is a contour volume rendering of the atomic orbitals for BeO (Be is the green atom) with the volume clipping technique. (b) is a boundary enhanced illustrative rendering (positive values, orange) with an isosurface rendering (negative value, green) for HF (H is the white atom). The highest positive value is rendered with the red isosurface.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 8 .Fig. 9 .</head><label>89</label><figDesc>User interfaces of the atomic and molecular orbitals. (a) is our user interface to choose the atomic orbitals. (b) is the interface for the molecular orbitals and it shows spin, energy, and occupation of each molecular orbital in order to help users select interesting molecular orbitals. Renderings of the atomic orbitals for a molecule (LiH, H is the white atom) with boundary enhanced volume contours. (a) shows the atomic orbitals rendered with only 1s, 2s, and 2p x of Li. (b) shows the atomic orbitals rendered with 2p y of Li, and 1s of H on top of (a).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 10 .Fig. 11 .</head><label>1011</label><figDesc>Molecular orbitals (C 2 H 5 , H is the white atom). (a) is the 3 rd molecular orbital and (b) is the 21 st molecular orbital. Two isosurface, 0.5 (orange) and -0.5 (green), comparison of Molekel [20] and our system. (a) and (b) show low (31x24x24) and high (170x128x137) resolutions of the isosurface using Molekel. (c) presents the isosurface rendering using our system. ume clipping. Clipping along the bond between two atoms shows the internal orbital structures of BeO. Figure 7 (b) is a rendering result of HF. Positive values of the atomic orbitals are rendered as contour volume (orange) and a negative value is shown as an isosurface (green). In the image, some of the positive orbitals are nested in the negative orbitals. (a) and (b) in Figure 9 are progressive atomic orbitals of LiH with boundary enhanced volume contours. (a) shows a combination of 1s, 2s, and 2p x of Li, whereas (b) is a rendering result of 2p y of Li, and 1s of H on top of (a). Comparing two images, we can see that the 1s of H orbital (left core) and 2p y of Li orbital (rotation of negative values) change the atomic orbital structure.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head></head><label></label><figDesc>(a) and (b) show different molecular orbitals of C 2 H 6 . (a) is rendered with the volume clipping technique and multiple isosurfaces and (b) is generated by the volume contours with the boundary enhancement. Both images present the orbital structures among the atoms and bonds. Figure 6 presents different rendering techniques on C 4 H 2 CH 2 CH 2 CH 4 and Figure 12 (c) shows the volume clipping and Figure 12 (d) shows the isosurface with the volume contours of</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Fig. 12 .</head><label>12</label><figDesc>More rendering results of C 2 H 6 (a, b) andN 2 C 4 O 2 H 4 N 2 C 4 O 2 H4 (c, d). (a) and (b) are the 17 th and 20 th molecular orbitals with the boundary enhanced contour volume. (c) shows the isosurface rendering of the 27 th molecular orbital with multiple isosurfaces and the volume clipping. (d) presents both isosurfaces (orange) and volume contours with the sinusoidal TF (green) of the 30 th molecular orbital.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head>•</head><label></label><figDesc>Yun Jang is with ETH Zürich, Switzerland, E-mail: jangy@inf.ethz.ch.</figDesc><table /><note>• Ugo Varetto is with Swiss National Supercomputing Center (CSCS), E-mail: uvaretto@cscs.ch. Manuscript received 31 March 2009; accepted 27 July 2009; posted online 11 October 2009; mailed on 5 October 2009. For information on obtaining reprints of this article, please send email to: tvcg@computer.org .</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 1 .</head><label>1</label><figDesc>Polynomial functions ( f t ) used in Equation 3.</figDesc><table><row><cell cols="2">Basis Function Orbital Type</cell><cell>f t</cell></row><row><cell>Gaussian</cell><cell>all</cell><cell>1</cell></row><row><cell></cell><cell>s</cell><cell>1</cell></row><row><cell></cell><cell>p x</cell><cell>x</cell></row><row><cell></cell><cell>p y</cell><cell>y</cell></row><row><cell>GTO</cell><cell>p z d xx d yy d zz</cell><cell>z x 2 / √ y 2 / √ 3 3 z 2 / √ 3</cell></row><row><cell></cell><cell>d xy</cell><cell>xy</cell></row><row><cell></cell><cell>d xz</cell><cell>xz</cell></row><row><cell></cell><cell>d yz</cell><cell>yz</cell></row><row><cell cols="3">from quantum chemistry computations. They use graphics hardware</cell></row><row><cell cols="3">to resample the results on regular grids and visualize the resampled</cell></row><row><cell cols="3">volumetric data. The large speedup is achieved compared to differ-</cell></row><row><cell cols="3">ent number of CPUs cores and different GPUs. Ufimtsev and Mar-</cell></row><row><cell>tines</cell><cell></cell><cell></cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head></head><label></label><figDesc>The parameters of basis functions are packed into 2 or 3 textures. The top image shows an example of texture layouts for 16 Gaussian basis function with 5 atomic orbitals in 2 textures. The bottom image presents our texture packing of GTOs into 3 textures. In the example, there are 2 atoms, 9 atomic orbital types, 36 atomic orbitals, and 2 sets of the molecular orbital coefficients.</figDesc><table><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>s 2</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell cols="2">x 11</cell><cell cols="2">x 12</cell><cell cols="2">x 13</cell><cell>x 14</cell><cell>x 15</cell><cell>x 16</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell cols="2">y 11</cell><cell cols="2">y 12</cell><cell cols="2">y 13</cell><cell>y 14</cell><cell>y 15</cell><cell>y 16</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell cols="2">z 11</cell><cell cols="2">z 12</cell><cell cols="2">z 13</cell><cell>z 14</cell><cell>z 15</cell><cell>z 16</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell cols="2">b 11</cell><cell cols="2">b 12</cell><cell cols="2">b 13</cell><cell>b 14</cell><cell>b 15</cell><cell>b 16</cell></row><row><cell></cell><cell></cell><cell cols="2">a 1</cell><cell cols="15">a 2 a 3 a 4 a 5 a 6 a 7 a 8 a 9 a 10 a 11 a 12 a 13 a 14 a 15 a 16</cell></row><row><cell></cell><cell>g</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell cols="3">Atom1 y</cell><cell cols="3">Atom2 y</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>AO</cell></row><row><cell>Texture 1</cell><cell>b</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell cols="3">Atom1 z</cell><cell cols="3">Atom2 z</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell>a</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell cols="3">Atom1 k</cell><cell cols="3">Atom2 k</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell></cell><cell>s 1</cell><cell></cell><cell></cell><cell cols="2">p 1</cell><cell>p 2</cell><cell cols="2">d 1</cell><cell>f 1</cell><cell cols="2">s 1</cell><cell>p 1</cell><cell></cell><cell cols="2">p 2</cell><cell></cell><cell>d 1</cell></row><row><cell></cell><cell>r</cell><cell>b 1</cell><cell cols="2">b 2</cell><cell>b 3</cell><cell>b 4</cell><cell>b 5</cell><cell>b 6</cell><cell>b 7</cell><cell>b 8</cell><cell>b 9</cell><cell>b 10</cell><cell>b 11</cell><cell cols="2">b 12</cell><cell cols="2">b 13</cell><cell>b 14</cell><cell>b 15</cell><cell>b 16</cell></row><row><cell>Texture 2</cell><cell>g</cell><cell>a 1</cell><cell cols="2">a 2</cell><cell>a 3</cell><cell>a 4</cell><cell>a 5</cell><cell>a 6</cell><cell>a 7</cell><cell>a 8</cell><cell>a 9</cell><cell>a 10</cell><cell>a 11</cell><cell cols="2">a 12</cell><cell cols="2">a 13</cell><cell>a 14</cell><cell>a 15</cell><cell>a 16</cell></row><row><cell></cell><cell>b</cell><cell>t 1</cell><cell></cell><cell>t 2</cell><cell>t 3</cell><cell>t 4</cell><cell>t 5</cell><cell>t 6</cell><cell>t 7</cell><cell>t 8</cell><cell>t 9</cell><cell>t 10</cell><cell>t 11</cell><cell cols="4">t 12 t 13</cell><cell>t 14</cell><cell>t 15</cell><cell>t 16</cell></row><row><cell></cell><cell>r</cell><cell>g 1</cell><cell cols="2">g 2</cell><cell>g 5</cell><cell>g 8</cell><cell>g 11</cell><cell>g 14</cell><cell>g 17</cell><cell>g 21</cell><cell>g 24</cell><cell>g 25</cell><cell>g 28</cell><cell cols="2">g 31</cell><cell cols="2">g 34</cell></row><row><cell></cell><cell>g</cell><cell></cell><cell cols="2">g 3</cell><cell>g 6</cell><cell>g 9</cell><cell>g 12</cell><cell>g 15</cell><cell>g 18</cell><cell>g 22</cell><cell></cell><cell>g 26</cell><cell>g 29</cell><cell cols="2">g 32</cell><cell cols="2">g 35</cell><cell>MO1</cell></row><row><cell></cell><cell>b</cell><cell></cell><cell cols="2">g 4</cell><cell>g 7</cell><cell>g 10</cell><cell>g 13</cell><cell>g 16</cell><cell>g 19</cell><cell>g 23</cell><cell></cell><cell>g 27</cell><cell>g 30</cell><cell cols="2">g 33</cell><cell cols="2">g 36</cell></row><row><cell>Texture 3</cell><cell>a</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>g 20</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell>r</cell><cell>g 1</cell><cell cols="2">g 2</cell><cell>g 5</cell><cell>g 8</cell><cell>g 11</cell><cell>g 14</cell><cell>g 17</cell><cell>g 21</cell><cell>g 24</cell><cell>g 25</cell><cell>g 28</cell><cell cols="2">g 31</cell><cell cols="2">g 34</cell></row><row><cell></cell><cell>g b</cell><cell></cell><cell cols="2">g 3 g 4</cell><cell>g 6 g 7</cell><cell>g 9 g 10</cell><cell>g 12 g 13</cell><cell>g 15 g 16</cell><cell>g 18 g 19</cell><cell>g 22 g 23</cell><cell></cell><cell>g 26 g 27</cell><cell>g 29 g 30</cell><cell cols="2">g 32 g 33</cell><cell cols="2">g 35 g 36</cell><cell>MO2</cell></row><row><cell></cell><cell>a</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>g 20</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Fig. 2.</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head></head><label></label><figDesc>C 2 H 5 , C 2 H 6 , C 4 H 2 CH 2 CH 2 CH 4 , and N 2 C 4 O 2 H 4 N 2 C 4 O 2 H 4 haveGaussian type orbital (GTO) as the basis function. C 2 H 5 has 38 molecular orbitals and</figDesc><table /><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head></head><label></label><figDesc>for the Molekel includes only the resampling and triangulation for one isosurface. Note that Molekel does not support the data format for Gaussian basis functions andN 2 C 4 O 2 H 4 N 2 C 4 O 2 H 4 isnot readable in Molekel. The grid resolution in Molekel for the comparison is set as 122 × 97 × 97 and Molekel performs resampling in the grid and marching cube for the isosurfaces. As seen in the table, our system provides greater performance improvement compared to Molekel although we do not include the rendering speeds in Molekel. The performance in our system highly depends on the number of basis functions and the atomic orbital types. Especially d-orbitals require more computation compared to s-orbital or p-orbitals. The storage columns in</figDesc><table /><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5"><head>Table 2 .</head><label>2</label><figDesc>Three datasets with Gaussian basis functions</figDesc><table><row><cell>Dataset</cell><cell>number of</cell><cell>number of</cell><cell>number of</cell></row><row><cell></cell><cell cols="3">basis functions atomic orbitals atomic orbitals</cell></row><row><cell></cell><cell>(x, y, z, b, a)</cell><cell>types</cell><cell></cell></row><row><cell>LiH</cell><cell>20</cell><cell>4</cell><cell>6</cell></row><row><cell>HF</cell><cell>66</cell><cell>9</cell><cell>19</cell></row><row><cell>BeO</cell><cell>112</cell><cell>12</cell><cell>28</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6"><head>Table 3 .</head><label>3</label><figDesc>Four datasets with GTO basis functions C 4 O 2 H 4 N 2 C 4 O 2 H</figDesc><table><row><cell>Dataset</cell><cell>number of</cell><cell>number of</cell><cell>number of</cell><cell>number of</cell><cell>number of</cell></row><row><cell></cell><cell>atoms</cell><cell cols="4">atomic orbital basis functions molecular orbital molecular orbitals</cell></row><row><cell></cell><cell>(x, y, z)</cell><cell>types</cell><cell>(b, a)</cell><cell>coefficients (g)</cell><cell></cell></row><row><cell>C 2 H 5</cell><cell>7</cell><cell>27</cell><cell>50</cell><cell>40</cell><cell>38</cell></row><row><cell>C 2 H 6</cell><cell>8</cell><cell>30</cell><cell>54</cell><cell>42</cell><cell>40</cell></row><row><cell>C 4 H 2 CH 2 CH 2 CH 4</cell><cell>17</cell><cell>62</cell><cell>124</cell><cell>125</cell><cell>118</cell></row><row><cell>N 2 4</cell><cell>24</cell><cell>120</cell><cell>856</cell><cell>264</cell><cell>162</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7"><head></head><label></label><figDesc>C 4 O 2 H 4 N 2 C 4 O 2 H 4 1.000</figDesc><table><row><cell></cell><cell cols="2">Our system</cell><cell cols="2">Molekel</cell></row><row><cell></cell><cell>speed</cell><cell>storage</cell><cell>speed</cell><cell>storage</cell></row><row><cell></cell><cell>(sec)</cell><cell cols="2">(Kbytes) (sec)</cell><cell>(Kbytes)</cell></row><row><cell>LiH</cell><cell>0.047</cell><cell>0.4</cell><cell>N/A</cell><cell>N/A</cell></row><row><cell>HF</cell><cell>0.094</cell><cell>1.3</cell><cell>N/A</cell><cell>N/A</cell></row><row><cell>BeO</cell><cell>0.204</cell><cell>2.2</cell><cell>N/A</cell><cell>N/A</cell></row><row><cell>C 2 H 5</cell><cell>0.108</cell><cell>6.6</cell><cell>11.1</cell><cell>1147.9</cell></row><row><cell>C 2 H 6</cell><cell>0.140</cell><cell>7.2</cell><cell>12.7</cell><cell>1147.9</cell></row><row><cell>C 4 H 2 CH 2 CH 2 CH 4</cell><cell>0.270</cell><cell>60.2</cell><cell>27.2</cell><cell>1147.9</cell></row><row><cell cols="3">N 2 178.2</cell><cell>N/A</cell><cell>N/A</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The authors would like to thank Jean Favre, Mario Valle, John Biddiscombe, Maria Grazia Giuffreda and the anonymous reviewers for many helpful discussion and comments. This work was supported in part by the Swiss National Science Foundation under grant 200021 124642.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Table of bond lengths determined by x-ray and neutron diffraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">H</forename><surname>Allen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Kennard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">G</forename><surname>Watson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Brammer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">G</forename><surname>Orpen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Taylor</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the Chemical Society</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="1" to="19" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+	<note>Perkin Transactions</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Texmol: Interactive visual exploration of large flexible multi-component molecular complexes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">L</forename><surname>Bajaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Djeu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Siddavanahalli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Thane</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on IEEE Visualization</title>
+		<meeting>the conference on IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="243" to="250" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Properties of the elements. Atom element properties from elements</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Blueobelisk</surname></persName>
+		</author>
+		<ptr target="http://sourceforge.net/projects/bodr" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Guaranteed quality triangulation of molecular skin surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-L</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Shi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on IEEE Visualization</title>
+		<meeting>the conference on IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="481" to="488" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Molecular surface abstraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Cipriano</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gleicher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1608" to="1615" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Volume illustration: Non-photorealistic rendering of volume models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Rheingans</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on IEEE Visualization</title>
+		<meeting>the conference on IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="195" to="202" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Texturing &amp; Modeling: A Procedural Approach, Third Edition (The Morgan Kaufmann Series in Computer Graphics)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">F</forename><surname>Musgrave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Peachey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Perlin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Worley</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002-12" />
+			<publisher>Morgan Kaufmann</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Visual verification and analysis of cluster detection for molecular dynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Grottel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Reina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Vrabec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1624" to="1631" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Realtime ray-casting and advanced shading of discrete isosurfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Sigg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Scharsach</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bühler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">H</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="303" to="312" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Direct volume rendering of volumetric protein data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Peng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics International</title>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="397" to="403" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Enhancing the interactive visualization of procedurally encoded multifield data with ellipsoidal basis functions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">P</forename><surname>Botchen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lauser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">P</forename><surname>Gaither</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="587" to="596" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Interactively visualizing procedurally encoded scalar fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">P</forename><surname>Gaither</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EG/IEEE TCVG Symposium on Visualization VisSym &apos;04</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="volume">339</biblScope>
+			<biblScope unit="page" from="35" to="44" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Acceleration Techniques for GPU-based Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings IEEE Visualization 2003</title>
+		<meeting>IEEE Visualization 2003</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="287" to="292" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Two-level approach to efficient visualization of protein dynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><forename type="middle">D</forename><surname>Lampe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Viola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Reuter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1616" to="1623" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Representing thermal vibrations and uncertainty in molecular surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">H</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Varshney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SPIE Conference on Visualization and Data Analysis</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="80" to="90" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Interactive molecule construction with gpu acceleration</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Fordham</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of World Conference on Educational Multimedia, Hypermedia and Telecommunications</title>
+		<meeting>World Conference on Educational Multimedia, Hypermedia and Telecommunications</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="5298" to="5301" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Real-time gpu rendering of piecewise algebraic surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Loop</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Blinn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="664" to="670" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Detection and visualization of defects in 3D unstructured models of nematic liquid crystals</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mehta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Jankun-Kelly</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1045" to="1051" />
+			<date type="published" when="2006-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Detection and visualization of anomalous structures in molecular dynamics simulation data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Mehta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hazzard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Machiraju</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Parthasarathy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilkins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on IEEE Visualization</title>
+		<meeting>the conference on IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="465" to="472" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Multiplatform molecular visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Molekel</surname></persName>
+		</author>
+		<ptr target="http://cscs.ch/molekel" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Cg language specification. Cg Language Specification</title>
+		<ptr target="http://developer.nvidia.com/page/cgmain.html" />
+		<imprint/>
+		<respStmt>
+			<orgName>NVIDIA</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Volqd: Direct volume rendering of multi-million atom quantum dot simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Qiao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Entezari</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Korkusinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Klimeck</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on IEEE Visualization 2005</title>
+		<meeting>the conference on IEEE Visualization 2005</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="319" to="326" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Hubbased simulation and graphics hardware accelerated visualization for nanotechnology applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Qiao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mclennan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kennell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Klimeck</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1061" to="1068" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">A Vertex Program for Efficient Box-Plane Intersection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Rezk-Salama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kolb</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Vision, Modeling and Visualization (VMV)</title>
+		<meeting>Vision, Modeling and Visualization (VMV)</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="115" to="122" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Smart hardware-accelerated volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Röttger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Straßer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VISSYM &apos;03: Proceedings of the symposium on Data visualisation 2003</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="231" to="238" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Molden: a pre-and post-processing program for molecular and electronic structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Schaftenaar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Noordik</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computer-Aided Molecular Design</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="123" to="134" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Visualizing dynamic molecular conformations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schmidt-Ehrenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Baum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">C</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on IEEE Visualization 2002</title>
+		<meeting>the conference on IEEE Visualization 2002</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="235" to="242" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">High performance computation and interactive display of molecular orbitals on gpus and multi-core cpus</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Stone</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Saam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Hardy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">L</forename><surname>Vandivort</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">.</forename><forename type="middle">W</forename><surname>Hwu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Schulten</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IACAT, GPGPU-2: Proceedings of 2nd Workshop on General Purpose Processing on Graphics Processing Units</title>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="9" to="18" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Illustration and photography inspired visualization of flows and volumes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Svakhine</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">P</forename><surname>Gaither</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on IEEE Visualization 2005</title>
+		<meeting>the conference on IEEE Visualization 2005</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="687" to="694" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Ambient occlusion and edge cueing to enhance real time molecular visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Tarini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cignoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Montani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transaction on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1237" to="1244" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Quantum chemistry on graphical processing units. 1. strategies for two-electron integral evaluation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">S</forename><surname>Ufimtsev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">J</forename><surname>Martinez</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Chemical Theory and Computation</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="222" to="231" />
+			<date type="published" when="2008-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Direct volume rendering via 3D textures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Wilson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">V</forename><surname>Gelder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+		<idno>UCSC-CRL-94-19</idno>
+		<imprint>
+			<date type="published" when="1994" />
+			<pubPlace>Santa Cruz, CA, USA</pubPlace>
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

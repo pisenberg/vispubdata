@@ -1,0 +1,751 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Hierarchical Splatting of Scattered Data</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Matthias</forename><surname>Hopf</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="laboratory">Visualization and Interactive Systems Group</orgName>
+								<orgName type="institution">University of Stuttgart</orgName>
+								<address>
+									<country key="DE">Germany</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Ertl</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="laboratory">Visualization and Interactive Systems Group</orgName>
+								<orgName type="institution">University of Stuttgart</orgName>
+								<address>
+									<country key="DE">Germany</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Hierarchical Splatting of Scattered Data</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:51+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>I.3.3 [Computer Graphics]: Picture/Image Generation-Viewing Algorithms</term>
+					<term>I.3.5 [Computer Graphics]: Computational Geometry and Object Modeling-Object hierarchies</term>
+					<term>I.3.6 [Computer Graphics]: Methodology and Techniques-Graphics data structures and data types Volume Rendering, Scattered Data, Splatting, Hierarchical Visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Numerical particle simulations and astronomical observations create huge data sets containing uncorrelated 3D points of varying size. These data sets cannot be visualized interactively by simply rendering millions of colored points for each frame. Therefore, in many visualization applications a scalar density corresponding to the point distribution is resampled on a regular grid for direct volume rendering. However, many fine details are usually lost for voxel resolutions which still allow interactive visualization on standard workstations. Since no surface geometry is associated with our data sets, the recently introduced point-based rendering algorithms cannot be applied as well. In this paper we propose to accelerate the visualization of scattered point data by a hierarchical data structure based on a PCA clustering procedure. By traversing this structure for each frame we can trade-off rendering speed vs. image quality. Our scheme also reduces memory consumption by using quantized relative coordinates and it allows for fast sorting of semi-transparent clusters. We analyze various software and hardware implementations of our renderer and demonstrate that we can now visualize data sets with tens of millions of points interactively with sub-pixel screen space error on current PC graphics hardware employing advanced vertex shader functionality.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Quite a number of physical simulations create large pointbased data sets, for example Smoothed Particle Hydrodynamics (SPH) <ref type="bibr" target="#b11">[Monaghan 1992</ref>] and n-body simulations <ref type="bibr" target="#b5">[Jenkins et al. 1998</ref>] in astrophysics. Other sources of scattered point data are astronomical observations where new techniques for measuring three dimensional positions of stars as in the GAIA project <ref type="bibr" target="#b3">[GAIA 2003</ref>] * {hopf,ertl}@vis.uni-stuttgart.de will create huge real-world data sets in the near future as well. These data sets contain up to hundreds of millions of points each with information about position x i , diameter s i , and intensity c i at various wavelengths.</p><p>These data sets are too large to be rendered in their entirety at interactive frame rates and the memory requirements are quite problematic for standard PCs as well. An alternative approach <ref type="bibr" target="#b7">[Kähler et al. 2002;</ref><ref type="bibr" target="#b14">Park et al. 2002]</ref> is to resample the data sets and use standard volume visualization, which can be implemented quite efficiently using texture mapping <ref type="bibr" target="#b19">[Rezk-Salama et al. 2000]</ref>. However, this technique imposes a low-pass filter on the data set, and for reasonable frame rates and memory usage the filter domain is so large that almost no subtle details within the data will be visible any more. To some extent this can be avoided for off-line rendering of animations. In this case hierarchical volume scene graphs can be used e.g. for visualizing stellar nebula <ref type="bibr" target="#b13">[Nadeau et al. 2000]</ref>.</p><p>In order to allow scientists to view these data sets at high resolution interactively on desktop workstations or PCs, we want to visualize the scattered data directly without resampling them to a volume density. We can achieve significant speedup by applying clustering techniques to create a hierarchical representation of the data set. The hierarchy can then be rendered adaptively according to screen resolution and focus points, and a lower hierarchy level can be chosen for the visualization during interaction. Of course, hierarchical data structures generate additional memory overhead imposing even greater restrictions on the maximum data size, but storage requirements can be reduced using relative position coding, while still maintaining high accuracy with respect to the particle positions.</p><p>In order to visualize scattered data interactively the point coordinates have to be transformed into image space and rasterized into the frame buffer. Current graphics hardware is highly optimized for this task and frees up the CPU for concurrent hierarchy selection and traversal. As triangles are the dominating primitive in computer games, rasterization throughput may be higher for polygons than for points. However, this will have no major effect, since our approach is more likely to be geometry limited rather than rasterization limited, because large numbers of points can only be visually precepted well as long as they do not overlap too much. For certain types of data -e.g. with widely varying point sizes or semitransparent appearance -blending may be necessary in order to enable visual depth perception. This requires the points to be sorted according to their projected z coordinates. Due to the high number of points this is nontrivial to do in realtime, but can be efficiently implemented based on our hierarchical data structures.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Previous Work</head><p>There has been quite a lot of work in the area of using footprints as rendering primitives for sampled data. <ref type="bibr" target="#b8">Laur and Hanrahan [1991]</ref> introduced hierarchical splatting for volume rendering using Gouraud-shaded polygons. Researchers like <ref type="bibr" target="#b12">Mueller et al. [1999]</ref>, <ref type="bibr" target="#b21">Swan et al. [1997]</ref>, <ref type="bibr">and Zwicker et al. [2001a]</ref> focus mainly on the improvement of the visual quality of texture splat- <ref type="bibr">IEEE Visualization 2003</ref><ref type="bibr">, October 19-24, 2003</ref>, Seattle, Washington, USA 0-7803-8120-3/03/$17.00 ©2003 IEEE ting; however, the techniques described in these papers only apply to the reconstruction of continuous functions e.g. for volume rendering of regular grid data, and they do not address adaptive rendering or data size reduction. Additionally, there exist a number of non-realtime rendering systems for large point-based data sets, e.g. for rendering film sequences <ref type="bibr" target="#b2">[Cox 1996</ref>].</p><p>Using points as rendering primitives is a topic of ongoing research. However, almost all publications in this area deal with the rendering of geometric surfaces. <ref type="bibr" target="#b0">Alexa et al. [2001]</ref>, <ref type="bibr" target="#b16">Pfister et al. [2000]</ref>, <ref type="bibr" target="#b20">Rusinkiewicz and Levoy [2000]</ref>, <ref type="bibr" target="#b22">Wand et al. [2001]</ref>, and <ref type="bibr">Zwicker et al. [2001b]</ref> showed different methods to create data hierarchies of surfaces represented by sample points and how to render them efficiently. As the intrinsic model of points describing a surface is fundamentally different to the model used for scattered data, their clustering techniques cannot be applied in our case. <ref type="bibr" target="#b15">Pauly et al. [2002]</ref> used principal component analysis for clustering, but with a different hierarchy concept compared to our approach. Some systems <ref type="bibr" target="#b20">[Rusinkiewicz and Levoy 2000;</ref><ref type="bibr" target="#b1">Botsch et al. 2002</ref>] use quantized relative coordinates for storing the points in a hierarchical data structure, but these approaches were not optimized for fast GPU access because the data structures had to be interpreted by the CPU. Additionally, the presented rendering techniques have been designed to create smooth surfaces without holes and they allow no or only few layers of transparency. Again, this does not meet our requirements.</p><p>First steps for visualizing uncorrelated samples for SPH data have been presented by <ref type="bibr">Rau and Straßer [1995]</ref>. <ref type="bibr" target="#b4">Jang et al. [2002]</ref> introduced a multiresolution splatting approach for non-uniform data. However, in their solution the higher hierarchy levels are always stored in uniform grids, and they cannot render more than approximately 135,000 splats per second. This technique seems to be more appropriate for almost flat and regular data.</p><p>For rendering large quantities a simple brute force approach would store the complete data set on the graphics card and use point array rendering for displaying the data set. As soon as the data set does not fit into graphics memory, rendering speed can drop by an order of magnitude.</p><p>In the following we propose a hierarchical data structure based on principal component analysis or similar clustering techniques that enables us to render large data sets adaptively at high frame rates on current PC hardware without compromising visual quality. Our scheme also reduces memory consumption by using quantized relative coordinates and it allows for fast sorting of semi-transparent clusters.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Data Storage</head><p>Using hierarchical structures imposes higher memory requirements than storing the same data in flat arrays. A trivial implementation can easily exhaust main memory on regular workstations for large data sets, even in the steady state. Memory bandwidth is limited, and traversing the hierarchy for rendering adds overhead for recursive function calls and pointer dereferencing. Additionally, with current graphics APIs there is no means to hand this process over to the GPU.</p><p>Therefore, we decoupled hierarchy structures (clusters) from data structures (points). The clusters contain a pointer to the next hierarchy level, a pointer to offspring point data, and the number of children. The point data itself only contains the point position, size, and color values. In principle one would like to store raw data values and use runtime classification for point size and color selection, but the cluster hierarchy itself and especially the pre-processed cluster representatives highly depend on point sizes and colors. <ref type="figure" target="#fig_1">Figure 1</ref> shows the lowest three levels of a typical data hierarchy. The finest level n does not contain any hierarchy information at all, thus no cluster nodes are needed. In level n − 1 a point data structure is related to each cluster node, containing its centroid. Cluster   nodes and point data are connected on the previous level. The diagram shows which points are rendered for a typical cluster node for rendering levels n − 2, n − 1, or n.</p><p>The decoupled data structure enables us to store point data for any given combination of rendering level and cluster node in a continuous array. This reduces the number of necessary recursive function calls and helps us with accelerating rendering by using graphics hardware. Additionally, it ensures that the data is concatenated for efficient cache usage.</p><p>Point data sets tend to get really large, and they need high positional resolution. Memory requirements can be reduced to one half or even one quarter by storing coordinates relatively to the centroids of the inspected clusters as depicted in <ref type="figure" target="#fig_2">Fig. 2</ref>. As the necessary positional resolution is much lower for encoding relative coordinates, they can be quantized using bytes or shorts instead of floats.</p><p>Finally, for a typical data set like the VIRGO n-body simulation ( <ref type="figure" target="#fig_7">Fig. 8</ref>) with 16 million points in level 6 we need 160 Mbyte for point data and 32 Mbyte for the cluster hierarchy when storing point coordinates in bytes only.</p><p>• Select cluster j (point indices I j ) with largest distortion ∆ j • Calculate auto-covariance matrix from centroid X j :</p><formula xml:id="formula_0">A = ∑ i∈I j (x i − X j )(x i − X j ) T • Find</formula><p>Eigenvector e max of A corresponding to the largest Eigenvalue λ max • Split cluster j into two new clusters:  </p><formula xml:id="formula_1">I n1 = {i ∈ I j : x i − X j , e max ≥ 0} I n2 = {i ∈ I j : x i − X j ,</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Creating the Hierarchy</head><p>In order to create one level of the hierarchy the input data points have to be sorted into bins. For each bin a point on the next higher hierarchy level is created, representing all points that fell into that bin. The properties of the newly created point are chosen so that its visual representation matches that of the substituted points best.</p><p>To obtain the set of bins several clustering schemes can be used. The most common solution is to subdivide the data set into an octree, which can be used efficiently for sorting as well (Sect. 6).</p><p>Another approach that has much better spatial adaptation properties is to perform a series of principal component analysis (PCA) splits, each dividing the cluster with the currently highest distortion as defined below into two halves. As PCA is a standard technique, we only present a short summary of the PCA-split algorithm in <ref type="figure" target="#fig_3">Fig. 3</ref>, more details can be found e.g. in <ref type="bibr" target="#b6">[Jolliffe 1986</ref>].</p><p>In the following I j denotes the set of indices of the points of cluster j. That is, cluster j consists of all points x i , i ∈ I j with diameters s i , and has the weighted centroid X j and distortion ∆ j with</p><formula xml:id="formula_2">X j = ∑ i∈I j s i • x i ∑ i∈I j s i , ∆ 2 j = ∑ i∈I j x i − X j 2 2 .</formula><p>As we have to perform this split operation several million times, fast cluster selection is of uttermost importance. Therefore, we keep the clusters in a skip-list <ref type="bibr" target="#b17">[Pugh 1990</ref>], sorted by decreasing ∆ 2 j . A skiplist is essentially a sorted linked list with randomized link depth, with O(log n) complexity in the average case for search, insert, and delete operations. Its properties are similar to balanced trees, with the advantage of faster insert and delete, O(1) largest value search, very small memory footprint, and almost trivial implementation.</p><p>This splitting process is continued until the maximum distortion or the average cluster size fall below pre-defined minima. After the visual properties of the new points have been obtained, these points undergo another series of PCA-splits in order to create the next hierarchy level. For most applications like the VIRGO data set a hierarchy depth of more than about 6 levels is usually not appropriate. For this data set with its 16 million points the hierarchy creation process takes only a few minutes.</p><p>For creating a visually approximative representation of the cluster j compared to its children the most important aspect is that the radiant flux Φ has to be the same. For the irradiance c j of the new centroid point representing the cluster this means for each of the representative wave lengths</p><formula xml:id="formula_3">Φ j = A j • c j = π 4 s 2 j c j = π 4 ∑ i∈I j s 2 i c i .<label>(1)</label></formula><p>The cluster representative should be larger than the largest of its children in order to keep some visual continuity. Additionally, small cluster points would have very high local intensities, which could finally saturate the covered pixels in the blending step during rendering. Distributed clusters -that is clusters with a large average distance of their children to the centroid compared to the children's point sizes -should have larger representatives than locally agglomerated ones. On the other hand, they must not be too large, as the human eye is very sensitive to edges, and enlarging a point implies reducing its intensity, diminishing the visibility of the edge. After comparing several different functions, we found a trade-off that creates acceptable results for almost all point distributions. It tries to combine point sizes and their distances to the centroid, and ensures, that the final size does not fall below the size of the largest point of the cluster:</p><formula xml:id="formula_4">m j = argmax i∈I j s i , s j = 0.5 |I j | − 1 ∑ i∈I j \{m j } s i x i − X j 2 + s m j .<label>(2)</label></formula><p>The scaling factor 1 2 in Eq. 2 of the weighted average point size of all points except the largest one before adding to the largest point size s m j has been determined empirically.</p><p>This calculated point size is subject to further restrictions, if intensities are stored in main memory as unsigned bytes in order to save memory. The system has to assure that the calculated point size does not overflow the intensity domain, and it has to increase the point size in case of saturation.</p><p>Eq. 1 and Eq. 2 are highly dependent on the blending function, and our definition only holds for cumulative blending (C = c 1 + c 2 ). For other blending functions, like the over operator (C = α 1 c 1 + (1 − α 1 )c 2 ), c j may be view dependent, as the total flux of overlapping points is no longer necessarily the sum of the individual fluxes of the points. With the current approach view dependent intensities cannot be modeled. However, with adaptive rendering we will use coarser hierarchy levels only for clusters that are projected to areas on the screen that are small or outside some region of interest, and it is very unlikely that view dependencies will be noticed in such small regions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Hierarchy Traversal</head><p>During rendering the hierarchy is traversed recursively. For each cluster the system may decide to descend further down into the hierarchy, render the centroid at the current level, or skip the cluster altogether when it is not visible. The decision can be based upon some maximum screen error metrics, the distance to the viewer, or some given region of interest. These rules should be computationally cheap. As a rule of thumb, evaluating the rule should be cheaper than transforming and rendering one point of the cluster.</p><p>For more complex rules and for accelerating the traversal process, the system may already decide on a higher level n, that it will render all offsprings of level n + δ n (see <ref type="figure">Fig. 4</ref>). Then the children do not have to be traversed. Even for simple adaptivity rules this has a strong effect on rendering performance. As described in Sect. 3, the point data of all children is stored linearly in memory, thus they can be addressed in a single loop, or even by a single OpenGL array rendering call. See <ref type="figure">Fig. 5</ref> for a pseudo code fragment.</p><p>Remember that we are using relative coordinates for storing the point locations. In this context children of different clusters can only be rendered in a single loop when the base centroid and the scaling factor for the relative coordinates is the same for all considered children. We can use the coordinates of a centroid of level n for the calculation of the relative coordinates of all descendants of level n + δ n . In order to use this arrangement efficiently, δ n has to be constant for the data set. We get a speedup of about 50 percent for an average cluster size of 5 points and δ n = 2, more for larger clusters. For adaptive rendering higher δ n are less efficient as the traversal routine has to select the clusters to be rendered on a higher level. Another drawback is that being able to render a set of clusters in one piece comes at the cost of higher discretization errors.  <ref type="figure">Figure 4</ref>: During traversal, the final rendering level should be selected at some higher level of the hierarchy for speedup reasons (δ n = 2 in this case).</p><formula xml:id="formula_5">void render cluster (cluster t *c, point t *p) { if (cluster visible (c)) { /* trivial reject */ if (descend cluster (c, p, δ n )) { for i = 0...c→len[0] /* recursion */ render cluster (&amp;c→children[i], &amp;c→points[i]) } else { len = c→len[δ n − 1] for i = 0...δ n − 2 /* find first point of hierarchy depth δ n */ c = c→children[0]</formula><p>/* not executed for δ n = 1 */ render points (c→points, len) } } } <ref type="figure">Figure 5</ref>: Pseudo code for traversing the hierarchy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Sorting</head><p>For many of the investigated data types cumulative blending is an effective way of visualizing both global and local structures in the data sets. However, with other data sets, for instance reversible Apollonian packings <ref type="figure" target="#fig_2">(Fig. 20)</ref>, the over operator is necessary to visualize the visual depth. Non-commutative blending operators require the data points to be sorted according to view distance. The implemented hierarchy can be used to efficiently sort the cluster centroids using quicksort or bucketsort. The cluster points themselves have to be sorted before rendering as well. Bucketsort only creates an approximative sorting order, but has the advantage of lower computational complexity (O(n) vs. O(n log n)) and its implementation is much simpler and thus faster. The rendered images are almost indistinguishable when using a relatively large number of buckets.</p><p>Sorting the cluster centroids is equivalent to the typical BSP-tree sorting, as long as the distances of any two neighboring centroids to their common splitting plane are equal <ref type="figure">(Fig. 6)</ref>. The octree clustering approach has this property, however, its spatial adaption to the local point density is much worse than the proposed PCA-split approach. Still, we have no choice but to use octrees if we really care about the correct sorting order.</p><p>Even with correctly sorted clusters, there is a chance that overlapping points are rendered in the wrong order, as it can be seen in <ref type="figure">Fig. 7</ref>. For many data sets the points can be thought to be infinitely small, in that case the points are rendered correctly. Other data sets are more sensitive to their sorting order, and require larger average cluster sizes by combining several octree levels to a single level. This helps reducing the chance of sorting errors, as the points of a single cluster are always rendered in the correct order.  <ref type="figure">Figure 6</ref>: Distance sorting according to d1, d2 is equivalent to BSP sorting for c1 = c2. Note that the sorting order of d1, d2 changes exactly at the same time the visibility order of the two cells changes.  <ref type="figure">Figure 7</ref>: Back-to-front distance sorting according to BSP fails for non-split overlapping points. In this example the right cluster is rendered before the left one due to BSP order.</p><p>In order to sort the Voronoi cells produced by the PCA-splits, additional connectivity and splitting plane information is needed for MPVO <ref type="bibr" target="#b10">[Max et al. 1990;</ref><ref type="bibr" target="#b23">Williams 1992]</ref> or equivalent algorithms. This implies a huge additional memory overhead we would like to avoid. It is ongoing research, how this approach can be combined with per-pixel clipping or z-test dependent blending to render exactly sorted images even for cases like in <ref type="figure">Fig. 7</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Rasterization</head><p>Since using only one vertex per primitive can accelerate the rendering process significantly, we will usually approximate the splats using OpenGL anti-aliased points. Other footprints can be used by rendering point sprites without additional cost (see <ref type="figure" target="#fig_2">Fig. 20</ref>), but they are only available on NVidia hardware right now. For rendering large quantities of points the generally fastest approach is to use vertex coordinates and attributes that are given by vertex arrays or display lists. However, display lists have to be stored in precious graphics memory and are more likely to be larger in size, as the graphics card has to store additional information about its contents and format.</p><p>When a point projects to an area with diameters smaller than a single pixel on the screen, its brightness has to be attenuated. The new alpha value isα</p><formula xml:id="formula_6">= α •s 2 ,<label>(3)</label></formula><p>assuming that point color is multiplied with alpha during blending. Note that attenuation increases quantization artifacts due to the limited frame buffer depth. Therefore, adaptive rendering can even improve the image quality by choosing higher levels for parts of the cluster that tend to project to very small screen areas. For drawing points with varying sizes we can use vertex programs, a concept NVidia introduced with the GeForce3 (NV_vertex_program). Besides changing the point size on a per vertex level and adding the last contribution of the relative coordinates, the vertex shader is responsible for correct alpha attenuation as indicated in Eq. 3, which is not possible without using vertex programs at all when we want to employ vertex arrays.    shows the program parameter configuration and the actual vertex program written in Cg <ref type="bibr" target="#b9">[Mark et al. 2003</ref>] that contains all of the above. Additionally, point size and alpha values are multiplied by two global scaling factors. It compiles into 29 program statements for both NV vertex program and ARB vertex program.</p><p>The later extension, which is supported by ATI's Radeon 9700, finally enables us to evaluate the algorithm on this card as well. The previous EXT_vertex_shader extension did not allow us to alter the point size on a per-vertex basis. As most of the performance gain comes from this last step, we could not really benefit from the Radeon's high performance geometry engine with the old extension. Unfortunately, both anti-aliased point image quality and execution speed is clearly below our expectations with the current drivers (see Sect. 9 for a comparison). Note that at least the setup is still much slower on NVidia cards as well compared to NV vertex program.</p><p>ATI's DirectX drivers are more mature than their OpenGL drivers, thus we investigated whether this API would be an option. However, the so-called flexible vertex format of DirectX up to version 8 only supports vertices specified as floats. As we do not want to store the points' vertices in this format due to its memory requirements, we would have to convert them on the fly, which would make the use of vertex buffers extremely expensive as they would have to be converted by the CPU.</p><p>With the availability of vertex shaders we can now use vertex arrays to send a large part of the hierarchy to the graphics hardware. When sorting is enabled, index arrays have to be used to select the points in the correct order. These calls are highly optimized, and the CPU can already continue to select the next cluster to be rendered in parallel to the rasterization process. As pointed out in Sect. 5 we have to take care that we only send down that part of the hierarchy in one piece that is related to the same base centroid for the calculation of the relative coordinates.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Alternative Rendering Approaches</head><p>For comparison, several other techniques have been developed and integrated into the rendering framework. The different rendering backends can be selected during runtime at almost no cost.</p><p>As hierarchy traversal and coordinate transformation seem to be the limiting factors for the visualization of scattered data, a software rasterizer is a valid option to be considered. Most points of a low hierarchy level project to a very small area on the screen, so the rasterizer should be optimized for single pixel points. This implementation can also function as a reference for the OpenGL based render backends, as it draws the points to a floating point frame buffer.</p><p>With this feature we reduce the chance of missing contributions of very small or dim points. However, the CPU is completely responsible for vertex transformation and rasterization, thus this solution is most likely to be the least efficient of the presented methods, and new graphics hardware like the Radeon 9700 or the GeForce FX is able to render into floating point frame buffers as well.</p><p>In contrast to regular PC workstations used by typical end users, virtual reality environments are still often based on Silicon Graphics systems. As the InfiniteReality hardware does not have a programmable graphics pipe, we additionally implemented a regular billboard renderer. Using billboards is less efficient compared to OpenGL anti-aliased points or point sprites, as four vertices have to be calculated and sent down the pipeline for a single data point.</p><p>Note that rendering points without vertex programs is not an option, as with the regular OpenGL pipeline one can only set the current point size outside an glBegin() / glEnd() pair, which reduces the overall speed considerably due to the state changes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">Results and Discussion</head><p>The images 8, 9, and 17 show visualizations of n-body simulations carried out by the Virgo Supercomputing Consortium. All images show redshift z = 0 for the τCDM model. The velocities of the galaxies relative to the simulated base cube have been color coded.</p><p>In images 11 to 13 one can see different levels of the data set. Note that level 3 would usually not be used for rendering, but it is a potential level for deciding on the rendering depth, as shown in <ref type="figure" target="#fig_1">Fig. 4. Figures 18 to 20</ref> show other data sets and rendering modes. Please note that the clearly visible aliasing in <ref type="figure" target="#fig_1">Fig. 18</ref> is inherent to the according data set and not an artefact of the presented rendering technique. In most areas the data set contains an almost regular grid and the splats are used for visualizing the grid structure and not for approximating any underlying function.</p><p>Despite the speed of modern processors, the OpenGL accelerated version is still superior to the software approach, which employed a very crude rasterizer in our implementation that renders large points in poor quality only. One major drawback of the software-based system is that the floating point frame buffer has to be sent down the AGP bus to the graphics card, though with latest AGP 8x graphics hardware and current drivers this only imposes an upper limit of 40 fps for a 1000 2 viewport, not including the time for clearing and rendering the software buffer. However, software based rendering still seems to be one of the slowest approaches. Using a 24 bit frame buffer could accelerate this process, but then we loose the major advantage of the software solution.  <ref type="table">Table 1</ref>: Rendering times in ms for different rendering techniques and levels for a 500 2 viewport, δ n = 2 except where noted.        <ref type="table">Table 1</ref> lists some performance measurements for the different algorithms and levels for δ n = 2, except where noted, together with the number of points, and the average projected size. It can be noticed that using billboards is rather slow, as the CPU has additional work to do for setting up four times the amount of vertices to be sent to the graphics pipe. The system used for the evaluation was an Pentium4 2800 MHz with an Intel 7225 chipset with 4 GB dual channel DDR 333 memory and a GeForce FX 5800 Ultra graphics pipe on a Linux system, except where noted. The Windows XP drivers showed similar but slightly lower performance figures for the GeForce. The Linux drivers for the Radeon currently don't have support for the used chipset. Please note that the high performance memory setup has a much larger impact on the software rasterizer than on the vertex array renderer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Level # Points</head><formula xml:id="formula_7">Soft * δ n = 1 Soft † δ n = 1 Soft † Soft ‡ V.p.a. * δ n = 1 V.p.a. † δ n = 1 V.p.a. † V.p.a. ‡ V.p.a. adapt. ‡ δ n = 1 V</formula><p>The adaptive algorithm shown in the table uses a simple adaptive scheme with vertex programs and vertex arrays, selecting the clusters that should be traversed on the CPU by the maximum screen projection size of the cluster children and the given maximum traversal depth. If the projected size exceeds 2 pixels, the cluster is traversed further, otherwise its children are rendered to screen for δ n = 1, for δ n = 2 the same criterion is applied to its grandchildren. Using these settings, there is almost no visual difference between the data set rendered in full resolution compared to the adaptive rendering. With δ n = 1 we get a finer hierarchy selection, but we also reduce the average array size that can be used for rendering, which explains the performance loss in the lower levels. The difference image in <ref type="figure" target="#fig_1">Fig. 10</ref> shows quite some changes in the visualization, however, they have the same quality as additional noise and do not disturb the visual appearance. Most of the screen space difference comes from points that happen to be rendered one pixel off to their original positions. While the human visual system is not able to notice these differences, they have a rather large impact on difference images. We also noticed that the quantization and floating point roundoff errors introduced by using graphics hardware for rendering ( <ref type="figure" target="#fig_1">Fig. 14)</ref> are larger than the ones created by adaptive rendering. The contrast of both difference images has been enhanced by 400 percent in order to show their properties more clearly. <ref type="table" target="#tab_4">Table 2</ref> lists some times for combinations of different sorting and rendering techniques. Please note that the qsort based sorting algorithm will slow down significantly for large cluster sizes, as it is O(n log n) compared to O(n) for the bucketsort. The two bucketsort variants use different bucket sizes, trading speed for quality. The al-  gorithm using larger buckets has almost the same visual appearance as the qsort algorithm, but exhibits some flickering during rotation on critical data sets containing large and almost overlapping points.</p><p>The cluster selection scheme has about the same performance impact on the rendering system as the flexible rendering backend (less than 2 percent each), which allows us to switch the rendering technique on the fly. Please note that for large viewports like 1000 2 the effect of adaptive hierarchy traversal is not noticeable for low maximum traversal depths, as all clusters are traversed due to their large projected size.</p><p>Things change when we reduce the viewport size. <ref type="table" target="#tab_5">Table 3</ref> lists rendering times and the number of rendered points in the levels 1 to 6 for this scheme with no maximum traversal depth. We get early view frustum culling at almost no cost for the adaptive rendering algorithm, as this can be incorporated in the point projection size calculation process. However, all tables show rendering times and point numbers for viewing the full data set. <ref type="figure" target="#fig_1">Figure 16</ref> shows a close up region, rendered intentionally with a very high projection size error of 14 in order to reveal the differences. The next two images show the same region rendered without adaption with approximately the same number of points and all points, respectively. Note that the projected screen size is only an approximation for the maximum screen space error, as the centroid size that used for evaluating the screen space error is not directly coupled with the maximum distribution width of the children which influences the error as well.</p><p>For more images and some realtime animations please take a look at our web site:</p><p>http://www.vis.uni-stuttgart.de/pointclouds/ <ref type="figure" target="#fig_1">Figure 16</ref>: A closeup of the virgo data set, rendered at the really coarse level 3 (123K pts = 0.74%, left), adaptively with approximately the same number of points and high potential projection error (130K pts, middle), and with all points (16.8M pts, right), respectively. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="10">Conclusion and Future Work</head><p>In this paper we presented a technique for accelerating the visualization of scattered point data compared to rendering flat point arrays. We employed principal component analysis for creating a hierarchy of point clusters, stored with quantized relative coordinates in a data structure that separates cluster from point data. With this data representation visualization quality can be traded for speed with an adaptive rendering algorithm. The rendering process itself was accelerated using vertex programs on modern PC graphics hardware. Finally, we are now able to visualize data sets with tens of millions of points interactively on standard workstations.</p><p>One of the most promising -but also most challenging -extensions to the algorithm is the handling of time dependent data. The rendering process can be left almost unchanged, but it is a topic of ongoing research how the clustering step can be improved. It will have to handle cluster transitions of single particles in a smooth way, such that popping artifacts will not occur.</p><p>The current implementation of the clustering algorithms requires all points as floating point data in memory, but they can be performed on some other, remote supercomputer. Out-of-core clustering algorithms exist, and we want to investigate how they can be applied to our case. Additionally, there are some issues with the overestimation of the radiant flux during rendering with cumulative blending in areas of high saturation. The system should detect these areas and reduce the brightness of the generated clusters accordingly. Alternatively, high dynamic range rendering to floating point frame buffers could be used.   An open question is how to handle multivariate data and how to change the visualized data during runtime. Storing several color values per point structure is one possibility, but this increases memory usage again. Color quantization and table lookup in the rendering step could help with regard to this aspect.</p><p>There are still some issues with the rendering of sorted points with respect to overlapping points in adjacent clusters. Additionally, there might be a chance to implement bucket sorting by rendering to off-screen textures with the next generation graphics hardware, and radix sorting could be an interesting alternative as well.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 1 :</head><label>1</label><figDesc>The last three levels of a typical data hierarchy. The green clusters can be rendered at their highest hierarchy level in a single loop without recursively descending the data structure. The point data correlated to the cluster centroids is not embedded in the clusters but stored in point structures parallel to the clusters.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :</head><label>2</label><figDesc>Point coordinates are scaled and quantized relatively to the position of the cluster centroid for storage.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 3 :</head><label>3</label><figDesc>The PCA-split algorithm</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head></head><label></label><figDesc>Figure 15</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 8 :</head><label>8</label><figDesc>A total view of one of the VIRGO n-body simulations with 16.8 million particles (level 6).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure 9 :</head><label>9</label><figDesc>A total view of one of the VIRGO n-body simulations rendered adaptively with a maximum screen space error of 2 pixels.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Figure 10 :</head><label>10</label><figDesc>Differences of adaptive vs. full data rendering (contrast enhanced by 400%).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Figure 11 :</head><label>11</label><figDesc>VIRGO at level 3. (123,000 clusters = 0.74%) Rendered at 270 fps.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Figure 12 :</head><label>12</label><figDesc>Level 4. (671,000 clusters = 4%) Rendered at 59 fps.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Figure 13 :</head><label>13</label><figDesc>Level 5. (3.3 million clusters = 19.7%) Rendered at 12 fps.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head>Figure 14 :</head><label>14</label><figDesc>Differences of software vs. OpenGL rasterization (contrast enhanced by 400%).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_14"><head></head><label></label><figDesc>= glstate.matrix.modelview[0]; uniform float4x4 proj = glstate.matrix.projection; float4 vec, homeye, eye; float tmp; /* relative coords → absolute coords */ vec.xyz = (posin.xyz + posoffset.www) * basepos.www + basepos.xyz; vec.w = 1.0; /* modelview transformation + projection */ homeye = mul (model, vec); posout = mul (proj, homeye); eye = homeye / homeye.w; /* effective point size calculation */ tmp = posin.w * basepos.w * scale.w * rsqrt (atten * dot (eye.xyz, eye.xyz)); /* clamping minimum point size to 1 */ sizeout.x = scale.x * max (tmp, 1.0); /* alpha calculation and attenuation for point sizes &lt; 1 */ tmp = min (tmp, 1.0); colout = colin; tmp = colin.w * scale.z * tmp * tmp; /* clamping minimum alpha value to keep extremely small points visible */ colout.w = max (tmp, 4.0/256); }</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_15"><head>Figure 15 :</head><label>15</label><figDesc>The vertex program written in Cg.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_16"><head>Figure 17 :</head><label>17</label><figDesc>A total view of one of the close up simulations with 16.8 million particles as well.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_17"><head>Figure 18 :</head><label>18</label><figDesc>Visualization of a shock front, simulated with SPH (1 million points).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_18"><head>Figure 19 :</head><label>19</label><figDesc>SPH and dark matter galaxy formation simulation rendered with sorted anti-aliased points (540,000 points).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_19"><head>Figure 20 :</head><label>20</label><figDesc>Reversible Apollonian packing rendered with sorted point sprites.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>e max &lt; 0} • Calculate centroids and distortions for the new clusters</figDesc><table /><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head></head><label></label><figDesc>ARB_vertex_program with vertex arrays, evaluated on ATI's Radeon 9700, WindowsXP, δ n = 2 V.p.a. Vertex program with array rendering</figDesc><table><row><cell>Level</cell><cell># Points</cell><cell>Av. pt. size</cell><cell>Software</cell><cell>Billboards</cell><cell>Vertexprogs</cell><cell>V.p.a. δ n = 1</cell><cell>V.p.a.</cell><cell>V.p.a. adapt. δ n = 1</cell><cell>V.p.a. adapt.</cell><cell>ATI V.p.a.  †</cell></row><row><cell>6</cell><cell>16.8M</cell><cell>0.5</cell><cell>847</cell><cell>1724</cell><cell>495</cell><cell>1389</cell><cell>427</cell><cell>104</cell><cell>153</cell><cell>1490</cell></row><row><cell>5</cell><cell>3.3M</cell><cell>0.6</cell><cell>433</cell><cell>752</cell><cell>229</cell><cell>262</cell><cell>85</cell><cell>93</cell><cell>79</cell><cell>287</cell></row><row><cell>4</cell><cell>671K</cell><cell>0.9</cell><cell>120</cell><cell>161</cell><cell>44</cell><cell>50</cell><cell>17</cell><cell>17</cell><cell>47</cell><cell>57</cell></row><row><cell>3</cell><cell>123K</cell><cell>1.5</cell><cell>48</cell><cell>30</cell><cell>8.8</cell><cell>10</cell><cell>3.7</cell><cell>3.7</cell><cell>10</cell><cell>12</cell></row><row><cell>2</cell><cell>24K</cell><cell>2.9</cell><cell>26</cell><cell>7.6</cell><cell>2.6</cell><cell>2.7</cell><cell>1.8</cell><cell>1.8</cell><cell>2.7</cell><cell>2.6</cell></row><row><cell></cell><cell>†</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 2 :</head><label>2</label><figDesc>Rendering times in ms for rendering sorted points with correct blending for a 500 2 viewport, δ n = 2 except where noted.</figDesc><table><row><cell>Viewport</cell><cell>Rendering time</cell><cell>Level 1</cell><cell>Level 2</cell><cell>Level 3</cell><cell>Level 4</cell><cell>Level 5</cell><cell>Level 6</cell></row><row><cell>160 2</cell><cell>9.5</cell><cell>0</cell><cell>4K</cell><cell>51K</cell><cell>1.7K</cell><cell>0</cell><cell>0</cell></row><row><cell>400 2</cell><cell>75</cell><cell>0</cell><cell>2</cell><cell>53K</cell><cell>348K</cell><cell>224K</cell><cell>23K</cell></row><row><cell>700 2</cell><cell>348</cell><cell>0</cell><cell>0</cell><cell>418</cell><cell>343K</cell><cell>1.4M</cell><cell>1.8M</cell></row><row><cell>1000 2</cell><cell>769</cell><cell>0</cell><cell>0</cell><cell>0</cell><cell>82K</cell><cell>1.9M</cell><cell>6.2M</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5"><head>Table 3 :</head><label>3</label><figDesc>Number of rendered points per level and rendering times in ms for adaptive rendering vs. viewport size, δ n = 1.</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="11">Acknowledgments</head><p>This work has been financed by the project SFB 382 of the German Research Foundation (DFG).</p><p>Some of the data sets shown in this paper are based on simulations carried out by the Virgo Supercomputing Consortium using computers based at the Computing Center of the Max-Planck Society in Garching and at the Edinburgh Parallel Computing Center. The data sets are publicly available at www.mpa-garching.mpg.de/NumCos/.</p><p>We would like to thank Sebastian Niedworok (TAT) from the University of Tübingen, Volker Springel and Martin Jubelgas from the Max-Planck Society in Garching, as well as Reza Mahmoodi Baram (ICA) and Johannes Roth (ITAP) from the University of Stuttgart for their support with data sets and insight into their visualization needs. Additionally, we would like to thank our colleagues Marcelo Magallón, Guido Reina, and Daniel Weiskopf for helpful discussion.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Point Set Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Alexa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Behr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Or</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Fleishman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Levin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization &apos;01</title>
+		<meeting>Visualization &apos;01</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="21" to="28" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Efficient High Quality Rendering of Point Sampled Geometry</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Botsch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wiratanaya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kobbelt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Eurographics Workshop on Rendering &apos;02</title>
+		<meeting>Eurographics Workshop on Rendering &apos;02<address><addrLine>EG</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Cosmic Voyage: Scientific Visualization for IMAX film</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Cox</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIG-GRAPH 96 Visual Proceedings</title>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page">147</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">ESA&apos;s space astrometry mission</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Gaia</surname></persName>
+		</author>
+		<ptr target="http://astro.estec.esa.nl/GAIA/gaia.html" />
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">View-Dependent Multiresolution Splatting of Non-Uniform Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Jang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Ribarsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Shaw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Faust</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Eurographics VisSym &apos;02</title>
+		<meeting>Eurographics VisSym &apos;02</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Evolution of Structure in Cold Dark Matter Universes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Jenkins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">S</forename><surname>Frenk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">R</forename><surname>Pearce</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">A</forename><surname>Thomas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">M</forename><surname>Colberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">D M</forename><surname>White</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">M P</forename><surname>Couchman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Peacock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">P</forename><surname>Efstathiou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">H</forename><surname>Nelson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ApJ</title>
+		<imprint>
+			<biblScope unit="volume">499</biblScope>
+			<biblScope unit="page" from="20" to="40" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Principal Component Analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">T</forename><surname>Jolliffe</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1986" />
+			<publisher>Springer</publisher>
+			<pubPlace>New York</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Rendering The First Star In The Universe -A Case Study</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kähler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cox</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Patterson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Levy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-C</forename><surname>Hege</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Abel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization 02</title>
+		<meeting>Visualization 02</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="537" to="540" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Hierarchical Splatting: A Progressive Refinement Algorithm for Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Laur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIGGRAPH &apos;91, ACM</title>
+		<meeting>SIGGRAPH &apos;91, ACM</meeting>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="285" to="288" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Cg: A System for Programming Graphics Hardware in a C-like Language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">R</forename><surname>Mark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Glanville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Akeley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIGGRAPH &apos;03</title>
+		<meeting>SIGGRAPH &apos;03</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Area And Volume Coherence For Efficient Visualization Of 3D Scalar Functions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computer Graphics (San Diego Workshop on</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="27" to="33" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Smoothed Particle Hydrodynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Monaghan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Ann. Rev. Astron. Astrophys</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="page" from="543" to="574" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Splatting without the Blur</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization &apos;99</title>
+		<meeting>Visualization &apos;99</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="363" to="370" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Visualizing Stars and Emission Nebulas</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">R</forename><surname>Nadeau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Genetti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Napear</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Pailthorpe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Emmart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Wesselak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Davidson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. EUROGRAPHICS &apos;00, Eurographics Association</title>
+		<meeting>EUROGRAPHICS &apos;00, Eurographics Association</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Case Study: Interactive Rendering of Adaptive Mesh Refinement Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Park</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Bajaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Siddavanahalli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization 02</title>
+		<meeting>Visualization 02</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="521" to="524" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Efficient Simplification of Point-Sampled Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pauly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kobbelt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization &apos;02</title>
+		<meeting>Visualization &apos;02</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="163" to="170" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Surfels: Surface Elements as Rendering Primitives</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zwicker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Baar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIGGRAPH &apos;00, ACM</title>
+		<meeting>SIGGRAPH &apos;00, ACM</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="335" to="342" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Skip Lists: A Probabilistic Alternative to Balanced Trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Pugh</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<date type="published" when="1990-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Direct Volume Rendering of Irregular Samples</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Rau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization in Scientific Computing &apos;95, R. Scateni</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="72" to="80" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Interactive Volume Rendering on Standard PC Graphics Hardware Using Multi-Textures and Multi-Stage-Rasterization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Rezk-Salama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Greiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EG/SIGGRAPH Workshop on Graphics Hardware &apos;00, ACM</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page">147</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">QSplat: A Multiresolution Point Rendering System for Large Meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rusinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIGGRAPH &apos;00, ACM</title>
+		<meeting>SIGGRAPH &apos;00, ACM</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="343" to="352" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">An Anti-Aliasing Technique for Splatting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Swan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization &apos;97</title>
+		<meeting>Visualization &apos;97</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="197" to="204" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">The Randomized z-Buffer Algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wand</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Fischer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Peter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Meyer Auf Der</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Heide</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIGGRAPH &apos;01, ACM</title>
+		<meeting>SIGGRAPH &apos;01, ACM</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="361" to="370" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Visibility Ordering Meshed Polyhedra</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">L</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="page" from="103" to="126" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">EWA Volume Splatting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zwicker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Baar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization &apos;01</title>
+		<meeting>Visualization &apos;01</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="29" to="36" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Surface Splatting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zwicker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Baar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIGGRAPH &apos;01, ACM</title>
+		<meeting>SIGGRAPH &apos;01, ACM</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="371" to="378" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

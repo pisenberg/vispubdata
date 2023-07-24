@@ -1,0 +1,1367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.4.1" ident="GROBID" when="2016-09-09T14:59+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Extinction-Based Shading and Illumination in GPU Volume Ray-Casting</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName>
+								<forename type="first">Philipp</forename>
+								<surname>Schlegel</surname>
+							</persName>
+						</author>
+						<author>
+							<persName>
+								<forename type="first">Maxim</forename>
+								<surname>Makhinya</surname>
+							</persName>
+						</author>
+						<author>
+							<persName>
+								<forename type="first">Renato</forename>
+								<surname>Pajarola</surname>
+								<roleName>Member, Ieee</roleName>
+							</persName>
+						</author>
+						<title level="a" type="main">Extinction-Based Shading and Illumination in GPU Volume Ray-Casting</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Index Terms—Volume Rendering</term>
+					<term>Shadows</term>
+					<term>Ambient Occlusion</term>
+					<term>GPU Ray-Casting</term>
+					<term>Exponential Extinction</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1. Bucky ball in a box illuminated by up to three point lights inside the volume (two white point lights in top front box corners; one white light inside bucky ball; two examples of one white light in top-right box corner and two colored lights inside bucky ball). Abstract—Direct volume rendering has become a popular method for visualizing volumetric datasets. Even though computers are continually getting faster, it remains a challenge to incorporate sophisticated illumination models into direct volume rendering while maintaining interactive frame rates. In this paper, we present a novel approach for advanced illumination in direct volume rendering based on GPU ray-casting. Our approach features directional soft shadows taking scattering into account, ambient occlusion and color bleeding effects while achieving very competitive frame rates. In particular, multiple dynamic lights and interactive transfer function changes are fully supported. Commonly, direct volume rendering is based on a very simplified discrete version of the original volume rendering integral, including the development of the original exponential extinction into α-blending. In contrast to α-blending forming a product when sampling along a ray, the original exponential extinction coefficient is an integral and its discretization a Riemann sum. The fact that it is a sum can cleverly be exploited to implement volume lighting effects, i.e. soft directional shadows, ambient occlusion and color bleeding. We will show how this can be achieved and how it can be implemented on the GPU.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Direct volume rendering (DVR) <ref type="bibr" coords="1,148.12,438.21,10.45,8.02" target="#b5">[6] </ref> is one of the most useful and popular methods for visualizing volumetric scalar field datasets without explicitly extracting geometry. Typically the visualization of such volume datasets is a critical tool in bio-medical imaging applications for CT, MRI or PET scan data. It is also used for the analysis of numerical simulations and occurs in visual arts. Visualizing sampled volume data involves the reconstruction of the continuous scalar field from the discrete dataset followed by the evaluation of the direct volume rendering integral <ref type="bibr" coords="1,98.47,517.91,14.19,8.02" target="#b17">[19,</ref><ref type="bibr" coords="1,115.33,517.91,10.64,8.02" target="#b19"> 22]</ref>. Even though many algorithms have been proposed to implement this, like splatting <ref type="bibr" coords="1,184.08,527.87,14.94,8.02" target="#b31">[34] </ref>and texture slicing <ref type="bibr" coords="1,269.17,527.87,9.52,8.02" target="#b6">[7]</ref>, recently GPU-based ray-casting <ref type="bibr" coords="1,148.43,537.83,14.94,8.02" target="#b30">[33] </ref>has become the preferred choice for many scientific visualization applications due to its image quality, performance and conceptual simplicity. Advanced volume illumination models such as directional soft shadows, ambient occlusion or color bleeding effects can further enhance the visual perception and spatial impression of GPU ray-casting. A lot of research has been done on such advanced illumination models . Many of these are standard in classical surface ray-tracing but not in scientific volume visualization applications. The problems with adapting such models to GPU ray-casting for DVR are numerous.  rect volume rendering on the GPU should be interactive and very responsive to the user while exploring the dataset. Hence, the available processing resources per rendered frame for evaluating an advanced illumination model are quite limited. Furthermore, when dealing with volumetric datasets, no explicit geometry is given and the material properties are defined by an arbitrarily shaped transfer function (TF) that can change at run-time. This typically prohibits an expensive preprocessing step relying on a static TF or static light positions. Generally , expensive preprocessing is undesirable because in many domains it is not feasible to undergo a time-consuming preprocess before data exploration, especially for time-varying datasets. Lastly, the advanced illumination models must be implemented on the GPU, fitting its computational model and its limited on-board memory resources. The qualifying idea of our novel approach to address these problems is a solution based on the original exponential extinction coefficient of the DVR integral, and an efficient GPU-based real-time summation mechanism. Besides the more accurate evaluation of the volume rendering integral, the beneficial extinction coefficient property of being additive allows discrete summation order independently when sampling along a ray. Throughout this paper special algorithms and data structures will be elaborated based on the original exponential extinction coefficient in order to solve the above outlined lighting problems and to get fast, plausible volume illumination and shading effects. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.1">Related Work</head><p> Although efficient, simple Phong-Blinn volume shading does not provide enough realism and has poor global depth reproduction. While computationally inexpensive techniques, such as semitransparent ha- los <ref type="bibr" coords="1,308.26,726.46,10.45,8.02" target="#b1">[2] </ref>or directional occlusion <ref type="bibr" coords="1,413.58,726.46,14.94,8.02" target="#b28">[31] </ref>can easily be implemented on GPUs to improve depth perception, more advanced lighting models are still a challenge. Soft shadows, ambient occlusion, light scattering and color bleeding are desired features in GPU volume rendering <ref type="bibr" coords="2,258.37,63.35,9.52,8.02" target="#b8">[9]</ref>. Soft directional shadows that are able to incorporate infinite light sources only, requiring an additional shadow volume, which is updated on each light position change, were proposed by Behrens and Rater- ing <ref type="bibr" coords="2,36.17,103.62,9.52,8.02" target="#b0">[1]</ref>. Classical shadow mapping <ref type="bibr" coords="2,149.21,103.62,14.94,8.02" target="#b32">[35] </ref>can also be applied to volume rendering in limited scenarios to obtain hard shadows. To improve performance for semitransparent objects, deep-shadow maps <ref type="bibr" coords="2,243.52,123.55,14.94,8.02" target="#b23">[26] </ref>use multiple opacity layers. Shadow maps are dependent on light position and TF with the evaluation typically done for a single light only. Halfangle slicing <ref type="bibr" coords="2,69.50,153.44,14.19,8.02" target="#b11">[13,</ref><ref type="bibr" coords="2,85.52,153.44,11.21,8.02" target="#b12"> 14,</ref><ref type="bibr" coords="2,98.57,153.44,11.95,8.02" target="#b33"> 36] </ref>is able to produce more realistic soft shadows with very small additional storage requirements, but also with the limitation of a single directional light source support. Obscurance and ambient occlusion (AO) methods <ref type="bibr" coords="2,210.26,183.75,14.19,8.02">[21,</ref><ref type="bibr" coords="2,226.19,183.75,11.95,8.02" target="#b15"> 17] </ref>provide a simple way to approximate indirect global illumination by sampling a limited neighborhood. Screen-space AO (SSAO) is popular in polygonal shading <ref type="bibr" coords="2,64.95,213.64,14.94,8.02" target="#b29">[32] </ref>as well as in volume rendering <ref type="bibr" coords="2,190.94,213.64,10.45,8.02" target="#b3">[4] </ref>due to its simplicity and high performance. These methods rely on the visible pixels' depth value estimates, are fast and have sufficient quality for opaque objects and simple geometry. SSAO can, however, fail in complex scenarios due to the limited 2D depth information available; they are also inefficient in the case of semitransparent objects when only one depth value per pixel can be used. These limitations can, at an increased cost, partially be solved through depth-peeling <ref type="bibr" coords="2,161.92,283.38,9.52,8.02" target="#b7">[8]</ref>, where a limited number of depth samples can be used in practice. Object space AO provides better quality than SSAO, at the price of extra storage and computation. Typically, an additional 3D texture for density values is used, which has to be updated upon TF changes. Depending on the implementation, TF updates can introduce significant lag, if individual neighboring voxels are sampled as presented by Ruiz et al. <ref type="bibr" coords="2,42.36,353.54,13.74,8.02" target="#b25">[28]</ref>, or it can be fast if aggregate values are considered as shown by Diaz et al. <ref type="bibr" coords="2,73.28,363.50,9.52,8.02" target="#b3">[4]</ref>. Similar techniques <ref type="bibr" coords="2,158.17,363.50,14.19,8.02" target="#b16">[18,</ref><ref type="bibr" coords="2,174.64,363.50,11.95,8.02" target="#b20"> 23] </ref> are suitable for polygonal rendering; additional 3D textures that represent voxelized objects have to be created, updated when geometry changes, and sampled during rendering. Another approach to dynamic AO, based on per-voxel local histograms, was introduced by Ropinski et al. <ref type="bibr" coords="2,208.62,403.35,13.74,8.02" target="#b24">[27]</ref>. TF and light source independent illumination are achieved by convolving local histograms with the current TF during rendering to obtain an environmental color of each voxel. Additional space for histogram clusters is moderate, and rendering itself is efficient. However, the preprocessing step requires hours even for medium size models. Scattering of light requires the inclusion of all indirect light contributions . Thus true evaluation is very expensive, yet a clever approximation can provide pleasant visual quality at interactive frame rates on modern hardware. Good results were achieved by Kniss et al. <ref type="bibr" coords="2,255.69,493.44,13.74,8.02" target="#b12">[14]</ref>, where only light contribution within a cone directed towards the light source was taken into account at each sample position. This allowed superimposing contributions of direct and indirect light in one rendering pass, using half-angle slicing. No preprocessing is required, but only a single point light source can be used. This method was further explored by Ropinski et al. <ref type="bibr" coords="2,125.72,553.22,13.74,8.02" target="#b22">[25]</ref> , resulting in fewer sampling operations for the illumination computation and allowing integration with GPU volume ray-casters. These benefits are achieved at the expense of recomputing a 3D light volume upon every light position change. Color bleeding is often integrated with obscurance methods, as it requires only minor changes to AO <ref type="bibr" coords="2,152.66,603.46,13.74,8.02" target="#b18">[20]</ref>. Many AO and translucency methods gather aggregate color information of the voxels' neighborhood together with the opacity, to use it for color bleeding effects <ref type="bibr" coords="2,22.50,633.35,14.19,8.02" target="#b25">[28,</ref><ref type="bibr" coords="2,39.26,633.35,11.21,8.02" target="#b24"> 27,</ref><ref type="bibr" coords="2,53.03,633.35,10.64,8.02" target="#b9"> 11]</ref> . Similarly, color bleeding can be integrated in light scattering techniques as well <ref type="bibr" coords="2,113.64,643.31,14.19,8.02" target="#b12">[14,</ref><ref type="bibr" coords="2,130.07,643.31,10.64,8.02" target="#b22"> 25]</ref>. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.2">Contributions</head><p>Our approach includes a number of contributions and advantages to achieve more realistic and efficient volume illumination. (i) A unified approximate model for both local ambient occlusion and directional soft shadows, as well as (homogeneous) light scattering and color bleeding is presented. (ii) The model is based on the summation of the exponential extinction coefficient, exploiting a 3D summed area table (SAT) for fast computation. (iii) Directional soft shadows can be computed reusing the same SAT as for ambient occlusion, having minimal performance impact. (iv) The proposed discrete extinction coefficient summation supports distance weighted ambient occlusion and shadow contributions. (v) The introduced solution requires no expensive preprocessing and allows for interactive TF changes. (vi) Multiple as well as dynamic point and spot light sources are supported. Moreover, arbitrary light source positions are allowed also inside the actual volume data. (vii) The model is integrated in a high-quality ray-casting based volume visualization application and works in real-time on the GPU. (viii) At run-time, some additional 3D texture storage is required to hold the TF dependent extinction coefficients. This data, however, can be adjusted flexibly for resolution accuracy and storage overhead. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">LIGHTING WITH ADDITIVE EXPONENTIAL EXTINCTION</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Additive Exponential Extinction Coefficients</head><p> Direct volume rendering is based on the emission and absorption theorem by Max <ref type="bibr" coords="2,339.26,229.04,13.74,8.02" target="#b17">[19]</ref>, leading to the DVR integral (Eq. 1). It can be shown <ref type="bibr" coords="2,310.21,239.00,14.94,8.02" target="#b19">[22] </ref> that the volume rendering integral cannot be solved analytically without making some confining assumptions, and consequently needs to be approximated. This includes the commonly used development of the original extinction coefficient into a Taylor series where only the first two elements are considered, which is equivalent to classical α-blending <ref type="bibr" coords="2,349.12,288.81,13.74,8.02" target="#b21">[24]</ref> . However, this is a rather coarse approximation optimized for mapping to fixed-function 3D graphics hardware of the past. Today with fast, programmable GPUs it is not required any- more <ref type="bibr" coords="2,305.41,318.70,14.19,8.02" target="#b13">[15,</ref><ref type="bibr" coords="2,321.46,318.70,10.64,8.02" target="#b27"> 30]</ref>. A closer approximation based on the original extinction coefficient can be chosen for a more accurate evaluation of the volume rendering integral. In addition, the advantage of integrating over the exponential extinction coefficient is that it corresponds to a summation , since being additive, when sampling along a ray, in contrast to the (ordered) product of α-blending. In Eq. 1, a ray from s = 0 at the back of the volume to s = D at the eye position is considered. The extinction coefficient is indicated by τ(s), and E(s) is the light reflected or emitted by a volume sample at s. The integrated intensity along a viewing ray is now given by: </p><formula>I(D) = D 0 E(s)τ(s)e − D s τ(t)dt ds. </formula><formula>(1) </formula><p>In the discretization of Eq. 1 using a step size ∆t along the ray, instead of performing a Taylor series expansion and simplification of the extinction term – as done in the past for fixed-function graphics hardware α-blending – the original exponential extinction coefficient can be retained as </p><formula>I(D) ≈ D/∆t ∑ i=0 E i · ∆tτ i e − ∑ D/∆t j=i ∆tτ j , </formula><formula>(2) </formula><p>where the reflected and emitted light E i is typically replaced by a voxel color modulated by a simple lighting model. The formulation of Eq. 2 is sufficiently simple and can easily be implemented on programmable GPUs. The additive property of τ allows for the summation of the samples in a shader in arbitrary order, followed by an exponential function applied to this sum, which can be done efficiently on today's GPUs. Hence the big advantage of Eq. 2 is not only an improved image quality compared to the less accurate approximation using multiplicative α-blending (see also <ref type="bibr" coords="2,488.60,644.18,14.19,8.02" target="#b13">[15,</ref><ref type="bibr" coords="2,504.90,644.18,10.31,8.02" target="#b27"> 30]</ref>), but also the fact that any attenuation calculation can be implemented by a summation of extinction coefficients, notably in arbitrary order. In the following we will show how this summation can efficiently be exploited for volume shading and illumination purposes. The basic premise is that any light occlusion and thus shadowing effects arise from the attenuation of light traveling or being scattered through the volume along a ray or within some specific region. Therefore, any light attenuation stems from some extinction factor e − ∑ j ∆tτ j where the sum ∑ j ∆tτ j must be taken over a ray or region of the volume. IEEE TRANSACTIONS ON VISUALIZATION AND COMPUTER GRAPHICS, VOL. 17, NO. 12, DECEMBER 2011 </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Ambient Occlusion and Color Bleeding</head><p>Ambient occlusion (AO) is an approximated attenuation of diffusely reflected ambient light through occlusion. It is not physically accurate, but since full-fledged physical illumination models such as global il- lumination <ref type="bibr" coords="3,72.39,97.72,14.94,8.02" target="#b10">[12] </ref>are beyond interactive volume rendering, AO is a very useful and effective approximation of the effect <ref type="bibr" coords="3,203.74,107.68,14.19,8.02" target="#b15">[17,</ref><ref type="bibr" coords="3,220.17,107.68,11.21,8.02" target="#b24"> 27,</ref><ref type="bibr" coords="3,233.62,107.68,11.21,8.02" target="#b9"> 11,</ref><ref type="bibr" coords="3,247.07,107.68,6.47,8.02" target="#b3"> 4]</ref>. The reflected light term E in the DVR integral includes an ambient term representing diffusely reflected ambient light. In the AO lighting model, this term I AO is not a constant but a function taking the occlusion in the local neighborhood of a sample s into account. It represents the total amount of unoccluded incident light over a sphere Ω at s, where I(s, ω ) denotes the incoming light at position s from direction ω : </p><formula>I AO (s) = ω ∈Ω I(s, ω )dω . </formula><formula>(3) </formula><p>Instead of densely sampling the sphere Ω and tracing many shadow rays for I(s, ω ), as shown by Ruiz <ref type="bibr" coords="3,158.40,225.72,14.94,8.02" target="#b25">[28] </ref>and Hernell <ref type="bibr" coords="3,220.03,225.72,14.94,8.02" target="#b9">[11] </ref>respectively, we opt for a much faster approximation. Only a well-defined local neighborhood N(s) of s is considered for local ambient occlusion. We assume that for all samples s a constant ambient light intensity I A is incident over the boundary ∂ N(s). I A is proportional to the sum of all lights, expressed by an ambient light term coefficient. Hence only the local light attenuation inside the neighborhood N(s) has to be considered . The local ambient occlusion is thus modeled by the distribution of the extinction τ in the neighborhood N(s) as </p><formula>I AO (s) ≈ I A · e − t∈N(s) τ(t) </formula><p>|s−t| 2 dt , </p><formula>(4) </formula><p>where the inverse of the square distance accounts for the law of radial distance based light attenuation. Color bleeding describes the phenomenon that the color appearance of a surface is locally affected by colored nearby objects <ref type="bibr" coords="3,236.49,383.04,13.74,8.02" target="#b18">[20]</ref>. As this illumination effect is also primarily based on the local neighborhood of a sample point, it can be approximated in a similar way to ambient occlusion. For AO only the extinction coefficient has been taken into account as an indicator for opacity at a particular position within the volume. For the estimation of color bleeding, the color also has to be taken into account as an additional parameter C RGB depending on the TF. So Eq. 4 can be reformulated to </p><formula>I AO RGB (s) ≈ I A · e − t∈N(s) τ(t)C RGB (t) |s−t| 2 dt , (5) </formula><p>where I AO RGB is a vector describing the intensity per color. Since the summation of the exponential extinction coefficients in Eqs. 4 and 5 is order independent, it is possible to exploit highly efficient aggregate summation methods (aggregate query q), as described in Section 3. This yields results similar in quality at much higher speeds as demonstrated in <ref type="figure" coords="3,127.12,550.49,19.81,8.02">Fig. 2</ref>. <ref type="figure" coords="3,47.67,702.63,3.32,7.37">2</ref>. Ambient occlusion with the neighborhood individually sampled (left) and aggregate extinction coefficients sampling (right). There is virtually no difference regarding image quality, but aggregate sampling is over 45 times faster (0.22s vs 10s). </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Directional Soft Shadows and Scattering</head><p>In the context of direct volume rendering, typically semitransparent surfaces and structures are displayed, partially obstructing other surfaces and structures. Thus for evaluating the volume illumination model the question is not whether a light source is obstructed or not but to what degree the light from this source is absorbed while traveling through the volume to the sample point in question. When using an extinction-based model as described in Section 2.1, this can be achieved by casting shadow rays to the light source, densely sampling along these shadow rays and summing up the weighted extinction coefficients . Applying the exponential function to this sum then results in a factor being a measure of how much light from this light source is attenuated before reaching the sample point. One can imagine that densely sampling many shadow rays for each light source from each volume sample is already very expensive, multiplying the basic volume ray-casting costs by a large factor. Moreover , light scattering describes a process where non-uniformities in the (semitransparent) medium force the traversal of light to deviate from the straight trajectory, caused by reflection of tiny particles. The ratio of light hitting a particle and the reflection direction are random but can be approximated by the Bidirectional Scattering Surface Reflectance Distribution Function R(s, ω, ω ), where s is the scatter position, ω the direction of reflection (to the viewer) and ω the direction of incoming light as illustrated in <ref type="figure" coords="3,371.05,287.47,20.10,8.02" target="#fig_1">Fig. 3</ref>. Max <ref type="bibr" coords="3,417.18,287.47,14.94,8.02" target="#b17">[19] </ref>accounted for this by adding a scattering term to the volume rendering integral Eq. 1, </p><formula>I(D) = D 0 (E(s) + S(s, ω))τ(s)e − D s τ(t)dt ds, (6) </formula><p>where S(s, ω) = R(s, ω, ω )I(s, ω ), and I(s, ω ) is the incoming light reaching s from direction ω . When scattering occurs in multiple directions as it is the case in high albedo media, all directions ω have to be considered by integrating the scattering over the unit sphere. According to Max <ref type="bibr" coords="3,374.84,566.44,14.94,8.02" target="#b17">[19] </ref> it is overkill to compute multiple scattering for most scientific visualizations, apart from being an elusive goal for interactive rendering. Instead of densely sampling shadow rays or computing multiple scattering, we suggest a very fast solution that produces similar effects with sufficient quality for most applications. The basic idea is not to cast a shadow ray from a sample to the light but a cone <ref type="bibr" coords="3,313.15,626.22,13.74,8.02" target="#b12">[14]</ref>. Sampling this cone not only yields the necessary extinction of the light on its way to the sample but also estimates the amount of light scattered towards the sample as a function of the distance and the neighborhood of the ray. A more sparsely occluded neighborhood is an indicator that there is more light scattered to the sample, thus supporting visually plausible soft shadow borders as presented in <ref type="figure" coords="3,517.28,676.03,19.81,8.02">Fig. 4</ref>. The attractive feature of our method is that the shadow cone does not need to be sampled. To incorporate an estimate of the scattering term S into the discretized volume rendering integral of Eq. 2, we evaluate shadow and scattering effects together by aggregating the extinction values within the shadow cone. Consequently scattering is not a separate term, but is included in E i . <ref type="figure" coords="4,22.50,180.26,19.24,7.37">Fig. 4</ref> . The engine with classical shadow rays (left) and our soft shadows (right). Even though an entire cone is considered for soft shadows compared to a single shadow ray, the shadow computation is 40% faster (0.0079s vs. 0.0132s). Commonly, the amount of light E i reflected or emitted by a voxel is modeled as the sum of an ambient I A , a diffuse I D and a specular term I S , where the ambient term is replaced by our AO term I AO introduced in the previous section. The diffuse and specular terms consist of the incoming light intensity I L from all light sources, multiplied by material properties of the voxel (i.e. color C RGB ) as well as angle-dependent diffuse and specular reflection factors respectively. To incorporate shadows, the light intensity I L is further attenuated by a factor τ L due to any occluders between the light source(s) L and voxel s: </p><formula>Screen ω i ω j S S ω j ' ω i ' Ψ Ψ j i i j </formula><formula>τ L = e − L s τ(t)</formula><p>dt . However, in our approach the integral is not only evaluated along a single shadow ray but over a cone Ψ towards the light source (see also <ref type="figure" coords="4,99.21,346.49,19.51,8.02" target="#fig_1">Fig. 3</ref>): </p><formula>τ L = e − t∈Ψ h(t)</formula><p> τ(t)dt where h is a weighting function. Hence, the inclusion of scattering is the extension of τ L to τ L as an attenuation factor of I L , replacing the specific scattering term S, giving rise to a shadowed and scattered lighting term </p><formula>I Sh (s) ≈ I L · e − t∈Ψs h(t)τ(t)dt . </formula><formula>(7) </formula><p>The key feature of our implementation is that the summation t∈Ψ h(t)τ(t)dt is approximated by a series of aggregate extinction queries as described in Section 3. The weighting function h(t) is the inverse of the aggregate query size V −1 q . Due to the query size growing with the distance and the cone diameter, the influence of occlusion and scattering in these areas decreases rapidly. The limitation of our approximation to scattering is the assumption that the scattering function R is constant for all directions and that the amount of scattering is basically proportional to the extinction coefficient of the medium. The rationale behind this is that the amount of light being absorbed or reflected directionally by the medium cannot be scattered isotropically or in a forward manner. Typically more light is absorbed or reflected directionally by denser media, especially when comparing gases to solids. In order to model medium specific scattering properties a separate transfer function would have to be applied . However, adjusting the cone angle allows for a certain flexibility . A narrow cone approximates forward scattering, taking a limited range strongly into account whereas a wider cone approximates more isotropic scattering, taking a broad range into account but with far less influence of individual voxels. Scattering in relation with cones is also discussed extensively by Kniss et al. <ref type="bibr" coords="4,161.30,620.78,13.74,8.02" target="#b12">[14]</ref>. Generally, our approach works very well for typical applications of scattering in highly homogeneous media such as smoke or a block of (wax-like) translucent material (<ref type="figure" coords="4,57.56,650.66,19.23,8.02" target="#fig_3">Fig. 9</ref>). </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">IMPLEMENTATION</head><p>The basis for our implementation is a GPU volume ray-caster <ref type="bibr" coords="4,244.57,686.61,14.19,8.02" target="#b14">[16,</ref><ref type="bibr" coords="4,260.92,686.61,11.95,8.02" target="#b26"> 29] </ref>built using OpenGL and GLSL shaders. Algorithm 1 shows an overview of the rendering pipeline. Basically a so-called light cache (texture T) is computed containing the summation terms for AO/color bleeding and the directional shadows in the different channels of the texture. During the ray-casting pass, these terms are fetched from the texture with a single lookup and used in the adapted illumination computation . In the beginning it has to be determined if either the TF or the light position relative to the dataset has changed. If this is not the case, the image can be rendered immediately, fetching the information for AO/color bleeding and the directional shadows from the light cache texture. If the TF has changed, the light cache texture needs to be recomputed. For this, a 3D summed area table (SAT, texture S) <ref type="bibr" coords="4,525.03,113.16,10.45,8.02" target="#b2">[3] </ref> is constructed in a first step and then the light cache texture is computed in a second step. If only the light position has changed relative to the dataset, it is sufficient to recompute only the part of the light cache texture containing the values for the directional shadows. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">3D Summed Area Table for Illumination</head><p> For any illumination computation I AO or I Sh , as outlined in the previous section, we need to account for an attenuation factor </p><formula>τ L = e − Ω τ(t)</formula><p>dt that will be multiplied with the light source intensity for ambient occlusion or directional soft shadows. In a discretized setup, this amounts to the computation of the sum of extinction coefficients ∑ Ω ∆tτ j , where the additive aggregation of extinction values τ j is done over a voxel neighborhood Ω A = N(s) for ambient occlusion (and the ambient light I A is modulated), along a ray Ω L = line voxel s to light source for hard shadows and within a cone Ω L = Ψ for soft shadows (and the light source intensity I L is modulated). Taking ambient occlusion or shadowing into account, the reflected light E i in Eq. 2 of a voxel due to a light source is basically </p><formula>E i = I A,L · e −w A,L ∑Ω A,L ∆tτ j · k ·C RGB , </formula><formula>(8) </formula><p>where the weighting function w A = r −2 q is the inverse square of the radius of the aggregate query, and w L = V −1 q is the inverse of the aggregate query size, and k simply represents a normal, gradient dependent local illumination model factor. For the fast extinction summation over Ω A,L , instead of using the traditional expensive shadow ray generation and sampling approach, we implement this aggregation operation using a summed area table (SAT) <ref type="bibr" coords="4,309.58,706.53,10.45,8.02" target="#b2">[3] </ref>of the extinction coefficients. With a 3D SAT it is possible to derive the sum of all elements inside an arbitrary cuboid in constant time using at most eight table lookups. As shown below, we approximate the extinction summations over Ω A,L by cuboid SAT queries. Since the extinction coefficients are transfer function (TF) dependent , this SAT needs to be updated whenever the TF changes. However , fast SAT construction on the GPU <ref type="bibr" coords="5,180.53,73.31,14.19,8.02">[10,</ref><ref type="bibr" coords="5,197.71,73.31,7.47,8.02" target="#b3"> 4] </ref>can be implemented based on the recursive doubling technique <ref type="bibr" coords="5,194.83,83.27,10.45,8.02" target="#b4">[5] </ref>using a logarithmic number of passes, allowing interactive TF changes as demonstrated in Section 4. We use a render-to-3D texture approach which allows for a number of implementation synergies and avoids OpenGL-CUDA switches. Unlike Diaz et al. <ref type="bibr" coords="5,132.06,123.12,10.45,8.02" target="#b3">[4] </ref>we are not using opacity values for the SAT but extinction coefficients. In order to compute our illumination model two auxiliary 3D textures are used, one for the SAT, and another as a ping-pong texture during SAT generation becoming a light cache during rendering. These two textures can be of arbitrary size within the OpenGL limitations, depending on the desired quality/performance, and do not necessarily need to match the input volume resolution, see also <ref type="figure" coords="5,226.62,193.71,24.89,8.02" target="#fig_4">Fig. 11</ref> . Algorithm 1 shows an overview of the rendering steps. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Ambient Occlusion and Color Bleeding</head><p> Remarkably, for approximating I AO (s) according to Eq. 4, the extinction coefficient SAT can be effectively used. The discretized extinction coefficient summation ∑ Ω A ∆tτ j in Eq. 8 is approximated by a series of cuboid shells as indicated in <ref type="figure" coords="5,135.83,269.79,20.00,8.02">Fig. 5</ref>, where the number and size of the shells can be varied. Hence, Ω A is a set of cuboids Sh i . For each shell, its aggregate sum of extinction coefficients can be obtained quickly by SAT lookups. A larger set of shells with varying diameters leads to a better image quality but requires more SAT lookups increasing the costs. According to our experiments as few as three shells are sufficient to reach an image quality hardly distinguishable from individually sampling a large neighborhood, as demonstrated in <ref type="figure" coords="5,230.74,339.53,19.60,8.02">Fig. 2</ref>. Only if the radius of Ω A exceeds 10% of the radius of the entire dataset, more shells may become necessary. The use of cuboid shells is entirely different from Diaz' approach <ref type="bibr" coords="5,130.95,369.41,9.52,8.02" target="#b3">[4]</ref>, where the neighborhood is subdivided into eight adjacent octants preventing a distance based weighting. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Sample rays </head><p>Shells </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Sh i+2 </head><p>Sh i Sh i+1 <ref type="figure" coords="5,31.50,536.02,18.63,7.37">Fig. 5</ref>. Ambient occlusion computation by way of sampling the spherical neighborhood (left) versus SAT-based lookups (right). Compared to pervoxel sampling, the number of 3D texture fetches is a order of magnitude smaller using the SAT method. </p><p> For AO/color bleeding, multiple shells are queried and accumulated as indicated in <ref type="figure" coords="5,107.72,588.91,20.42,8.02">Fig. 5</ref>. First, the innermost shell Sh 0 is queried from the SAT and weighted by the inverse square of its radius, </p><formula>τ Sh 0 = SAT (Sh 0 ) · r Sh 0 −2 . </formula><p>Iteratively all shells are accumulated by </p><formula>τ Sh i+1 = τ Sh i + (SAT (Sh i+1 ) − SAT (Sh i )) · r Sh i+1 −2 until </formula><p>the last shell is processed. The result of this summation is stored in the auxiliary 3D light cache texture. Ambient occlusion is independent of the light position, but needs to be recomputed if the TF changes. The actual values for AO are cached together with the values from the directional shadows in the 3D light cache texture. Consequently ambient occlusion in our solution comes at zero cost during rendering. Of course Eq. 5 for color bleeding can be computed similar to Eq. 4 using a SAT that stores vectors τC RGB . Since four values can be processed per operation with OpenGL textures, the SAT for τC RGB can be constructed at the same time with the SAT for τ, and stored in the same 3D texture at no additional computation costs. The only downsides are the additional memory and memory bandwidth requirements compared to a single channel texture that would be used when constructing the SAT for τ only. However, on our hardware the additional memory bandwidth requirements do not harm rendering performance. The typical number of shells required for color bleeding proved to be the same as for AO. An example of color bleeding is shown in <ref type="figure" coords="5,519.37,113.16,19.81,8.02" target="#fig_2">Fig. 6</ref>. (left), as well as color bleeding (right). Due to the fixed light source of the Cornell box, rendering with soft shadows and AO/color bleeding enabled comes at near zero extra cost (one additional texture lookup). </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Directional Soft Shadows and Scattering</head><p>For the directional soft shadow illumination I Sh (s) according to Eq. 7, two cases have to be differentiated. If the light sources are at a fixed position with respect to the dataset, as it is the case with the Cornell box model, the attenuation factors for directional soft shadows only have to be computed once and are stored in the auxiliary light cache together with the terms for ambient occlusion/color bleeding. In this case, the total cost for evaluating our extinction-based illumination model during rendering consists of a single, additional texture lookup per sample having only a minor impact on the overall performance . If the light sources change their relative position with respect to the dataset when rotating, moving and zooming, then the occlusion factors have to be queried from the extinction SAT for every frame. <ref type="figure" coords="5,294.12,647.63,19.87,7.37">Fig. 7</ref>. The cone is approximated by a series of cuboids. The main axis is determined and the cone is projected onto the planes with the secondary axes. The intersections of the projections with lines parallel to the secondary axes through the sample points on the main axis define the cuboids. </p><p>When needed, the attenuation factors for directional soft shadows, given by the discrete extinction coefficient summation ∑ Ω L ∆tτ j in Eq. 8 over the sampling cone Ω L = Ψ, are computed by a render- to-3D-texture pass with the appropriate shader enabled. This shader approximates the attenuation cone Ψ for each voxel and light source  by a series of cuboids. The primary cone axis is defined to be the coordinate axis with the smallest angle to the vector to the light source. The sampling points on the primary axis are given by a user defined sampling frequency and growth rate. The growth rate (growth of the cuboids) is the change of the frequency over the distance since further away a smaller sampling frequency may be sufficient. The cuboid queries are then derived from this primary axis sampling and from the projection of the query cone onto the primary-secondary axis planes as shown in <ref type="figure" coords="6,57.19,476.20,19.82,8.02">Fig. 7</ref>. Because the SAT inherently allows only axis-aligned lookups, deriving the primary and secondary axes is required. Choosing the axes in this way yields the best possible coverage of the cone with cuboids. With the cone covered by cuboids, the summation of the extinction coefficients can quickly be obtained by a few SAT lookups. The shadow and scattering approximation by extinction SAT queries makes it very fast and flexible. The number of cuboids and the cone angle of Ψ can easily be varied, or the cuboids can be weighted differently using h in order to strengthen or weaken the effect. Approximating the cone by exploiting the SAT allows for soft, realistic looking, directional shadows at very low costs as shown in <ref type="figure" coords="6,238.10,576.42,20.15,8.02">Fig. 4</ref>. In contrast to the half angle slicing method by Kniss et al. <ref type="bibr" coords="6,223.36,586.39,14.94,8.02" target="#b12">[14] </ref> our solution can handle any type and multiple light sources. It is also different from the method by Ropinski et al. <ref type="bibr" coords="6,151.27,606.31,14.94,8.02" target="#b22">[25] </ref>because we do not propagate illumination from the outside but compute the extinction of the light intensity for the voxels. We can therefore trivially handle light sources even within or on the border of the dataset without any additional effort . Multiple light sources can also be easily dealt with (see <ref type="figure" coords="6,239.56,646.16,20.77,8.02">Fig. 1</ref>for multiple point and spot light sources inside the volume). The angle of the cone Ψ, the number of cuboids for approximation (defined by a sampling frequency), the growth rate, and a weighting function are parameters that can be chosen freely according to the desired quality/performance and strength of the shadow effects (see <ref type="figure" coords="6,22.50,706.53,23.15,8.02">Fig. 10</ref>). Typically a few dozen lookups per cone and voxel are already sufficient to approximate the attenuation cone, compared to classical shadow rays where hundreds of samples are required to achieve a similar quality (see Section 4). Hence, even when computing these shadow terms for every frame, the performance impact is tolerable with respect to the achieved shading effects. To avoid duplicate shadow queries, the computed terms are stored in the light cache texture together with the terms for ambient occlusion/color bleeding. <ref type="figure" coords="7,31.50,170.25,23.14,7.37">Fig. 10</ref>. Pelvis rendered with no directional shadows at all (left), and with different cone angles of 1.0, 3.0 and 5.0 degrees, causing progressively smoother shadows (from 2nd left to right). color bleeding. Hence we can see that even for dynamic TF changes an interactive feedback can be achieved. The influence of the SAT size on the rendering is shown in <ref type="figure" coords="7,136.38,522.08,24.09,8.02" target="#fig_4">Fig. 11</ref>, demonstrating that the SAT size can easily be set at a fraction of the size of the volume dataset itself. <ref type="figure" coords="7,41.46,542.08,26.52,8.02" target="#tab_2">Table 2</ref>shows the time required for computing the actual terms for ambient occlusion/color bleeding by approximating the neighborhood of every voxel with cuboid shells. The time is only dependent on the volume size and the number of shells but not on the neighborhood radius in contrast to explicit neighborhood sampling. Nevertheless, the last column shows the time for explicitly sampling a neighborhood of radius 7 (<ref type="figure" coords="7,31.50,724.63,24.15,7.37" target="#tab_2">Table 2</ref> . Time needed for computing the AO/color bleeding terms for different light cache texture sizes and numbers of shells. The last column shows the time for explicitly sampling the neighborhood of radius r = 7. head in <ref type="figure" coords="7,322.51,343.46,20.93,8.02">Fig. 2</ref>was rendered using a 192 3 AO texture with 15 shells. Note that combining SAT construction and AO computation times for an example as in <ref type="figure" coords="7,372.19,363.39,47.88,8.02">Fig. 2 results</ref>in a fairly low cost of only about 0.073s. This highly interactive SAT and AO computation avoids costly preprocessing <ref type="bibr" coords="7,346.16,383.31,14.94,8.02" target="#b24">[27] </ref>to achieve TF independence. <ref type="figure" coords="7,304.08,393.28,28.25,8.02" target="#tab_3">Table 3</ref>shows the time required for computing directional soft shadows for two different cuboidal cone approximation resolutions. The time required and the quality obviously depend on the sampling parameters. The last column shows the time for a single, classical shadow ray with a sampling rate of 250 samples per unit (the side length of volume dataset). In fact, to get equally soft shadows, the cost of a single shadow ray would have to be multiplied by a factor ( 1) because sampling would have to be performed within an entire cone and not only on the ray. For the engine in <ref type="figure" coords="7,368.85,606.91,21.34,8.02">Fig. 4</ref>and the first medical dataset in <ref type="figure" coords="7,506.88,606.91,28.98,8.02">Fig. 8 it</ref>is sufficient to use a 64 3 AO/shadow texture with 50 samples per unit, consuming only 0.0079s/frame for shadow computations, to achieve a very good image quality. The second medical dataset in <ref type="figure" coords="7,521.93,636.80,22.56,8.02">Fig. 8</ref> was rendered using a 128 3 AO/shadow texture with 50 samples, using 0.0385s/frame for shadow computations. The Cornell box in <ref type="figure" coords="7,523.96,656.72,20.52,8.02" target="#fig_2">Fig. 6</ref> was rendered using a 256 3 AO/shadow texture with 60 samples but updated only upon TF changes due to the fixed embedded light source. <ref type="figure" coords="7,294.12,686.61,26.52,8.02">Fig. 10</ref>shows the effects of different cone angles. <ref type="figure" coords="7,487.23,686.61,26.51,8.02" target="#fig_5">Fig. 12</ref>demonstrates the artifacts from the cuboids that become visible if only very few cone samples are used. The scattering of light in smoke, thick fog or wax-like media with non-zero opacity is demonstrated in <ref type="figure" coords="7,430.06,726.46,20.85,8.02" target="#fig_3">Fig. 9</ref> , clearly showing the expected light shafts and diffusely scattered light propagation. Multiple different point and spot light sources inside the volume dataset and the corresponding illumination and shadow effects are demonstrated in <ref type="figure" coords="8,31.90,73.31,44.69,8.02" target="#fig_3">Fig. 1 and 9</ref>. Our solution can transparently and efficiently handle any such light sources (unlike e.g. half-angle slicing). </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">CONCLUSION AND FUTURE WORK</head><p>In this paper we have presented a novel advanced illumination and shading model for direct volume rendering based on the original exponential extinction of the volume rendering integral. The fact that the original exponential extinction is additive allows us to exploit a summed area table (SAT) concept for the efficient computation of any type of ambient or directional light occlusion queries. In our work, ambient occlusion, color bleeding, soft shadows and scattering effects are evaluated through a series of 3D SAT queries, thus benefitting in speed while maintaining high visual quality. The method and its implementation take advantage of the SIMD architecture of OpenGL and GLSL shaders for concurrently constructing the SAT not only for extinction coefficients but also for color value aggregation at virtually no additional cost. Interactive frame rates can be achieved on scenes with static and dynamic lights as well as for dynamic transfer function changes on moderate size volume datas. A limitation of our implementation is that specific shapes of light sources such as neon tubes are not taken into account and only basic point, spot and area light sources are supported. We would like to resolve this issue in future work. We would also like to investigate scalability issues for large datasets that do not fit on GPU. Once the GPU memory runs low, it is common to employ bricking <ref type="bibr" coords="8,92.09,325.92,10.45,8.02" target="#b5">[6] </ref>in GPU ray-casting. Nothing prevents applying bricking to our illumination model, where the auxiliary 3D textures can either be kept resident in the GPU memory (if small enough) and only the dataset is bricked, or they can be bricked as well. We expect that the performance penalty will be proportional to bricking without our illumination model applied. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0" coords="3,31.50,702.63,250.38,7.37;3,31.50,712.09,250.38,7.37;3,31.50,721.55,250.38,7.37;3,31.50,731.02,131.88,7.37"><head>Fig. </head><figDesc>Fig. 2. Ambient occlusion with the neighborhood individually sampled (left) and aggregate extinction coefficients sampling (right). There is virtually no difference regarding image quality, but aggregate sampling is over 45 times faster (0.22s vs 10s). </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1" coords="3,294.12,542.98,250.38,7.49;3,294.12,552.45,25.70,7.37"><head>Fig. 3. </head><figDesc>Fig. 3. Approximating scattering effects by considering cones Ψ instead of rays. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2" coords="5,294.12,263.78,250.38,7.37;5,294.12,273.24,250.38,7.37;5,294.12,282.71,250.38,7.37;5,294.12,292.17,246.35,7.37"><head>Fig. 6. </head><figDesc>Fig. 6. The Cornell box with soft shadows and strong ambient occlusion (left), as well as color bleeding (right). Due to the fixed light source of the Cornell box, rendering with soft shadows and AO/color bleeding enabled comes at near zero extra cost (one additional texture lookup). </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3" coords="6,285.12,362.43,250.38,7.37;6,285.12,371.90,250.38,7.37;6,285.12,381.36,250.38,7.37;6,285.12,390.83,250.38,7.37;6,285.12,400.29,48.15,7.37"><head>Fig. 9. </head><figDesc>Fig. 9. Bucky ball in a smoky cube where a point light source is inside the bucky ball and a spot light in the top right corner (left), and Skull in thick fog or a block of translucent material with a point light source in the back scattering light through the medium and a spot light in the top left corner (right). </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4" coords="7,31.50,310.09,512.99,8.67;7,31.50,320.82,291.88,7.37"><head>Fig. 11. </head><figDesc>Fig. 11. The engine dataset rendered with different SAT resolutions of 64 3 , 128 3 , 192 3 and 256 3 and 40 cone samples (from left to right). Even lower SAT sizes will result in more blurred shadows but not expose conspicuous artifacts. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5" coords="7,31.50,460.33,250.38,7.37;7,31.50,468.53,250.38,8.67;7,31.50,479.26,226.24,7.37"><head>Fig. 12. </head><figDesc>Fig. 12. As few as 12 cone samples are sufficient until cuboid artifacts become clearly visible for a SAT resolution of 128 3 . The image on the left shows the difference to the respective image from Figure 11. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6" coords="7,78.41,600.85,11.90,10.20;7,86.83,601.12,195.04,12.58;7,31.50,612.99,250.37,8.02;7,31.50,622.95,250.37,8.02;7,61.62,652.33,43.36,8.02;7,129.00,652.33,8.97,8.02;7,166.37,652.33,4.48,8.02;7,201.48,652.33,4.48,8.02;7,226.31,652.33,31.38,8.02;7,60.90,662.30,44.80,8.02;7,122.53,662.30,136.69,8.02;7,60.88,672.66,195.18,8.02;7,54.16,682.62,201.91,8.02;7,54.16,692.58,201.91,8.02;7,54.16,702.54,201.91,8.02"><head>= 4 3 </head><figDesc> π7 3 samples) to demonstrate the large time cost difference . Thus even if not cached, ambient occlusion/color bleeding effects can be computed in real-time for these volume models. The AO Shadow 11 7 3 Sampled Texture Size Shells Shells Shells Radius=7 64 x 64 x 64 0.0039s 0.0030s 0.0022s 0.2099s 128 x 128 x 128 0.0202s 0.0126s 0.0065s 0.4441s 192 x 192 x 192 0.0606s 0.0348s 0.0147s 1.4280s 256 x 256 x 256 0.1382s 0.0791s 0.0307s 3.0818s </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7" coords="7,337.84,493.84,45.85,8.02;7,407.59,493.84,8.97,8.02;7,444.95,493.84,8.97,8.02;7,471.60,493.84,35.39,8.02;7,338.37,503.80,126.26,8.02;7,482.08,503.80,14.44,8.02;7,338.35,514.16,165.02,8.02;7,331.63,524.12,171.74,8.02;7,331.63,534.09,171.74,8.02;7,331.63,544.05,171.74,8.02"><head></head><figDesc>Soft Shadow 50 20 1 Shadow Texture Size Samples Samples Ray 64 x 64 x 64 0.0079s 0.0061s 0.0098s 128 x 128 x 128 0.0385s 0.0270s 0.0361s 192 x 129 x 129 0.1166s 0.0816s 0.0954s 256 x 256 x 256 0.2671s 0.1821s 0.2105s </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8" coords="7,294.12,566.08,250.38,7.37;7,294.12,575.55,250.38,7.37;7,294.12,585.01,250.38,7.37;7,294.12,594.47,185.41,7.37"><head>Table 3. </head><figDesc> Time required for computing directional soft shadows for different volume sizes and two different cone samplings. The last column shows the time for a single, classical shadow ray with a sampling rate of 250 samples per unit (the side length of the volume). </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false" coords="4,285.12,176.59,212.25,270.73"><figDesc coords="4,285.12,176.59,174.44,8.12;4,287.29,189.13,60.05,7.13;4,287.29,198.10,111.84,7.13;4,287.29,207.06,6.20,7.13;4,316.90,207.74,180.47,6.23">Algorithm 1 Overview of the rendering pipeline 1: for each frame do 2: if transfer function changed then 3: Apply transfer function to volume V and store result to texture T</figDesc><table coords="4,285.12,216.03,198.39,231.28">4: 
+
+/* —————————– SAT —————————– */ 
+
+5: 
+
+Compute SAT from texture T by 
+
+6: 
+
+-Recursive doubling 
+
+7: 
+
+-Using ping-pong textures S, T 
+
+8: 
+
+Store SAT to S 
+
+9: 
+
+/* ———— Ambient/color bleeding factors ————– */ 
+
+10: 
+
+for each voxel of S do 
+
+11: 
+
+Sample shells from S 
+
+12: 
+
+Sum up weighted shells 
+
+13: 
+
+Store sum to texture T 
+
+14: 
+
+if light source or transfer function changed then 
+
+15: 
+
+/* ————— Directional shadow factors —————-*/ 
+
+16: 
+
+for each light source L do 
+
+17: 
+
+for each voxel of S do 
+
+18: 
+
+Query cuboids towards light source L 
+
+19: 
+
+Sum up weighted cuboids 
+
+20: 
+
+Store sum to texture T 
+
+21: 
+
+/* ————————-Ray casting ———————— */ 
+
+22: 
+
+for each pixel on screen do 
+
+23: 
+
+Compute entry and exit point for volume V 
+
+24: 
+
+Compute ray R from entry and exit point 
+
+25: 
+
+for each sample position P along ray R do 
+
+26: 
+
+Lookup volume V and apply transfer function 
+
+27: 
+
+Lookup texture T 
+
+28: 
+
+Evaluate illumination model 
+
+29: 
+
+Add contribution to pixel 
+
+</table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3" validated="true" coords="6,22.50,59.41,506.29,320.52"><figDesc coords="6,29.21,59.41,499.59,8.67;6,134.03,70.14,289.94,7.37">Table 1. Overall frame rates with and without extinction-based illumination for a 512 2 pixel viewport. Except for the head, Cornell box, skull and bucky ball, the directional soft shadows are computed dynamically for every frame.</figDesc><table coords="6,22.50,79.81,505.81,300.12">Dataset 
+Volume 
+SAT 
+Shells Cone 
+Cone 
+Lights 
+With 
+Without 
+Figure 
+Size 
+Size 
+Samples Angle [Dynamic / Static] Illumination Illumination 
+Head 
+128 x 256 x 256 
+192 3 
+15 
+n/a 
+n/a 
+ambient only 
+111fps 
+143fps 
+2 
+Engine 
+256 x 256 x 128 
+64 3 
+n/a 
+50 
+10 @BULLET 
+1 / 0 
+57fps 
+130fps 
+4 
+Cornell box 
+256 x 256 x 256 
+256 3 
+5 
+60 
+16 @BULLET 
+0 / 1 
+133fps 
+161fps 
+6 
+Pelvis 
+512 x 512 x 461 
+64 3 
+5 
+50 
+2 @BULLET 
+2 / 0 
+15fps 
+26fps 
+8 
+Feet 
+512 x 512 x 250 
+128 3 
+3 
+50 
+2 @BULLET 
+1 / 0 
+13fps 
+31fps 
+8 
+Bucky ball 
+128 x 128 x 128 
+128 3 
+3 
+80 
+2 @BULLET 
+0 / 1, 2, 3 
+55fps 
+62fps 
+1, 9 
+Skull 
+128 x 256 x 256 
+128 3 
+5 
+50 
+2 @BULLET 
+0 / 2 
+14fps 
+26fps 
+9 
+Pelvis (comparison) 512 x 512 x 461 
+192 3 
+3 
+40 
+1 @BULLET , 3 @BULLET , 5 @BULLET 
+1 / 0 
+3fps 
+30fps 
+10 
+Engine (comparison) 256 x 256 x 128 64 3 , 128 3 
+5 
+40 
+2 @BULLET 
+1 / 0 
+26fps, 12fps 
+49fps 
+11 
+Engine (comparison) 256 x 256 x 128 192 3 , 256 3 
+5 
+40 
+2 @BULLET 
+1 / 0 
+5fps, 3fps 
+49fps 
+11 
+
+Fig. 8. Medical datasets rendered with extinction based-shading and 
+illumination including directional soft shadows and ambient occlusion. 
+The left image is rendered using two lights and shows multiple shadows. 
+
+</table></figure>
+
+			<note place="foot" n="4"> RESULTS All experiments have been performed on a Mac Pro 2.4GHz dual- Xeon with NVIDIA GeForce GTX 285 graphics. Compared to a Phong-Blinn-based GPU ray-caster, a ray-caster with our illumination model can produce realistic looking images with improved depth and occlusion effects (i.e. Figs. 8, 10, 11). To ensure interactivity and responsivity, we use a 3D SAT enabling fast approximation of shadow cones with cuboids and AO/color bleeding using cuboid shells. For each change of the TF, the extinction SAT and the AO/color bleeding terms have to be recomputed. Every time the light source moves relative to the dataset or the TF changes, the terms for the directional shadows will be recomputed. During the actual raycasting pass, one additional texture lookup per sample is sufficient to apply the illumination terms. Other approaches [27] need two additional texture lookups for AO, not considering directional shadows. Table 3.3 demonstrates the interactive performance of our extinction-based illumination model. This includes computation of the SAT and the ambient factors once and the factors for directional shadows in every frame. The exceptions are the head, Cornell box, skull and bucky ball datasets where the factors for the directional shadows have to be computed only once due to the fixed light source(s). The time required for constructing the 3D SAT for different sizes is 0.029, 0.067, 0.148 and 0.311s for 64 3 , 128 3 , 192 3 and 256 3 volumes respectively. Even though we do not use CUDA, the time is similar to the one reported by Diaz et al. [4] for the 256 3 volume and is in fact much faster for smaller volume sizes. Moreover, our timings include the concurrent construction of the 3D SAT comprising the terms for</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS </head><p> The authors wish to thank volvis.org for the engine model, the National Library of Medicine-NIH (and Univ. Erlangen) for the VisMale data, OsiriX for the chest, pelvis and feet DICOM images, and AVS (Univ. Erlangen) for the bucky ball volume data. This work was supported in part by the Swiss National Science Foundation under Grant 200020-129525/1. </p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct coords="8,40.76,491.02,232.12,7.13;8,40.76,500.48,232.12,7.13;8,40.76,509.95,61.98,7.13"  xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Adding shadows to a texture-based volume renderer</title>
+		<author>
+			<persName>
+				<forename type="first">U</forename>
+				<surname>Behrens</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Ratering</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings IEEE Symposium on Volume Visualization</title>
+		<meeting>IEEE Symposium on Volume Visualization</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="39" to="46" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,40.76,519.41,232.12,7.13;8,40.76,528.88,232.12,7.13;8,40.76,538.34,80.81,7.13"  xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Enhancing depth-perception with flexible volumetric halos</title>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<surname>Bruckner</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">E</forename>
+				<surname>Groller</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page" from="1344" to="1351" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,40.76,547.81,232.12,7.13;8,40.76,557.35,232.12,6.86;8,40.76,566.74,138.58,7.13"  xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Summed-area tables for texture mapping</title>
+		<author>
+			<persName>
+				<forename type="first">F</forename>
+				<forename type="middle">C</forename>
+				<surname>Crow</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 11th annual conference on Computer graphics and interactive techniques , SIGGRAPH</title>
+		<meeting>the 11th annual conference on Computer graphics and interactive techniques , SIGGRAPH</meeting>
+		<imprint>
+			<date type="published" when="1984" />
+			<biblScope unit="page" from="207" to="212" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,40.76,576.20,232.12,7.13;8,40.76,585.66,232.12,7.13;8,40.76,595.13,94.31,7.13"  xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Real-time ambient occlusion and halos with summed area tables</title>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Díaz</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">P.-P</forename>
+				<surname>Vázquez</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">I</forename>
+				<surname>Navazo</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">F</forename>
+				<surname>Duguet</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Graphics</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="337" to="350" />
+			<date type="published" when="2010-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,40.76,604.59,232.12,7.13;8,40.76,614.06,232.12,7.13;8,40.76,623.52,232.12,7.13;8,40.76,632.99,17.93,7.13"  xml:id="b4">
+	<analytic>
+		<title level="a" type="main">An analysis of the recursive doubling algorithm</title>
+		<author>
+			<persName>
+				<forename type="first">P</forename>
+				<surname>Dubois</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">G</forename>
+				<surname>Rodrigue</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">High Speed Computer and Algorithm Organization</title>
+		<editor>D. H. L. D. J. Kuck and A. H. Sameh</editor>
+		<imprint>
+			<publisher>Academic Press</publisher>
+			<date type="published" when="1977" />
+			<biblScope unit="page" from="299" to="305" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,40.76,642.45,232.12,7.13;8,40.76,651.92,172.54,7.13"  xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Real-Time Volume Graphics</title>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<surname>Engel</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Hadwiger</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<forename type="middle">M</forename>
+				<surname>Kniss</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Rezk-Salama</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Weiskopf</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006" />
+			<pubPlace>A. K. Peters, Ltd</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,40.76,661.38,232.12,7.13;8,40.76,670.85,232.12,7.13;8,40.76,680.31,232.12,7.13;8,40.76,689.77,37.86,7.13"  xml:id="b6">
+	<analytic>
+		<title level="a" type="main">High-quality pre-integrated volume rendering using hardware-accelerated pixel shading</title>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<surname>Engel</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Kraus</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Ertl</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings ACM SIGGRAPH/EUROGRAPHICS Workshop on Graphics Hardware</title>
+		<meeting>ACM SIGGRAPH/EUROGRAPHICS Workshop on Graphics Hardware</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,40.76,699.24,232.12,7.13;8,40.76,708.70,70.17,7.13"  xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Interactive order-independent transparency</title>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Everitt</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,40.76,718.17,232.12,7.13;8,40.76,727.63,232.12,7.13;8,40.76,737.10,94.09,7.13;8,285.12,54.06,250.38,7.13;8,303.38,63.52,232.12,7.13;8,303.38,72.99,84.84,7.13"  xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Advanced illumination techniques for GPU-based volume raycasting Fast summed-area table generation and its applications</title>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Hadwiger</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">P</forename>
+				<surname>Ljung</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Rezk-Salama</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Ropinski</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">]</forename>
+				<forename type="middle">J</forename>
+				<surname>Hensley</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Scheuermann</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">G</forename>
+				<surname>Coombe</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Singh</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">A</forename>
+				<surname>Lastra</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM SIG- GRAPH Course Notes Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="547" to="555" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,82.45,232.12,7.13;8,303.38,91.92,232.12,7.13;8,303.38,101.38,143.34,7.13"  xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Local ambient occlusion in direct volume rendering</title>
+		<author>
+			<persName>
+				<forename type="first">F</forename>
+				<surname>Hernell</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">P</forename>
+				<surname>Ljung</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">A</forename>
+				<surname>Ynnerman</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="548" to="559" />
+			<date type="published" when="2010-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,110.85,232.12,7.13;8,303.38,120.31,58.44,7.13"  xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Realistic image synthesis using photon mapping</title>
+		<author>
+			<persName>
+				<forename type="first">H</forename>
+				<forename type="middle">W</forename>
+				<surname>Jensen</surname>
+			</persName>
+		</author>
+		<editor>A. K. Peters, Ltd</editor>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,129.78,232.12,7.13;8,303.38,139.24,232.12,7.13;8,303.38,148.70,161.05,7.13"  xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Multidimensional transfer functions for interactive volume rendering</title>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Kniss</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">G</forename>
+				<surname>Kindlmann</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Hansen</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="270" to="285" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,158.17,232.12,7.13;8,303.38,167.63,232.12,7.13;8,303.38,177.10,101.84,7.13"  xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Interactive translucent volume rendering and procedural modeling</title>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Kniss</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<surname>Premoze</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Hansen</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Ebert</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings IEEE Visualization</title>
+		<meeting>IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="109" to="116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,186.56,232.12,7.13;8,303.38,196.03,158.56,7.13"  xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Interpolating and downsampling RGBA volume data</title>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Kraus</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<surname>Bürger</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings VMV</title>
+		<meeting>VMV</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="323" to="332" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,205.49,232.12,7.13;8,303.38,214.96,232.12,7.13;8,303.38,224.42,17.93,7.13"  xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Acceleration techniques for GPU-based volume rendering</title>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Kruger</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Westermann</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings IEEE Visualization</title>
+		<meeting>IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="287" to="292" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,233.89,232.12,7.13;8,303.38,243.35,77.77,7.13"  xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Production-ready global illumination</title>
+		<author>
+			<persName>
+				<forename type="first">H</forename>
+				<surname>Landis</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Siggraph Course Notes</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,252.81,232.12,7.13;8,303.38,262.28,232.12,7.13;8,303.38,271.74,99.63,7.13"  xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Fast precomputed ambient occlusion for proximity shadows</title>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Malmer</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">F</forename>
+				<surname>Malmer</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">U</forename>
+				<surname>Assarsson</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">N</forename>
+				<surname>Holzschuch</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of graphics tools</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="59" to="71" />
+			<date type="published" when="2007-04" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,281.21,232.12,7.13;8,303.38,290.67,212.71,7.13"  xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Optical models for direct volume rendering</title>
+		<author>
+			<persName>
+				<forename type="first">N</forename>
+				<surname>Max</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="99" to="108" />
+			<date type="published" when="1995-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,300.14,232.12,7.13;8,303.38,309.60,232.12,7.13;8,303.38,319.07,69.95,7.13;8,285.12,326.79,22.46,8.86;8,303.38,328.53,232.11,7.13;8,303.38,337.99,204.74,7.13"  xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Real-time obscurances with color bleeding Méndez-Feliu and M. Sbert. From obscurances to ambient occlusion: A survey</title>
+		<author>
+			<persName>
+				<forename type="first">A</forename>
+				<surname>Méndez</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Sbert</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Catà</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Spring Conference on Computer Graphics</title>
+		<meeting>Spring Conference on Computer Graphics</meeting>
+		<imprint>
+			<date type="published" when="2003-02" />
+			<biblScope unit="page" from="171" to="176181" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,347.46,232.11,7.13;8,303.38,356.92,106.94,7.13"  xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Fast High Accuracy Volume Rendering</title>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<forename type="middle">D</forename>
+				<surname>Moreland</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,366.39,232.12,7.13;8,303.38,375.85,232.12,7.13;8,303.38,385.32,185.61,7.13"  xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Real-time volumebased ambient occlusion</title>
+		<author>
+			<persName>
+				<forename type="first">G</forename>
+				<surname>Papaioannou</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<forename type="middle">L</forename>
+				<surname>Menexi</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Papadopoulos</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="752" to="762" />
+			<date type="published" when="2010-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,394.78,232.12,7.13;8,303.38,404.25,112.45,7.13"  xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Compositing digital images</title>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Porter</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Duff</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings ACM SIGGRAPH</title>
+		<meeting>ACM SIGGRAPH</meeting>
+		<imprint>
+			<date type="published" when="1984" />
+			<biblScope unit="page" from="253" to="259" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,413.71,232.12,7.13;8,303.38,423.18,232.12,7.13;8,303.38,432.64,153.72,7.13"  xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Interactive volumetric lighting simulating scattering and shadowing</title>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Ropinski</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Döring</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Rezk-Salama</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings IEEE Pacific Visualization Symposium</title>
+		<meeting>IEEE Pacific Visualization Symposium</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="169" to="176" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,442.10,232.12,7.13;8,303.38,451.57,232.12,7.13;8,303.38,461.03,232.12,7.13;8,303.38,470.50,41.84,7.13"  xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Efficient shadows for GPUbased volume raycasting</title>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Ropinski</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Kasten</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<surname>Hinrichs</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings International Conference on Computer Graphics, Visualization and Computer Vision (WSCG)</title>
+		<meeting>International Conference on Computer Graphics, Visualization and Computer Vision (WSCG)</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="17" to="24" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,479.96,232.12,7.13;8,303.38,489.43,232.12,7.13;8,303.38,498.89,223.73,7.13"  xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Interactive volume rendering with dynamic ambient occlusion and color bleeding</title>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Ropinski</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Meyer-Spradow</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<surname>Diepenbrock</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Mensmann</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<forename type="middle">H</forename>
+				<surname>Hinrichs</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="567" to="576" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,508.36,232.12,7.13;8,303.38,517.82,232.12,7.13;8,303.38,527.28,232.12,7.13;8,303.38,536.75,33.87,7.13"  xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Obscurance-based volume rendering framework</title>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Ruiz</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">I</forename>
+				<surname>Boada</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">I</forename>
+				<surname>Viola</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<surname>Bruckner</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Feixas</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Sbert</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings IEEE/EG Symposium on Volume and Point-Based Graphics</title>
+		<meeting>IEEE/EG Symposium on Volume and Point-Based Graphics</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="113" to="120" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,546.21,232.12,7.13;8,303.38,555.68,217.93,7.13"  xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Advanced GPU raycasting</title>
+		<author>
+			<persName>
+				<forename type="first">H</forename>
+				<surname>Scharsach</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Central European Seminar on Computer Graphics (CESCG)</title>
+		<meeting>Central European Seminar on Computer Graphics (CESCG)</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="69" to="76" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,565.14,232.12,7.13;8,303.38,574.61,211.50,7.13"  xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Layered volume splatting</title>
+		<author>
+			<persName>
+				<forename type="first">P</forename>
+				<surname>Schlegel</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Pajarola</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings International Symposium on Visual Computing</title>
+		<meeting>International Symposium on Visual Computing</meeting>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="1" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,584.07,232.12,7.13;8,303.38,593.54,232.12,7.13;8,303.38,603.00,191.19,7.13"  xml:id="b28">
+	<analytic>
+		<title level="a" type="main">A directional occlusion shading model for interactive direct volume rendering</title>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Schott</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">V</forename>
+				<surname>Pegoraro</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Hansen</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<surname>Boulanger</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<surname>Bouatouch</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="855" to="862" />
+			<date type="published" when="2009-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,612.47,232.12,7.13;8,303.38,621.93,232.12,7.13;8,303.38,631.39,197.25,7.13"  xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Hardware accelerated ambient occlusion techniques on GPUs</title>
+		<author>
+			<persName>
+				<forename type="first">P</forename>
+				<surname>Shanmugam</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">O</forename>
+				<surname>Arikan</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Symposium on Interactive 3D Graphics and Games</title>
+		<meeting>Symposium on Interactive 3D Graphics and Games</meeting>
+		<imprint>
+			<publisher>ACM SIGGRAPH</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="73" to="80" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,640.86,232.12,7.13;8,303.38,650.32,232.12,7.13;8,303.38,659.79,232.12,7.13;8,303.38,669.25,33.87,7.13"  xml:id="b30">
+	<analytic>
+		<title level="a" type="main">A simple and flexible volume rendering framework for graphics-hardware–based raycasting</title>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<surname>Stegmaier</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Strengert</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Klein</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Ertl</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings International Workshop on Volume Graphics</title>
+		<meeting>International Workshop on Volume Graphics</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="187" to="195" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,678.72,232.12,7.13;8,303.38,688.18,194.69,7.13"  xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Footprint evaluation for volume rendering</title>
+		<author>
+			<persName>
+				<forename type="first">L</forename>
+				<surname>Westover</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings ACM SIGGRAPH</title>
+		<meeting>ACM SIGGRAPH</meeting>
+		<imprint>
+			<publisher>ACM SIGGRAPH</publisher>
+			<date type="published" when="1990" />
+			<biblScope unit="page" from="367" to="376" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,697.65,232.12,7.13;8,303.38,707.11,131.03,7.13"  xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Casting curved shadows on curved surfaces</title>
+		<author>
+			<persName>
+				<forename type="first">L</forename>
+				<surname>Williams</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings ACM SIGGRAPH</title>
+		<meeting>ACM SIGGRAPH</meeting>
+		<imprint>
+			<date type="published" when="1978" />
+			<biblScope unit="page" from="270" to="274" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="8,303.38,716.57,232.12,7.13;8,303.38,726.04,232.12,7.13;8,303.38,735.50,98.84,7.13"  xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Shadows and soft shadows with participating media using splatting</title>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Zhang</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Crawfis</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="139" to="149" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

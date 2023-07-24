@@ -1,0 +1,1831 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">A Study of the Trade-off Between Reducing Precision and Reducing Resolution for Data Analysis and Visualization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Duong</forename><surname>Hoang</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pavol</forename><surname>Klacansky</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Peer-Timo</roleName><forename type="first">Harsh</forename><surname>Bhatia</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Bremer</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Valerio</forename><surname>Lindstrom</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Pascucci</surname></persName>
+						</author>
+						<title level="a" type="main">A Study of the Trade-off Between Reducing Precision and Reducing Resolution for Data Analysis and Visualization</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T19:43+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>data compression</term>
+					<term>bit ordering</term>
+					<term>multi-resolution</term>
+					<term>data analysis</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1: Visualization of the diffusivity field at 0.2 bits per sample (bps) and its Laplacian field at 1.5 bps, using two of the bit streams studied in the paper. Compared to the by bit plane stream, the by wavelet norm stream produces a better reconstruction of the original function (left, compare white features), and a slightly worse, if not comparable, reconstruction of the Laplacian field (right).</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>As the gap between the available compute power and the cost of data movement increases, data transfer, whether from cache, main memory, or disk, becomes a major bottleneck in many workflows. However, it has been shown that not every bit of data is always necessary to answer scientific questions with required accuracy. In particular, for techniques at the end of scientific workflows, such as visualization and data analysis, lower fidelity representations of the data often provide adequate approximations <ref type="bibr" target="#b23">[24,</ref><ref type="bibr" target="#b37">38,</ref><ref type="bibr" target="#b69">70]</ref>; even during simulation, some loss in precision is often acceptable <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b37">38]</ref>. As a result, several different techniques have been proposed to reduce the size of data.</p><p>Broadly, these techniques either (i) reduce the data resolution, e.g., the number of data points stored, or (ii) reduce the precision of each data point. Examples of the first kind of approach are subsampling <ref type="bibr" target="#b48">[49]</ref>, adaptive mesh refinement <ref type="bibr" target="#b4">[5]</ref>, octrees and other tree structures <ref type="bibr" target="#b54">[55]</ref>, and wavelets <ref type="bibr" target="#b69">[70]</ref>, and those of the second are various forms of compression <ref type="bibr" target="#b33">[34,</ref><ref type="bibr" target="#b35">36,</ref><ref type="bibr" target="#b40">41,</ref><ref type="bibr" target="#b42">43,</ref><ref type="bibr" target="#b47">48,</ref><ref type="bibr" target="#b55">56,</ref><ref type="bibr" target="#b61">62]</ref>. Traditionally, multiresolution structures have been used to accelerate dynamic queries, e.g., in rendering <ref type="bibr" target="#b36">[37]</ref>, since discarding data points based on the viewpoint or data complexity can result in significant speed-up. Compression based on quantization, on the other hand, is more common when storing data, where in the absence of other information, treating each sample as equally important is the null hypothesis. However, in many situations, a combination of both resolution and precision reduction may be appropriate. For example, high spatial resolution may be needed to resolve the topology of an isosurface, yet the corresponding data samples may be usable at less than full precision to adequately approximate the geometry. Conversely, accumulating accurate statistics may require high-precision values, yet a lower resolution subset of data points may be sufficient for the task. In general, different levels of adaptivity in combinations of resolution and precision may be suitable for different types of analysis and visualization tasks, and for many, these requirements might be data dependent. Consequently, a globally optimal data organization may not exist. Instead, we consider a progressive setting in which some initial data is loaded and processed, and new data is requested selectively based on the requirements of the current task as well as the characteristics of the data already loaded. The result is a stream of bits ordered such that the error is minimized, considering the task at hand. However, although intuitively considering both resolution and precision in the ordering certainly has advantages, it is unclear how much the error could be reduced for a given data budget or how little data could be used to achieve the same error. Furthermore, optimal data-dependent orderings may be especially impractical since they assume perfect knowledge of the data. We therefore need to understand which of these potential gains are realizable. This paper aims to address these problems about the suitable bit orderings through extensive, empirical experiments. In particular, this paper presents:</p><p>• a framework that allows systematic studies of the resolution-versus-precision trade-off for common data analysis and visualization tasks. The core idea is to represent various data reduction techniques as bit streams that progressively improve data quality in either resolution or precision (Section 3). We can thus compare these techniques fairly, by comparing the corresponding bit streams. • empirical evidence that jointly optimizing resolution and precision can provide significant improvements on the results of analysis tasks over adjusting either independently. We present a diverse collection of data sets and data analysis tasks and also show how different types of data analysis might require substantially different data streams for optimal results. • a greedy approach that gives estimations for lower bounds of error for various analysis tasks. In addition, we also identify practical streams that closely approximate these bounds for each task (Section 4.1, Section 4.2, Section 4.3, and Section 4.4) using a novel concept called stream signature (Section 3.4), which is a small matrix that captures the essence of how a bit stream navigates the precision-versus-resolution space.</p><p>In the third contribution, we focus on common analysis tasks, with a notable omission of volume rendering, which is dependent on many parameters, such as transfer function, camera position, and resolution of the image, among others. Thus, for volume rendering, a standalone study is likely required to ensure scientifically sound experiments with generalizable results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Tree-based multiresolution hierarchies. A very common scheme to generate a tree-like hierarchy is to construct low-resolution copies of the data from higher resolution ones through downsampling. Examples include Gaussian and Laplacian pyramids <ref type="bibr" target="#b7">[8]</ref> and mipmaps <ref type="bibr" target="#b36">[37,</ref><ref type="bibr" target="#b50">51]</ref>. The data is often stored in blocks on each resolution level. To save bandwidth, low-resolution versions of distant blocks can be streamed during rendering. However, these methods increase storage requirements, making them unsuitable for very large data. Recent multiresolution techniques save storage by adapting to the data in such a way that different regions are stored with different resolutions. A very popular approach is sparse voxel octrees <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b24">25]</ref> and variations <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b21">22,</ref><ref type="bibr" target="#b30">31]</ref>. Smooth-varying regions are stored at coarser octree levels, which significantly reduces storage. During rendering, blocks of samples are streamed from an appropriate resolution, determined by how far the queried samples are from the eye/camera. A sparse, multiresolution hierarchy can also be built using other trees such as B+ tree <ref type="bibr" target="#b45">[46]</ref> and kd-tree <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b68">69]</ref>, or space-filling curves <ref type="bibr" target="#b25">[26,</ref><ref type="bibr" target="#b48">49]</ref>, which reorder data samples to form a hierarchy without any filtering steps or redundant samples. Low-resolution levels are constructed via subsampling, which, unfortunately, is prone to aliasing problems.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Transform-based multiresolution hierarchies.</head><p>Other multiresolution approaches reduce data by transform-based compression. For example, COVRA <ref type="bibr" target="#b23">[24]</ref> constructs an octree of bricks (consisting of blocks) and learns a sparse representation for the blocks in terms of basis blocks. Similarly, Fout et al. <ref type="bibr" target="#b22">[23]</ref> transform each block using the KLT transform to produce several resolution levels, and compress each level using vector quantization <ref type="bibr" target="#b47">[48]</ref>. Schneider et al. <ref type="bibr" target="#b55">[56]</ref> also use vector quantization but with a simple Haar-like transform that separates each block of 2 3 voxels into one average and seven difference coefficients. Other examples of transform-based hierarchies include works that use the Tucker decomposition <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b2">3,</ref><ref type="bibr" target="#b58">59,</ref><ref type="bibr" target="#b59">60]</ref>, which decomposes the input data (stored as a tensor) into n matrices of basis vectors and one core tensor. Tensor decomposition works for higher dimensional data and can achieve high compression ratios, albeit at the price of a costly transform step.</p><p>Wavelets. Transforms that use fixed bases avoid such high computation cost at the expense of slightly less effective compression. Perhaps the most popular transform that uses a fixed basis is the (discrete) wavelet transform (DWT), which constructs a hierarchy of resolution levels via low and high bandpass filters. The transform is recursively applied to the lower resolution band, resulting in a hierarchy of "details" at varying resolution. The DWT is merely a change of basis that does not increase the data size. Furthermore, the wavelet basis functions are defined everywhere in space, requiring no special interpolation rules when given some arbitrary subset of wavelet coefficients. One disadvantage of the DWT is the random access cost, which is not constant time, although there has been work to develop acceleration structures to speed up local queries <ref type="bibr" target="#b66">[67]</ref>.</p><p>Besides offering a multiresolution decomposition, enabling data streaming with level-of-detail support, wavelet coefficients are especially amenable for compression, through thresholding or entropy compression. In storing and visualizing scientific data, wavelets (with compression) are used in a wide variety of systems <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b12">13,</ref><ref type="bibr" target="#b69">70]</ref> and applications, such as volume rendering with level-of-detail <ref type="bibr" target="#b28">[29,</ref><ref type="bibr" target="#b29">30,</ref><ref type="bibr" target="#b32">33,</ref><ref type="bibr" target="#b46">47,</ref><ref type="bibr" target="#b67">68]</ref>, turbulence visualization <ref type="bibr" target="#b64">[65]</ref>, and particle visualization <ref type="bibr" target="#b51">[52]</ref>.</p><p>Most wavelet-based techniques employ tiling of wavelet coefficients in individual subands to facilitate random access and spatial adaptivity in resolution. For example, the VAPOR toolkit <ref type="bibr" target="#b12">[13]</ref> incorporates a multiresolution file format based on wavelets to allow data analysis on commodity hardware by storing individual tiles in separate files to allow loading of the region of interest. However, like most multiresolution work, only the resolution control is leveraged. The precision axis, which can potentially further reduce data transfer, is left unexplored.</p><p>Wavelet coders. Most work that explores the precision axis can be found in wavelet coders. Wavelet coefficients in corresponding regions across subbands can be thought of as belonging to a "tree". The embedded zerotrees (EZW) coder exploits the observation that in such trees, "parent" coefficients are often larger in magnitude than their "children". EZW therefore locates trees of wavelet coefficients that are insignificant with regard to a series of thresholds and encodes such a tree with one single symbol. The thresholds are typically set at the bit planes, starting from the most significant one. In this way, the data can be progressively refined in precision during decompression. The SPIHT coder <ref type="bibr" target="#b53">[54]</ref> improves on EZW by locating more general types of zero trees <ref type="bibr" target="#b9">[10]</ref>. SPECK <ref type="bibr" target="#b49">[50]</ref> extends SPIHT to also exploit spatial correlations among nearby coefficients on the same subband.</p><p>Floating-point compression. The ZFP compression scheme <ref type="bibr" target="#b40">[41]</ref> also encodes transform coefficients by bit plane, in order of decreasing significance. By partitioning the domain into 4 × 4 × 4 independent blocks, ZFP supports fixed-rate compression, random access to the data, localized decompression, and fast inline compression. Extensions of ZFP allow it to vary either the bit rate or precision spatially over the domain, albeit at fixed resolution <ref type="bibr" target="#b41">[42]</ref>. Other notable compression schemes for scientific data include scalar quantization encoding (SQE) <ref type="bibr" target="#b33">[34]</ref>, ISABELA <ref type="bibr" target="#b35">[36]</ref>, SZ <ref type="bibr" target="#b61">[62]</ref>, and FPZIP <ref type="bibr" target="#b42">[43]</ref>, which generally employ prediction and compress the residuals. ISABELA and SZ perform residual scalar quantization, whereas FPZIP truncates floats, which can be seen as nonuniform scalar quantization. Similarly, the precision-based level of details (PLoD) scheme proposed in MLOC <ref type="bibr" target="#b25">[26]</ref> also truncates floats by dividing a double-precision number into several parts. MLOC includes a multiresolution scheme based on Hillbert curves, but this scheme (based on resolution) and the PLoD scheme (based on precision) are exclusive.</p><p>Mixing resolution and precision. Schemes that allow progressive data access in both resolution and precision include SBHP <ref type="bibr" target="#b10">[11]</ref> and JPEG2000 <ref type="bibr" target="#b63">[64]</ref>. Both partition each subband into blocks and code each block independently, in bit plane order. By interleaving compressed bits across blocks, one can construct a purely resolution-progressive or a purely precision-progressive stream, or anything in between. JPEG2000 has found use in the compression of scientific data, e.g., by Woodring et al. <ref type="bibr" target="#b69">[70]</ref>. Since most JPEG2000 implementations are limited to integer data, the authors apply uniform scalar quantization to convert floating point data to integer form. Even though JPEG2000 supports varying both resolution and precision, most works do not explore this capability but focus only on setting bit rate. In general, efficiently leveraging both axes of data reduction has not been well studied.</p><p>Error quantification. Several works have aimed at quantifying the error incurred by data reduction, by compression or otherwise, for the results of analysis tasks. Baker et al. <ref type="bibr" target="#b0">[1]</ref> evaluate several compressors, including FPZIP <ref type="bibr" target="#b42">[43]</ref> and ISABELA <ref type="bibr" target="#b35">[36]</ref> on ensembles of climate simulation data. Laney et al. <ref type="bibr" target="#b37">[38]</ref> study the effects of lossy compression on the Miranda hydrodynamic simulation code. Li et al. <ref type="bibr" target="#b38">[39]</ref> measure the error incurred by wavelet compression on turbulent-flow data. Wang et al. <ref type="bibr" target="#b65">[66]</ref> assess the quality of distorted data using a combination of statistical metrics in the wavelet transform domain. Etiene et al. have published a series of studies on verification of isosurfaces in geometrical <ref type="bibr" target="#b19">[20]</ref> and topological <ref type="bibr" target="#b18">[19]</ref> terms, and verification of volume-rendered images <ref type="bibr" target="#b17">[18]</ref>. They focus on order-of-accuracy and convergence analysis, where errors are introduced mostly through discretization, not necessarily for the purpose of reducing data bandwidth. For volume rendering, Ljung et al. <ref type="bibr" target="#b43">[44]</ref> compute an error estimate based on color variation between low-and high-resolution levels in each block, which guides the selection of an appropriate resolution level for every block. Finally, the Z-checker framework <ref type="bibr" target="#b62">[63]</ref> consists of a wide range of independent metrics to evaluate data quality after lossy compression. In all these works, errors are not quantified in the context of the tradeoff between resolution and precision.</p><p>Finally, for surveys of data reduction techniques in general, we refer the readers to the work of Rodríguez et al. <ref type="bibr" target="#b3">[4]</ref> and Li et al. <ref type="bibr" target="#b39">[40]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">DATA REDUCTION SCHEMES AS PACKET STREAMS</head><p>In order to systematically study the resolution-versus-precision trade-offs among different data reduction schemes, it is important to perform fair and consistent comparisons. In this section, we develop such a consistent methodology by proposing to model different data reduction schemes as streams of uniformly sized data packets, where the original data contains all the packets, and any reduction step removes a set of packets (comparable amounts of data). These data streams are transmitted using a client-server model. At any point, the client is assumed to have received a subset of packets (in some predetermined sequential order or in some order requested by the client), which can be used to reconstruct an approximation to the original data. Therefore, to compare different streams, we reconstruct the original data using the same number of packets from each stream and perform desired tasks on each of the (approximate) reconstructions. A stream is considered better suited for a given task if it produces results that are closer to the reference results computed from the original data. <ref type="figure" target="#fig_0">Fig. 2</ref> gives a schematic view of our data streaming model.</p><p>Although both the server and the client in our model can be on the same physical machine, only the server has full knowledge of the data. Thus, when the client receives a packet, it might not know where that packet should be deposited. A common solution is to have both the client and the server agree beforehand on a static ordering of packets, independent of the data. We use the term data-independent streams to refer to streams using such solutions. In contrast, for data-dependent streams, an additional mechanism is needed to inform the client about the subbands and bit planes of incoming packets. In this paper, we consider both types of streams, as well as specialized task-dependent streams optimized for given tasks (see <ref type="table">Table 1</ref>).   <ref type="table">Table 1</ref>: We define various types of data streams, including data-independent, data-dependent, task-independent, and task-dependent streams.</p><p>S [task]-sig can be data dependent or task dependent, depending on the stream from which it is derived.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Decomposition of Data into Packets</head><p>Although one way to compare different data reduction strategies is to restrict the techniques to the same data size and compare data quality, it is difficult to enforce consistency. For example, the amount of change (in data) in one step of multiresolution simplification may be different from removing one bit in the quantization of every sample. To make all data reduction schemes comparable, in each scheme, a data set is redefined as a stream of equally sized packets. These packets are the smallest units of data transfer in our framework. A packet consists of a relatively small number ≈ 2 3 of bits and is associated with a resolution level and a precision level (i.e., bit plane). In this framework, different data-reduction schemes become different orderings of packets, called streams. Restricting two (or more) data streams to the same number of packets allows us to perform fair and consistent comparisons.</p><p>Resolution levels. Although there exist several ways to define the notion of resolution/scale/frequency, we choose the multilevel basis functions of the wavelet transform because they have compact support, and they avoid interpolation problems associated with other representations. Wavelet transform enables spatial adaptivity (i.e., finer resolution in regions that contain sharp features, at the expense of coarser resolution elsewhere). In particular, we choose the CDF5/3 multilinear wavelets <ref type="bibr" target="#b13">[14]</ref> for their balance between simplicity and effectiveness at decorrelating the input signal in practice <ref type="bibr" target="#b63">[64]</ref>.</p><p>A multidimensional wavelet transform can be performed in multiple passes, which partitions the original domain into subbands, each of which can be thought of as a resolution level associated with one or more spatial direction. One transform pass (in 3D) creates eight subbands, of which the first is a low-pass, downsampled version of the original data, and the remaining add fine details in each subset of the dimensions (see <ref type="figure" target="#fig_0">Fig. 2</ref> for a visualization of subbands in 2D). A subsequent transform pass recurses only on the first subband (of the previous level), creating the next (resolution) level of subbands. We use l (0 ≤ l &lt; L) to index the subbands, with l = 0 referring to the coarsest subband and L denoting the number of subbands. In 3D, the eight subbands created after one transform pass are indexed in the following order, from coarse to fine: LLL, LLH, LHL, LHH, HLL, HLH, HHL, HHH (L stands for "low" and H stands for "high", referring to the low-and high-pass filter pair that perform the wavelet transform). The LHL subband, for example, contains coefficients that are low-pass transformed along X and Z, and high-pass transformed along Y . In our experiments, the number of subbands, L, is fixed at 1 + 3 * 7 = 22, corresponding to three transform passes in 3D.</p><p>Precision levels. For creating packets corresponding to different precision levels, we quantize floating-point wavelet coefficients to B-bit signed integers. For most of the experiments in this paper, B = 16. This quantization eliminates the floating-point exponent bits, such that every bit (except the sign bit) can be associated with a bit plane b (0 ≤ b &lt; B). In our convention, the higher indexed bit planes are less significant. We convert quantized coefficients to the negabinary representation, where integers are represented in base −2, i.e., ∑ B b=0 c b (−2) b with c b ∈ {0, 1}. Negabinary encoding is preferred over two's complement encoding, because we start data reconstruction by zero-initializing all bits, and negabinary encoding has no single dedicated sign bit and ensures that small coefficients have many leading zero-bits. This transformation increases the number of bit planes by one, i.e., 0 ≤ b ≤ B.</p><p>Blocks and packets. Precisely, a packet consists of bits from the same bit plane, from a block of negabinary wavelet coefficients. A block is a [g × g × g] grid of adjacent coefficients from the same subband. We let g be a constant (g = 2 in this paper), so that finer resolution subbands contain more packets, which presents a trade-off between packets that provide wider (but coarser) coverage and packets that provide finer (but more local) details. Every packet (of size one byte in this paper) comes from a bit plane b and a subband l. g is chosen to be larger than one for performance reasons, as in practice, most systems read bits in batches.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Data-Dependent and Data-Independent Streams</head><p>We define two streams: by level and by bit plane, which model two common reduction schemes in the literature. The by level stream, S lvl , orders the packets strictly from coarser to finer subbands. Within the same subband, packets follow the row-major order of blocks and then bit plane order (from 0 to B) within each coefficient. All bits for each coefficient are streamed together. The other common ordering, by bit plane, or S bit , proceeds strictly from higher ordered to lower ordered bit planes. Within the same bit plane, packets follow the subband order (from 0 to L − 1) and then row-major order in each subband. S lvl and S bit are designed to mimic the way data is accessed in traditional methods that work either in resolution (S lvl ) or in precision (S bit ).</p><p>Additionally, we define a third stream that combines these two dimensions and refer to it as by wavelet norm, or S wav . This stream orders packets in descending order of weights w wav (p) = 2 B−b(p) × ψ l(p) , where p denotes a packet and ψ l(p) represents wavelet basis on subband l(p). The || notation refers to the L 2 norm of the wavelet basis function. The first term captures the contribution of a bit on bit plane b(p), and the second term captures the contribution of a wavelet coefficient on subband l(p). In the wavelet representation, a function f is written as a linear sum of wavelet basis functions, i.e., f = ∑ c i ψ i , where c i are the coefficients. Since our wavelet transforms are based on lifting, this norm is usually not one, but it increases with level. Basis functions in the same subband share the same norm, hence w wav (p) is simply the contribution (in L 2 norm) of a bit on bit plane b(p) and subband l(p), to the whole function f . This ordering based on norms of wavelet basis functions was proposed previously by Weiss et al. <ref type="bibr" target="#b66">[67]</ref>. For details of computing the norms of basis functions, see Appendix A.</p><p>Another common way to reduce data in the wavelet domain is to leave out the coefficients of the smallest magnitudes. Note that coefficient magnitudes are only weakly related to error, as the error also depends on the wavelet basis function norm <ref type="bibr" target="#b66">[67]</ref>. We model this scheme with a stream called by magnitude, or S mag . Here, the weight function is w mag (p) = ∑ c∈block(p) c (the sum is over all coefficients in the block that contains packet p). If two packets have the same weight, they are ordered by subband index and then by bit plane.</p><p>Unlike S lvl , S bit , and S wav , the S mag stream is data dependent because the coefficient magnitudes are not known without the data. In principle, data-dependent streams are better than data-independent streams because they can prioritize important packets based on the actual data. However, data-dependent streams are ill-suited for practical purposes, because the cost of sending position information likely outweighs any potential benefit. Nevertheless, we study them for various reasons. First, the by magnitude scheme is well known in the literature <ref type="bibr" target="#b12">[13]</ref>. Second, the "best" data-dependent streams (which do not include position information for packets) can serve as a baseline to evaluate the performance of their data-independent counterparts. Finally, in addition to being data dependent, streams can also be task dependent (Section 3.3), which may provide insights into how data should be queried to perform certain analysis tasks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Task-Optimized Streams</head><p>Each analysis task may require a fundamentally different stream for optimal results. Studying such "optimal" streams is important because they not only serve as a baseline but also can provide insights into other, more practical streams. Given the original data set f and its reconstructed approximation f using a subset of packets, let q represent some quantity of interest, e.g., histogram, isosurface, etc., computed on f or f . For a given q, a well-defined error metric e(q( f ), q( f )), which returns a single scalar, is needed. Given f , q, and e, our goal is to generate an optimal (and data-dependent) stream, S opt , for q with respect to e. One possible definition for S opt is a stream such that the area under the plotted curve of e, with respect to the number of bits, is minimized for all packets to be streamed. However, this definition is limited in practice because a stream should be able to terminate at any point and still produce as small an error as possible.</p><p>Instead, we employ a greedy approach to define the optimal stream. We notice through experiments, however, that a straightforward greedy algorithm can pick unimportant packets too early. For example, starting with an all-zero reconstruction f = 0 and an empty stream, we can repeatedly append new packets to the stream, which when included in the current f , would minimize e at every step. At some point, the algorithm might pick a packet that introduces the lowest error yet contributes very little to improve the quality of f (because more important packets would increase the error), leading to a nonoptimal stream. To avoid this problem, we make a modification to this greedy algorithm and build the stream backwards. We start with a "lossless" f (i.e., f = f ), and at each step we remove the packet that has the least impact on the error e from f . This modification largely avoids the previous problem where less important packets were added to S opt too early, because by starting with the full (instead of empty) set of packets, our error measurement better captures the importance of packets.</p><p>Unfortunately, such a greedy algorithm is still expensive in practice, as its complexity is at least O(n 2 ) (n is the number of packets), due to the 2-level nested loop. For a nx × ny × nz volume, a block size of bx × by × bz, and B + 1 bit planes, n is nx bx × ny by × nz bz × (B + 1). Thus, even a small volume, e.g., nx, ny, nz = 64 and bx, by, bz = 2, can result in a prohibitively high run time, as n 2 = (32768 × 17) 2 . Therefore, we adopt a simplified version of this algorithm, where only one pass through n packets is needed. In iteration i (0 ≤ i &lt; n), we set a new packet p i to zero, compute and record the incurred error w i using the error metric e, and then enable p i again at the end of iteration i. After n iterations, each packet has an associated weight w i . The stream S opt is simply the sorted list of packets in decreasing order of the weights. This simplified algorithm (Algorithm 1) has significantly lower running time, while (by observation) retaining the same quality for S opt .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Algorithm 1 Computing a task-optimized stream 1: Inputs:</head><p>An original function f An unordered set of n packets P = {p i }, produced from f A quantity of interest q, and an error function e 2: Initialize:</p><p>A set of n weights {w i } 3: for each packet p i do 4:</p><formula xml:id="formula_0">p i := 0 5: P → wavelet coefficients C = {c j } 6:</formula><p>(inverse quantization and inverse negabinary transform) <ref type="bibr" target="#b6">7</ref>:</p><formula xml:id="formula_1">{c j } → f (inverse wavelet transform) 8: w i := e(q( f ), q( f )) 9:</formula><p>Restore p i 10: end for 11: Sort the p i 's in descending order of w i . 12: Output:</p><p>The q-optimized stream, which is the sorted P For a more optimized implementation, the inverse wavelet transform on line 7 can be replaced by "splatting" coefficient p i onto the domain, due to the transform being linear and the fact that p i is the only coefficient changed in the current iteration. Since tt is almost never advantageous to stream bits belonging to one coefficient out-of-order, we also enforce that in the final stream, packets belonging to the same group follow the bit plane order (from 0 to B).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Stream Signatures</head><p>Unlike data-independent streams, data-dependent streams do not impose a static ordering of packets. To concisely represent and characterize the dynamic ordering of data-dependent streams, we introduce the notion of a stream signature. Any stream can be represented with respect to the two-dimensional space of resolution (subbands) and precision (bit planes), i.e.,</p><formula xml:id="formula_2">L L,B = {(l, b) | 0 ≤ l &lt; L, 0 ≤ b ≤ B}.</formula><p>Given a stream, we define its signature A as an L × (1 + B) matrix, where each (l, b) element is associated with P l,b , the set of packets belonging to subband l and bit plane b. In particular, A(l, b), i.e., the (l, b) element of A, is an integer in the range [0, (1 + B) × L), and indicates, on average, the position at which packets in P l,b appear in the given stream. For example, the signature A = 0 1 4 2 3 5 indicates that the stream begins with packets that lie on the first bit plane of the first subband, as A(0, 0) = 0. Those are followed by packets on the second bit plane of the first subband (A(0, 1) = 1), and then the first bit plane of the second subband (A(1, 0) = 2), and finally, the third bit plane of the second subband (A(1, 2) = 5). Thus, a stream's signature shows how the stream traverses the space L L,B and highlights the different resolution-versus-precision trade-offs among streams, especially among S opt streams optimized for different tasks. In <ref type="figure" target="#fig_1">Fig. 3</ref> we visualize the signatures of S bit , S lvl , and S wav , defined in Section 3.1.</p><p>To compute a stream signature, we partition the whole domain (not individual subbands) into several regions, compute one signature per region, and average these local signatures. Partitioning is used since it is only when packets are relatively well localized that their relative ordering in the L L,B space becomes meaningful. For example, a packet at one corner of the domain may be streamed before one at an opposite corner, but this fact contains no useful information. We define a region to be the spatial volume that is covered by a packet in the coarsest subband. Algorithm 2 lists the steps of our approach.</p><p>Finally, a signature can be used to construct a stream denoted generically as S sig . This construction is done by iterating through each element A(l, b) in ascending order and adding to the end of S sig all the packets in P l,b . An S sig captures the behavior (in the L L,B space) of the stream it derives from, but it is stripped from any spatial adaptivity. Hence, when S sig is derived from an S opt , it can serve as a bridge when comparing the resolution-versus-precision trade-offs between data-independent and data-dependent streams.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Algorithm 2 Computing a stream signature 1: Inputs:</head><p>A stream P = {p i } 2: Initialize:</p><p>Per-region signature matrix A r := 0 Global signature matrix A := 0 3: for each packet p i in P do</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>4:</head><p>Let r, b, l be the region, bit plane, and subband that p i belongs Assign each element of A r its index after sorting</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>10:</head><p>A := A + A r 11: end for 12: Sort the elements of A 13: Assign each element of A its index after sorting 14: Output:</p><p>The signature matrix A Name Type Data type boiler <ref type="bibr" target="#b57">[58]</ref> combustion simulation float64 plasma <ref type="bibr" target="#b27">[28]</ref> magnetic reconnection simulation float32 diffusivity <ref type="bibr" target="#b14">[15]</ref> hydrodynamics simulation float64 pressure <ref type="bibr" target="#b14">[15]</ref> hydrodynamics simulation float64 turbulence <ref type="bibr" target="#b16">[17]</ref> fluid dynamics simulation float32 kingsnake <ref type="bibr" target="#b26">[27]</ref> CT scan uint8 foam <ref type="bibr" target="#b44">[45]</ref> CT scan uint16 </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">EVALUATION ON DIFFERENT ANALYSIS TASKS</head><p>Thus far, we have presented several types of streams: data-independent (S lvl , S bit , S wav ), data-dependent and task-independent (S mag ), and task-dependent (S opt , S sig ). In this section, we consider a variety of common analysis and visualization tasks to evaluate the performance of these streams. For each task, we define an error metric, e, for the evaluation and comparison of streams. Using Algorithm 1, we compute streams specifically optimized for each task, S [task]-opt , and use its signature to compute the corresponding S [task]-sig . For a variety of data sets, we compare these streams by evaluating the error as a function of bits per samples (or bps), defined as the total number of bits received divided by the total number of samples. To mimic the effects of entropy compression commonly used in practice, we remove from each stream all packets that consist only of leading-zero bits. The wavelet basis allows us to always reconstruct data at full resolution, which greatly simplifies computation of errors, as there exists no standard method to compute error between grids of different dimensions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Function Reconstruction</head><p>One of the most fundamental analysis tasks is that of reconstructing the original function itself. A commonly used error metric in this case is the root-mean-square error (RMSE). <ref type="figure">Fig. 4</ref> shows a comparison of the different streams for a variety of data sets. It can be noted that, in general, S rmse-opt (the stream optimized to minimize the RMSE) performs better than S rmse-sig due to spatial adaptivity, whereas S rmse-sig slightly outperforms S wav , followed by S bit , S mag , and S lvl .</p><p>In particular, S bit outperforms S lvl (for kingsnake and boiler, it does so after approximately 1 bps), which can be attributed to the removal of leading-zero packets. Empirically, wavelet coefficients on finer scale subbands are much smaller in magnitude <ref type="bibr" target="#b53">[54]</ref>. Such coefficients contain a majority of the leading-zero bits, whose removal benefits S bit the most. diffusivity and plasma contain a significant amount of empty space, which translates to more leading-zero bits after the wavelet transform that S bit can take advantage of, and thus, it outperforms S lvl immediately from the beginning. S mag underperforms for the same reason that S lvl does, but to a lesser extent, since S mag is adapted to the data. S wav outperforms both S lvl and S bit , because it follows the optimal (data-independent) bit ordering in L L,B in the L 2 norm, which is also the norm that the RMSE is based upon. Unsurprisingly, S rmse-opt outperforms all the others, as it is the most data-adaptive (i.e., it can optimize packet ordering in the spatial domain in addition to the L L,B domain). S rmse-sig is the second best stream, as it follows the bit ordering of S rmse-opt in L L,B but lacks any spatial adaptivity. In general, S wav and S sig have similar performances, but S sig performs better when the data is less smooth or noisy, as is the case for boiler and kingsnake. For such data, fine-level packets tend to have very few leading one bits among a majority of leading zero bits, which S wav does not take into account (data-independent streams in effect assume every packet contains all one bits).</p><p>We explore the errors visually by rendering the plasma volume at 0.2 bps, for all streams except S rmse-opt ( <ref type="figure" target="#fig_2">Fig. 5)</ref>. Although S lvl has the precision to obtain an accurate background, it lacks resolution to resolve the fine details. S bit , instead, lacks the precision to reconstruct the (mostly smooth) background, but it has enough resolution to capture the fine details well. S wav balances both precision and resolution, producing a more accurate picture as a whole. In this case, the S sig stream produces the most accurate rendering overall.  <ref type="figure">Fig. 4</ref>: Root-mean-square error (RMSE) of reconstructed functions for different streams and data sets; lower RMSE is better. The streams are truncated at both ends to highlight the differences, without omitting important information. The numbers in brackets are the ranges of original data samples. The general ordering of error, from lowest to highest, is S opt &lt; S sig &lt; S wav &lt; S bit &lt; S mag &lt; S lvl . </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Derivative Computation</head><p>Computation of derivative-based quantities is important in data analysis. Examples include vorticity (curl) computation from velocity fields to identify vortical structures, gradient computation for accurate Morse segmentation and shading, and ridge extraction (e.g., for Lagrangian coherent structures). In this paper, derivatives are always computed using finite differences, which is common in practice. In this section, we use 32 bits for quantization to ensure enough precision for finite differences. We always compute finite differences on the finest resolution grid to avoid computing distances between quantities defined on grids of different resolutions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">Gradient Computation</head><p>Given a function f defined on a grid, its gradient at a grid point</p><formula xml:id="formula_3">x = (x, y, z) is ∇ f (x) = ∂ f ∂ x , ∂ f ∂ y , ∂ f ∂ z .</formula><p>For accuracy, we use a five-point stencil to compute the gradient, i.e., ∂ f</p><formula xml:id="formula_4">∂ x ≈ 1 12 f (x − 2, y, z) − 2 3 f (x − 1, y, z) + 2 3 f (x + 1, y, z) − 1 12 f (x + 2, y, z)</formula><p>, but we note that the relative performances of the streams stay the same, using the more common two-and three-point formulas. The error between a gradient field ∇ f , and its low-bit-rate approximation ∇ f , is defined as e(∇ f ,</p><formula xml:id="formula_5">∇ f ) = 1 N ∑ N i=1 ∇ f (x i ) − ∇ f (x i ) 2 .</formula><p>Using Algorithm 1, we compute a gradient-optimized stream, S grad-opt , that minimizes the difference between the reconstructed and the original gradient fields. <ref type="figure">Fig. 7</ref> shows the gradient error incurred by different streams for four data sets. In general, we observe the ordering of performance (from best to worst) as: S grad-opt , S grad-sig , S bit , S wav , S mag , S lvl . This ordering can also be seen in <ref type="figure">Fig. 8</ref>, where the x-component of the gradient field for tuburlence is rendered at 0.3 bps. Unlike in the RMSE case, S bit performs nearly the same as S wav . To investigate this difference, we extract a 1D line from the plasma data set and reconstruct the function using S bit and S wav at 0.6 bps ( <ref type="figure">Fig. 6</ref>). S wav 's reconstruction is more accurate on average compared to S bit , which captures well the function's shape (due to the presence of fine-scale bits), but not the function values (due to the lack of precision in the coarse-scale coefficients). Functions reconstructed with S bit tend to be "shifted" in the range domain, as seen in <ref type="figure">Fig. 6</ref>. However, the gradient operator has the tendency to cancel the shifting effect, bringing the performance of S bit closer to that of S wav . S grad-opt again outperforms the rest of the streams. S lvl and S mag perform poorly for gradient computation, lacking the resolution to capture sharp features. S grad-sig mostly closely follows S bit in performance but outperforms it for boiler. Again, compared to the other fields, boiler is less smooth, resulting in less spatial coherency in the magnitudes of the fine-scale coefficients, which S grad-opt and S grad-sig can take advantage of, whereas S wav or S bit do not take into account actual bit values. Overall, the results suggest that besides minimizing RMSE, S wav also works well for gradient computation, although for the latter task, S bit is also good alternative.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">Laplacian Computation</head><p>The Laplace operator is a second-order differential operator defined as the divergence of the gradient field. The Laplacian of a 3D field is defined as ∆</p><formula xml:id="formula_6">f = ∂ 2 ∂ x 2 f + ∂ 2 ∂ y 2 f + ∂ 2 ∂ z 2 f</formula><p>. Using a five-point finite difference, we approximate</p><formula xml:id="formula_7">∂ 2 f ∂ x 2 ≈ − 1 12 f (x − 2, y, z) + 4 3 f (x − 1, y, z) − 5 2 f (x, y, z) + 4 3 f (x + 1, y, z) − 1 12 f (x + 2, y, z).</formula><p>We use the root-mean-square error to compare two Laplacian fields, i.e., e(∆ f , ∆ f ) = RMSE(∆ f , ∆ f ). We use Algorithm 1 to compute a Laplacian-optimized stream, S lap-opt , which minimizes e, and an S lap-sig stream from its signature. <ref type="figure">Fig. 9</ref> plots the errors for all relevant streams. The plots here largely follow the ones in <ref type="figure">Fig. 7</ref>, in terms of relative performance among the streams, but with more discernible gaps between S bit and S lap-sig , as well as between S lap-sig and S bit . The results suggest that similar to the gradient case, computation of the Laplacian favors resolution over precision, but to a higher degree.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Histogram Computation</head><p>A histogram succinctly summarizes the distribution of sample values, and thus it is useful as a cursory "look" into the data and in guiding further analysis. For example, it can be used to guide the selection of colors and opacities in a transfer function. To decide on an error  <ref type="figure">Fig. 7</ref>: Gradient error of reconstructed functions. Lower gradient error is better. Leading zero packets are removed, and the plots are truncated in the same way as in <ref type="figure">Fig. 4</ref>. The numbers in brackets are the ranges of original gradient magnitudes. The trend in error, in all cases, is S grad-opt &lt; S grad-sig ≈ S bit ≈ S wav &lt; S mag &lt; S lvl .  metric to compare histograms, we experimented with several popular metrics such as Kolmogorov-Smirnov <ref type="bibr" target="#b56">[57]</ref>, Kullback-Leibler <ref type="bibr" target="#b34">[35]</ref>, and Earth Mover's Distance <ref type="bibr" target="#b52">[53]</ref>, among others <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b31">32]</ref>. We chose histogram intersection <ref type="bibr" target="#b60">[61]</ref> as the metric of choice, because it is fast to compute and is reasonably insensitive to changes in precision, as well as the number of bins. The intersection distance between two histograms H 1 and H 2 is defined as e(H 1 , H 2 ) = 1 − ∑ i min (H 1 (i), H 2 (i)) (the sum is over all bins i). Every histogram is normalized by dividing the value in each bin by the total number of samples. We decided that the error metric should take into account both the histogram shapes and the range of values, and we clamped the range of values in reconstructed functions to that of the original function, so that corresponding histogram bins, i.e., H 1 (i) and H 2 (i), share the same range.</p><p>As before, for each data set, we use Algorithm 1 to compute an S hist-opt stream, optimized for histogram error, and then construct an S hist-sig from its signature. We plot the error curves for all relevant streams using the Intersection error metric (compare <ref type="figure" target="#fig_10">Fig. 10</ref>). We use 64 for the number of bins but note that there exist no meaningful differences across a wide range of number of bins (from 64 to 512) in our experiments. In all cases, the group consisting of S bit , S lvl , and S mag underperforms the other group by a large margin. S mag performs poorly, because it ignores regions of smooth variations, which nevertheless count toward the distribution. S lvl generally outperforms S bit at low bit rates, although there are several crossover points between the two curves. As can be seen in <ref type="figure" target="#fig_0">Fig. 12</ref>, S lvl outperforms S bit when leading zero packets are present, because increasing resolution does not help as much as increasing precision. This is because the histogram is oblivious to spatial locations of samples (which require resolution to resolve) but is sensitive to sample values (which require precision). However, when leading zero packets are removed, S bit benefits significantly more than S lvl does (for the same reason explained in Section 4.1), resulting in the observed crossovers.</p><p>In the latter group, the performances of S wav and S hist-sig (and even S hist-opt ) differ by a negligible amount. This observation is confirmed in <ref type="figure">Fig. 11</ref>, where we plot various histograms, reconstructed at 0.3 bps, for the boiler data set. The histograms produced by S wav and S hist-sig have approximately the same shape and are the closest to the reference histogram. The next best histogram is produced by S lvl , followed by the one produced by S bit , and finally S mag . These results suggest that histogram computation benefits from a bit ordering that combines both resolution and precision, with a strong bias toward precision.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Isosurface Extraction</head><p>Studying isosurfaces of a given function is an essential task in many visualization and analysis pipelines, as they can highlight features of interest. For measuring error between isosurfaces, we have found that the commonly used Hausdorff distance does not work well in our case, because two very different reconstructed surfaces may share the same Hausdorff distance to the reference. More sophisticated metrics exist, focusing on different characteristics such as geometric <ref type="bibr" target="#b19">[20]</ref> and topological <ref type="bibr" target="#b18">[19]</ref> properties, but they assume the surface has certain properties. Since isosurfaces partition the domain into "inside" and "outside" regions, we opt for a simpler error metric that assumes nothing about the shape of the isosurfaces, but simply counts misclassified voxels. This metric differs from comparing histograms with two bins in that we care about the spatial position and not just voxel counts.  Plots are truncated to highlight differences without hiding important trends. In general, in terms of error, S hist-opt ≈ S hist-sig ≈ S wav &lt; S lvl , S bit , S mag . The erratic behavior at the beginning for kingsnake is likely due to the data being too noisy. The especially poor performances of S bit for boiler and foam are due to the "shifting" effect explained in Section 4.2.1. Crossover points between S bit and S lvl are explained in <ref type="figure" target="#fig_0">Fig. 12</ref>.  <ref type="figure">Fig. 11</ref>: Histograms of the boiler data set, reconstructed at 0.3 bps. S lvl , S wav , and S hist-sig produce histograms that share a shape similar to the reference histogram, with most of the peaks and valleys preserved. In contrast, S bit produces a spurious peak not found in the reference. Finally, S mag 's histogram has a widely skewed distribution where too many values fall into the first bin. However, if the error caused by discarding a packet is of subvoxel resolution, such a metric fails to capture the importance of that packet, causing S iso-opt to be ineffective. Therefore, we add the relative difference in surface areas (|A 1 − A 2 |/|A 1 |) to the error term. This additional term is often between [0, 1] and is meant to capture the subvoxel error when the number of misclassified voxels is zero.</p><p>With the error metric defined, we can compute a data-dependent stream optimized for this metric (S iso-opt ) and a stream based on its signature (S iso-sig ) using Algorithm 1 and Algorithm 2. <ref type="figure" target="#fig_1">Fig. 13</ref> compares the performances of these two streams, along with S bit , S lvl , S wav , and S mag . As can be observed, S lvl performs poorly, indicating that isosurface extraction, requires higher levels of resolution compared to histogram computation, as we need to resolve a surface in the spatial domain and not just the range domain of the function. S wav and S iso-sig typically outperform S bit , especially at low bit rates. <ref type="figure">Fig. 14</ref> renders the isosurfaces reconstructed at 0.6 bps for all streams. In terms of the quality of the reconstructed surfaces, S iso-sig ≈ S wav &gt; S bit &gt; S mag &gt; S lvl , which agrees with the plots in <ref type="figure" target="#fig_1">Fig. 13</ref>. For isosurface extraction, S wav appears to be the only stream -among the data-independent ones -that consistently works well in all cases.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">DISCUSSION AND FUTURE WORK</head><p>This work addresses one of the biggest contemporary challenges in visualization: management of the enormous amounts of data. We focus on the trade-off between two prominent dimensions of data reduction, resolution and precision, with respect to common analysis and visualization tasks. To keep the study tractable while not compromising the generalizability of results, we target fundamental analysis and visualization tasks, with an outlook that these can serve as building blocks for more complex and multiparameter tasks in the future. Although the paper focuses on a small set of core tasks, the framework is generic and applies to any well-defined metric, and one future direction is to consider a broader set of tasks.</p><p>We present the first empirical study to demonstrate that combining reduction in precision and resolution can lead to a significant improvement in data quality for the same data budget, and that different tasks might prefer different resolution-versus-precision trade-offs. For example, whereas computing histograms requires high precision, computing derivatives benefits more from higher resolution, and function reconstruction and isosurface extraction require a suitable mix of the two (see <ref type="figure" target="#fig_2">Fig. 15</ref>). We also show that common reduction techniques, e.g., those based on S lvl and S mag , do not perform well when leading zero bits are removed (to simulate entropy compression). For each task, the relative ordering of the rate-distortion curves stays largely the same regardless of data sets, although the gaps among them vary depending on the smoothness and noisiness of the data. Compared to data-independent streams, signature-based streams often perform better because they can adapt to the data. They are also amenable for implementation (unlike S opt ), since a signature is negligibly small and thus can be precomputed and stored during preprocessing. It is also interesting to consider per-block signatures instead of a global one.</p><p>An important question is whether task-and data-dependent streams provide sufficient advantages over purely data-independent streams. In practice, data would be used for multiple, and not necessarily predefined, tasks, and maintaining multiple streams will likely lead to additional overheads. Here, we consider S sig to be the best possible stream that could be realized. Improvements on S sig in the resolution-versus-precision space are likely possible, but they are unlikely to be significant. Given these assumptions and the fact that S sig in most cases provides very similar results to S bit or S wav , the additional effort (and potential overheads) for task-dependent bit orderings is unlikely to be beneficial. This leaves a significant gap between the best data-independent streams and the optimal stream S opt . Our experiments suggest that the majority of these differences can be attributed to spatial adaptivity (see <ref type="figure" target="#fig_2">Fig. 15</ref>). The prototypical example is isosurface computation, where S opt can skip all regions that do not affect any portion of the surface. It may be worthwhile in future work to investigate solutions to spatial adaptivity to significantly improve the performance of data-independent streams. This study can be considered only a first step toward a system of solutions that can optimize storage, network, and I/O bandwidth to suit specific tasks at hand. Ultimately, our results can guide development of new data layouts and file formats for scientific data. S wav appears to provide the best all around performance. However, for a file format additional constraints must be considered, such as disk block sizes, cache coherence, and compression. Furthermore, an ideal format should allow task-dependent data queries even though task-dependent formats will likely be restricted to very specific situations.</p><p>Finally, for fair comparisons, we always reconstruct the data at full resolution using wavelets. However, processing and memory costs are important, and it is likely that adaptive representations would be used in practice <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b24">25,</ref><ref type="bibr" target="#b45">46]</ref>. In these cases the error of a given approximation depends not only on the available information, but also on the data structure and algorithm being used. For example, trilinear interpolation on a coarse grid might produce different results than wavelet reconstruction on the original mesh. There exist solutions where both interpolations are equivalent <ref type="bibr" target="#b66">[67]</ref>, but such solutions have not yet been implemented in standard tools. An important future research direction will be to understand the implications of the results presented here for existing toolchains such as VTK. The data is a 2D slice from diffusivity. Subbands are separated by red lines. The color of each pixel indicates the bit plane at which the corresponding coefficient currently is. Brighter greens correspond to more precision. Both the top and the bottom rows show that S hist-sig allocates more bits to the lower subbands, while S lap-sig prefers to stream bits from higher subbands. S rmse-sig is somewhere in the middle. Both S lap-sig and S lap-opt share the same signature by definition but only S lap-opt provides spatial adaptivity, seen as nonuniform colors in each subband.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A L2 NORMS OF CDF5/3 WAVELET BASIS FUNCTIONS</head><p>The S wav stream requires the norms of CDF5/3 wavelet basis functions, which the following pseudocode computes (in 1D). The upsample function adds a 0 between every two adjacent samples in its argument. The convolve function implements the convolution operation in 1D. When the loop ends, sca norms[n] stores the the norm of the basis functions in the coarsest subband (they all share the same norm), while wav norms[n-1], wav norms[n-2], . . . store the norms of basis functions in subsequent subbands, from coarse to fine. Since we use tensor product wavelets, the norms of basis functions in higher dimensions are simply products of the 1D norms.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 :</head><label>2</label><figDesc>Our data streaming model. The input is a regular grid of floating-point samples; the output is a stream of packets. A packet consists of bits from the same bit plane, from a block of negabinary wavelet coefficients. Different data reduction schemes generate different streams. The wavelet subbands are separated by blue lines in the second image, with the coarsest subband at the top left corner. Quantization and negabinary conversion happen immediately after wavelet transform.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 :</head><label>3</label><figDesc>(a) by level (S lvl ) (b) by bit plane (S bit ) (c) by wavelet norm (S wav ) Visualization of signatures for S lvl , S bit , and S wav in 2D. Each signature is a 10 × 17 image, corresponding to 10 subbands (in 2D) and 17 bit planes. Each (l, b) "cell" contains a unique value from 0 to 169, indicating its "priority" in the stream, and is mapped to a white-blue color scale. S lvl streams bits by resolution (from top to bottom), S bit streams by precision (from left to right), while S wav mixes precision and resolution.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>5 :</head><label>5</label><figDesc>A r (l, b) := A r (l, b) + i 6: end for 7: for each region r do 8: Sort the elements of A r 9:</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head></head><label></label><figDesc>kingsnake<ref type="bibr" target="#b62">[63,</ref> 185]    </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 :</head><label>5</label><figDesc>(a) by level (S lvl ) (b) by bit plane (S bit ) (c) by wavelet norm (S wav ) (d) by magnitude (S mag ) (e) by signature (S sig ) (f) reference Volume renderings of a 64 3 region of plasma data set at 0.2 bps. S lvl captures the background (purple-blue) well, whereas S bit captures the fine details better. S wav combines the strength of both. S sig , however, produces the most accurate rendering in overall.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head></head><label></label><figDesc>(a) by bit plane (S bit ) (b) by wavelet norm (S wav ) Fig. 6: A 1D line extracted from plasma, and reconstructed using S bit and S wav at 0.6 bps. The original data is in orange and the reconstructions are in blue. S bit is worse at capturing the function values (seen as a slight vertical shift) but it is comparable to S wav in capturing the shape of the function, which is important for gradient computation.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head></head><label></label><figDesc>pressure [2.542e−6, 0.536]</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head></head><label></label><figDesc>(a) by level (S lvl ) (b) by bit plane (S bit ) (c) by wavelet norm (S wav ) (d) by magnitude (S mag ) (e) by signature (S grad-sig ) (f) reference</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 8 :Fig. 9 :</head><label>89</label><figDesc>The x-component of the (64 3 ) gradient field of turbulence, reconstructed at 0.3 bps. S bit , S wav , and S grad-sig produce visually comparable gradient fields. pressure [−0.467, 0.432] Laplacian error comparison among streams. The plots are truncated to better highlight differences without discarding important information. The numbers in brackets are the ranges of the original Laplacian fields. In all cases, in terms of error, S lap-opt &lt; S lap-sig &lt; S bit &lt; S wav &lt; S mag &lt; S lvl .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 10 :</head><label>10</label><figDesc>Comparison of histogram errors among streams.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head></head><label></label><figDesc>by bit plane (S bit ) by wavelet norm (S wav ) by signature (S hist-sig )</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Fig. 12 :</head><label>12</label><figDesc>Histogram error curves produced by S bit and S lvl , for boiler, with and without leading zero bits. The vertical axis is in log scale. The error for S bit reduces in a stair-step fashion, where each step corresponds to a new bit plane streamed. S bit benefits significantly more from the removal of leading zero bits (the blue curve shifts more to the left).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head>Fig. 13 :Fig. 14 :</head><label>1314</label><figDesc>Comparison of isosurface errors among streams. Plots are truncated to highlight differences without hiding important trends. The number of cells that each original surface occupies is reported. The trend in error is S iso-opt &lt; S iso-sig ≈ S wav &lt; S bit &lt; S mag &lt;&lt; S lvl .(a) by level (S lvl ) (b) by bit plane (S bit ) (c) by wavelet norm (S wav ) (d) by magnitude (S mag ) (e) by signature (S iso-sig ) (f) reference Rendering of isosurfaces at isovalue of 0.2, at 0.6 bps, for the pressure data set. The surfaces are colored by the x-component of the normal vector at each point. S wav and S iso-sig produce surfaces that are closest to the reference, followed by S bit , S mag , and S lvl .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_14"><head></head><label></label><figDesc>(a) S rmse-sig (b) S lap-sig (c) S lap-opt (d) S hist-sig Fig. 15: (Top) Bit distribution across subbands at 1.6 bps for signature-based streams, and (bottom) corresponding stream signatures.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_15"><head></head><label></label><figDesc>, wav_func = wav_weights sca_norms = [], wav_norms = [] for (l = 0; l &lt; n+1; l = l+1) { sca_norms[l] = norm(sca_func), wav_norms[l] = norm(wav_func) wav_weights = upsample(wav_weights) wav_func = convolve(wav_weights, sca_func) sca_weights = upsample(sca_weights) sca_func = convolve(sca_weights, sca_func) }</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>• Hoang, Klacansky, and Pascucci are with the SCI Institute at the University of Utah, USA. E-mail: {duong, klacansky, pascucci}@sci.utah.edu • Bhatia, Bremer, and Lindstrom are with Lawrence Livemore National Laboratory, USA. E-mail: {hbhatia, bremer5, pl}@llnl.</figDesc><table /><note>gov Manuscript received xx xxx. 201x; accepted xx xxx. 201x. Date of Publication xx xxx. 201x; date of current version xx xxx. 201x. For information on obtaining reprints of this article, please send e-mail to: reprints@ieee.org. Digital Object Identifier: xx.xxxx/TVCG.201x.xxxxxxx</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>[task]-opt task-optimized S [task]-sig by signature / /</figDesc><table><row><cell>Symbol</cell><cell>Name</cell><cell>Data Dependent Task Dependent</cell></row><row><cell>S lvl</cell><cell>by level</cell><cell></cell></row><row><cell>S bit</cell><cell>by bit plane</cell><cell></cell></row><row><cell>S wav</cell><cell>by wavelet norm</cell><cell></cell></row><row><cell>S mag</cell><cell>by magnitude</cell><cell></cell></row><row><cell>S</cell><cell></cell><cell></cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 2 :</head><label>2</label><figDesc>Data sets used in our experiments; all volumes are 64<ref type="bibr" target="#b2">3</ref> . Additional data sets are included in the supplementary material.</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>We thank the reviewers for their valueable comments. Some of the data sets are kindly shared with us by Benjamin Isaac (boiler) and Kristoffer </p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">A methodology for evaluating the impact of data compression on climate simulation data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">H</forename><surname>Baker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">M</forename><surname>Dennis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">N</forename><surname>Levy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Nychka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">A</forename><surname>Mickelson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Edwards</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Vertenstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wegener</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Symposium on High-performance Parallel and Distributed Computing</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="203" to="214" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Lossy volume compression using Tucker truncation and thresholding. The Visual Computer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ballester-Ripoll</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pajarola</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="volume">32</biblScope>
+			<biblScope unit="page" from="1433" to="1446" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Analysis of tensor approximation for compression-domain volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ballester-Ripoll</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Suter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pajarola</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Graphics</title>
+		<imprint>
+			<biblScope unit="volume">47</biblScope>
+			<biblScope unit="issue">C</biblScope>
+			<biblScope unit="page" from="34" to="47" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">State-of-the-art in compressed GPU-based direct volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Balsa Rodríguez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Gobbetti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Iglesias Guitián</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Makhinya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Marton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pajarola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Suter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">33</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="77" to="100" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Local adaptive mesh refinement for shock hydrodynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">J</forename><surname>Berger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Colella</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computational Physics</title>
+		<imprint>
+			<biblScope unit="volume">82</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="64" to="84" />
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">State-of-the-art in GPU-based large-scale volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Beyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="13" to="37" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">On a measure of divergence between two statistical populations defined by their probability distributions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bhattacharyya</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Bulletin of the Calcutta Mathematical Society</title>
+		<imprint>
+			<biblScope unit="volume">35</biblScope>
+			<biblScope unit="page" from="99" to="109" />
+			<date type="published" when="1943" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">The Laplacian pyramid as a compact image code</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Burt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Adelson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Communications</title>
+		<imprint>
+			<biblScope unit="volume">31</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="532" to="540" />
+			<date type="published" when="1983" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Exploring the feasibility of lossy compression for PDE simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Calhoun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Cappello</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">N</forename><surname>Olson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Snir</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">D</forename><surname>Gropp</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The International Journal of High Performance Computing Applications</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Quantifying the coding performance of zerotrees of wavelet coefficients: Degree-k zerotree</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Cho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">A</forename><surname>Pearlman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Signal Processing</title>
+		<imprint>
+			<biblScope unit="volume">55</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="2425" to="2431" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">SBHP-a low complexity wavelet coder</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Chrysafis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Said</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Drukarev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Islam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">A</forename><surname>Pearlman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE International Conference on Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="page" from="2035" to="2038" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">The multiresolution toolkit: Progressive access for regular gridded data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Clyne</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization, Imaging, and Image Processing</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="152" to="157" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Interactive desktop analysis of high resolution simulations: Application to turbulent plume dynamics and current sheet formation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Clyne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Mininni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Norton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Rast</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">New Journal of Physics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page">301</biblScope>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Biorthogonal bases of compactly supported wavelets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Daubechies</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Feauveau</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications on Pure and Applied Mathematics</title>
+		<imprint>
+			<biblScope unit="volume">45</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="485" to="560" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">The mixing transition in Rayleigh-Taylor instability</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">W</forename><surname>Cook</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Cabot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">L</forename><surname>Miller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Fluid Mechanics</title>
+		<imprint>
+			<biblScope unit="volume">511</biblScope>
+			<biblScope unit="page" from="333" to="362" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Gigavoxels: Ray-guided streaming for efficient and detailed voxel rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Crassin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Neyret</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lefebvre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Eisemann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH Symposium on Interactive 3D Graphics and Games</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="15" to="22" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Turbulence simulations on O(10 4 ) processors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">A</forename><surname>Donzis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Yeung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Pekurovsky</surname></persName>
+		</author>
+		<editor>TeraGrid</editor>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Verifying volume rendering using discretization error analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Etiene</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jönsson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ropinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Scheidegger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">L D</forename><surname>Comba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">G</forename><surname>Nonato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Kirby</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Ynnerman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="140" to="154" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Topology verification for isosurface extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Etiene</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">G</forename><surname>Nonato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Scheidegger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Tienry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">J</forename><surname>Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Kirby</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="952" to="965" />
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Verifiable visualization for isosurface extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Etiene</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Scheidegger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">G</forename><surname>Nonato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Kirby</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1227" to="1234" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Large data visualization on distributed memory multi-GPU clusters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Fogal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Childs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Shankar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">D</forename><surname>Bergeron</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hatcher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">High Performance Graphics</title>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="57" to="66" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">An Analysis of Scalable GPU-Based Ray-Guided Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Fogal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Schiewe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large-Scale Data Analysis and Visualization</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Transform coding for hardware-accelerated volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Fout</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1600" to="1607" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">COVRA: A compression-domain output-sensitive volume rendering architecture based on a sparse representation of voxel blocks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Gobbetti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Iglesias Guitián</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Marton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">31</biblScope>
+			<biblScope unit="issue">34</biblScope>
+			<biblScope unit="page" from="1315" to="1324" />
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Iglesias Guitián. A single-pass GPU ray casting framework for interactive out-of-core rendering of massive volumetric datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Gobbetti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Marton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Visual Computer</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">7</biblScope>
+			<biblScope unit="page" from="797" to="806" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">MLOC: Multi-level layout optimization framework for compressed scientific data exploration with heterogeneous access patterns</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Gong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Rogers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Jenkins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Kolla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ethier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Klasky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">F</forename><surname>Samatova</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Parallel Processing</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="239" to="248" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">The deep scaly project</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Gosselin-Ildari</surname></persName>
+		</author>
+		<ptr target="http://digimorph.org/specimens/Lampropeltis_getula/adult/(accessedon" />
+	</analytic>
+	<monogr>
+		<title level="m">digital morphology</title>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="volume">23</biblScope>
+		</imprint>
+	</monogr>
+	<note>lampropeltis getula&quot; (on-line</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Formation of hard power-laws in the energetic particle spectra resulting from relativistic magnetic reconnection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Daughton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y.-H</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Physical Review Letters</title>
+		<imprint>
+			<biblScope unit="volume">113</biblScope>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Advanced techniques for high-quality multi-resolution volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Graphics</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="51" to="58" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Interactive rendering of large volume data sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wand</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gonser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="53" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Interactive volume exploration of petascale microscopy data streams using a visualization-driven virtual memory approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Beyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">K</forename><surname>Jeong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2285" to="2294" />
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Neue begründung der theorie quadratischer formen von unendlichvielen veränderlichen</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Hellinger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal für die reine und angewandte Mathematik</title>
+		<imprint>
+			<biblScope unit="volume">136</biblScope>
+			<biblScope unit="page" from="210" to="271" />
+			<date type="published" when="1909" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Wavelet-based 3D compression scheme for interactive visualization of very large volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Ihm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Park</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="3" to="15" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Fast and effective lossy compression algorithms for scientific datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Iverson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Kamath</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Karypis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Parallel Processing</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="843" to="856" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">On information and sufficiency</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kullback</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Leibler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Annals of Mathematical Statistics</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="79" to="86" />
+			<date type="published" when="1951" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Compressing the incompressible with ISABELA: In-situ reduction of spatio-temporal data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lakshminarasimhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ethier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Klasky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Latham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">F</forename><surname>Samatova</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International European Conference on Parallel and Distributed Computing</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="366" to="379" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Multiresolution techniques for interactive texture-based volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Lamar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="355" to="361" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Assessing the effects of data compression in simulations using physically motivated metrics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">E</forename><surname>Laney</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Langer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Weber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wegener</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference for High Performance Computing, Networking, Storage and Analysis</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Evaluating the efficacy of wavelet configurations on turbulent-flow data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Gruchalla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Potter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Clyne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Childs</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="81" to="89" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Data reduction techniques for simulation, visualization and data analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Marsaglia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Garth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Clyne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Childs</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="422" to="447" />
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Fixed-rate compressed floating-point arrays</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2674" to="2683" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Reducing data movement using adaptive-rate computing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<ptr target="https://computation.llnl.gov/sites/default/files/public//llnl-post-728998.pdf" />
+	</analytic>
+	<monogr>
+		<title level="j">June</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Fast and efficient compression of floating-point data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1245" to="1250" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Transfer function based adaptive decompression for volume rendering of large medical data sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ljung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Lundstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Ynnerman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Museth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Volume Visualization and Graphics</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="25" to="32" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">A multiscale comparison of stochastic open-cell aluminum foam produced via conventional and additive-manufacturing routes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">E</forename><surname>Matheson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">K</forename><surname>Cross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">M</forename><surname>Nowell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">D</forename><surname>Spear</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Materials Science and Engineering: A</title>
+		<imprint>
+			<biblScope unit="volume">707</biblScope>
+			<biblScope unit="page" from="181" to="192" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">VDB: High-resolution sparse volumes with dynamic topology</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Museth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transaction on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">32</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1" to="22" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Rapid high quality compression of volume data for visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">G</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Saupe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="49" to="57" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Vector quantization for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Hesselink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Workshop on Volume Visualization</title>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="69" to="74" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">Global static indexing for real-time exploration of very large regular grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">J</forename><surname>Frank</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM/IEEE Supercomputing</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="45" to="45" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">Efficient, low-complexity image coding with a set-partitioning embedded block coder</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">A</forename><surname>Pearlman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Islam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Nagaraj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Said</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Circuits and Systems for Video Technology</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="page" from="1219" to="1235" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Interactive exploration of large remote micro-CT scans</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Prohaska</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Hutanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kahler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">C</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="345" to="352" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">Visualization of big SPH simulations via compressed octree grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Reichl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Treib</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE International Conference on Big Data</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="71" to="78" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<analytic>
+		<title level="a" type="main">A metric for distributions with applications to image databases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Rubner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Tomasi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">J</forename><surname>Guibas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Computer Vision</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="59" to="66" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<analytic>
+		<title level="a" type="main">A new, fast, and efficient image codec based on set partitioning in hierarchical trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Said</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">A</forename><surname>Pearlman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Circuits and Systems for Video Technology</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="243" to="250" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<analytic>
+		<title level="a" type="main">The quadtree and related hierarchical data structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Samet</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computing Surveys</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="187" to="260" />
+			<date type="published" when="1984" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b55">
+	<analytic>
+		<title level="a" type="main">Compression domain volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="293" to="300" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b56">
+	<analytic>
+		<title level="a" type="main">Table for estimating the goodness of fit of empirical distributions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Smirnov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Annals of Mathematical Statistics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="279" to="281" />
+			<date type="published" when="1948" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b57">
+	<analytic>
+		<title level="a" type="main">Oxy-coal power boiler simulation and validation through extreme computing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Thornock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Isaac</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Numerical Combustion</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b58">
+	<analytic>
+		<title level="a" type="main">Interactive multiscale tensor reconstruction for multiresolution volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Suter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A I</forename><surname>Guitian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Marton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Agus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Elsener</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">P E</forename><surname>Zollikofer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gopi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Gobbetti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pajarola</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2135" to="2143" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b59">
+	<analytic>
+		<title level="a" type="main">Tamresh -tensor approximation multiresolution hierarchy for interactive volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Suter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Makhynia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pajarola</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EG/VGTC Conference on Visualization</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="151" to="160" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b60">
+	<analytic>
+		<title level="a" type="main">Color indexing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">J</forename><surname>Swain</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">H</forename><surname>Ballard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal of Computer Vision</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="11" to="32" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b61">
+	<analytic>
+		<title level="a" type="main">Significantly improving lossy compression for scientific data sets based on multidimensional prediction and error-controlled quantization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Tao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Di</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Cappello</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE International Parallel and Distributed Processing Symposium</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="1129" to="1139" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b62">
+	<monogr>
+		<title level="m" type="main">Z-checker: A framework for assessing lossy compression of scientific data. The International Journal of High Performance Computing Applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Tao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Di</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Cappello</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b63">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Taubman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">W</forename><surname>Marcellin</surname></persName>
+		</author>
+		<title level="m">JPEG 2000: Image Compression Fundamentals, Standards and Practice</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b64">
+	<analytic>
+		<title level="a" type="main">Turbulence visualization at the terascale on desktop PCs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Treib</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bürger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Reichl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Meneveau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Szalay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2169" to="2177" />
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b65">
+	<analytic>
+		<title level="a" type="main">A statistical approach to volume data quality assessment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="590" to="602" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b66">
+	<analytic>
+		<title level="a" type="main">Adaptive multilinear tensor product wavelets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Weiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="985" to="994" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b67">
+	<analytic>
+		<title level="a" type="main">A multiresolution framework for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Volume Visualization</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="51" to="58" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b68">
+	<analytic>
+		<title level="a" type="main">In-situ sampling of a large-scale particle simulation for interactive visualization and analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Figg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wendelberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Habib</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Heitmann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EG/VGTC Conference on Visualization</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="1151" to="1160" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b69">
+	<analytic>
+		<title level="a" type="main">Revisiting wavelet compression for large-scale climate data using JPEG 2000 and ensuring data precision</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Mniszewski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Brislawn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Demarle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="31" to="38" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

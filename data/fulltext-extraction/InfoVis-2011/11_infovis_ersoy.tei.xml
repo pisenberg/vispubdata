@@ -1,0 +1,915 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Skeleton-Based Edge Bundling for Graph Visualization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ozan</forename><surname>Ersoy</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christophe</forename><surname>Hurter</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Fernando</forename><forename type="middle">V</forename><surname>Paulovich</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gabriel</forename><surname>Cantareira</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandru</forename><surname>Telea</surname></persName>
+						</author>
+						<title level="a" type="main">Skeleton-Based Edge Bundling for Graph Visualization</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T19:01+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Graph layouts</term>
+					<term>edge bundles</term>
+					<term>image-based information visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>In this paper, we present a novel approach for constructing bundled layouts of general graphs. As layout cues for bundles, we use medial axes, or skeletons, of edges which are similar in terms of position information. We combine edge clustering, distance fields, and 2D skeletonization to construct progressively bundled layouts for general graphs by iteratively attracting edges towards the centerlines of level sets of their distance fields. Apart from clustering, our entire pipeline is image-based with an efficient implementation in graphics hardware. Besides speed and implementation simplicity, our method allows explicit control of the emphasis on structure of the bundled layout, i.e. the creation of strongly branching (organic-like) or smooth bundles. We demonstrate our method on several large real-world graphs.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Graphs are among the most important data structures in information visualization, and are present in many application domains including software comprehension, geovisualization, analysis of traffic networks, and social network exploration. Classical visualization metaphors for general graphs include node-link diagrams <ref type="bibr" target="#b16">[17]</ref>, matrix plots <ref type="bibr" target="#b33">[34]</ref>, and graph splatting <ref type="bibr" target="#b34">[35]</ref>. For specific types of graphs, such as hierarchies (trees), additional methods exist such as treemaps.</p><p>As the number of nodes and edges of a graph increases, node-link graph visualizations become challenged by clutter, i.e. unorganized groups of nodes and edges onto small screen areas. To reduce clutter, and also address use-cases which focus on simplified depiction of large graphs with an emphasis on graph structure, several methods have emerged. Specifically, bundling methods are an interesting alternative for classical node-link metaphors. Bundling typically starts with a given set of node positions, either present in the input data, or computed using a layout algorithm. Edges found to be close in terms of graph structure, geometric position of their endpoints, data attributes, or combinations thereof, are drawn as tightly bundled curves. This trades clutter for overdraw and produces images which are easier to understand and/or better emphasize the graph structure. Edge bundles can be rendered using various effects such as blending or shading <ref type="bibr" target="#b14">[15,</ref><ref type="bibr" target="#b21">22,</ref><ref type="bibr" target="#b31">32]</ref>. Edge bundling algorithms exist for both compound (hierarchy-and-association) <ref type="bibr" target="#b13">[14]</ref> and general graphs <ref type="bibr" target="#b14">[15,</ref><ref type="bibr" target="#b6">7,</ref><ref type="bibr" target="#b23">24,</ref><ref type="bibr" target="#b21">22]</ref>.</p><p>In this paper, we present a novel approach for constructing edge bundles for general graphs. We adapt a recent result which computes centerlines, or skeletons, of groups of edges <ref type="bibr" target="#b31">[32]</ref> and use the skeleton for actual edge bundling rather than shading only. In detail, we combine edge clustering, distance fields, and 2D skeletonization to construct bundled layouts by iteratively attracting edges towards the centerlines of level sets of their distance fields. Apart from clustering, our pipeline is image-based, which allows an efficient implementation in graphics hardware. Besides speed, our method allows users to explicitly control the emphasis on bundle structure, i.e. create strongly branching (organic-like) or smooth bundles which always have a tree structure. This type of control can be helpful in applications where one is interested to see how several edges 'join' together into, or split from, main structures, for example when exploring the structure of a network. Instances hereof are examining the local hierarchy of traffic connections in a road or airline network, or identifying the number and size of branches (fan in/out patterns) in software structures. The structure of this paper is as follows. In Section 2, we review related work on edge bundles. Section 3 presents our bundling algorithm. Section 4 details implementation. Section 5 presents applications on large real-world graphs. Section 6 discusses our method. Section 7 concludes the paper and outlines future work directions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Related work in reducing clutter in large graph visualizations can be organized as follows.</p><p>Graph simplification techniques reduce clutter by simplifying the graph prior to layout e.g. by grouping strongly connected nodes and edges into so-called metanodes, followed by using classical nodelink layouts for visualization. Several simplification methods exist, e.g. <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b1">2]</ref>. Graph simplification is attractive as it reuses existing nodelink layouts out of the box, but can be sensitive to simplification parameters, which further depend on the type of graph being processed. It does not allow a continuous treatment of the graph: the simplification events yield a set of discrete graphs rather than a smooth exploration scale <ref type="bibr" target="#b21">[22]</ref>. Also, simplification typically changes node positions (collapse to metanodes), which can be undesirable e.g. when positions encode information.</p><p>Edge bundling techniques trade clutter for overdraw, by routing geometrically and semantically related edges along similar paths. Further details on clutter causes and reduction strategies in information visualization are given in <ref type="bibr" target="#b10">[11]</ref>. Bundling can be seen as condensing the edges' angle distribution along a reduced set of directions and also sharpening the local edge spatial density, by making it high at bundle locations and low elsewhere. This improves readability in terms of finding groups of nodes related to each other by groups of edges (the bundles). Bundling increases the amount of white space between bundles, which makes their visual separation easier.</p><p>Dickerson et al. merge edges by reducing non-planar graphs to planar ones <ref type="bibr" target="#b8">[9]</ref>. Holten pioneered edge bundling under this name for compound (hierarchy-and-association) graphs by routing edges along the hierarchy layout using B-splines <ref type="bibr" target="#b13">[14]</ref>. Gansner and Koren bundle edges in a circular node layout similar to <ref type="bibr" target="#b13">[14]</ref> using area optimization metrics <ref type="bibr" target="#b12">[13]</ref>. Dwyer et al. use curved edges in force-directed layouts to minimize crossings, which implicitly creates bundle-like shapes <ref type="bibr" target="#b9">[10]</ref>. Force-directed edge bundling (FDEB) creates bundles by attracting control points on edges close to each other <ref type="bibr" target="#b14">[15]</ref>. FDEB can be significantly optimized using multilevel clustering techniques such as the MINGLE method <ref type="bibr" target="#b11">[12]</ref>. Flow maps produce a binary clustering of nodes in a directed graph representing flows to route curved edges along <ref type="bibr" target="#b23">[24]</ref>. Control meshes are used by several authors to route curved edges, e.g. <ref type="bibr" target="#b25">[26,</ref><ref type="bibr" target="#b35">36]</ref>; a Delaunay-based extension called geometricbased edge bundling (GBEB) <ref type="bibr" target="#b6">[7]</ref>; and 'winding roads' (WR) which use boundaries of Voronoi diagrams for 2D <ref type="bibr" target="#b21">[22]</ref> and 3D <ref type="bibr" target="#b20">[21]</ref>  interpolation along edges for edge directions <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b6">7]</ref>; transparency or hue for local edge density, i.e. the importance of a bundle, or for edge lengths <ref type="bibr" target="#b21">[22]</ref>. Whole bundles can be drawn as compact shapes whose structure is emphasized by shaded cushions <ref type="bibr" target="#b31">[32]</ref>. Graph splatting visualizes node-link diagrams as continuous scalar fields using color and/or height maps <ref type="bibr" target="#b34">[35,</ref><ref type="bibr" target="#b15">16]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">ALGORITHM</head><p>The inspiration behind our method relates to a well-known fact in shape analysis: given a 2D shape, its skeleton is a curve locally centered with respect to the shape's boundary <ref type="bibr" target="#b5">[6]</ref>. Skeleton branches capture well the topology of elongated shapes <ref type="bibr" target="#b19">[20,</ref><ref type="bibr" target="#b28">29]</ref>. Hence, if we could create such shapes from sets of edges in a graph, their skeletons could be suitable locations for bundling. To this end, we propose a skeletonbased edge bundling method, as follows (see <ref type="figure">Fig. 1</ref>):</p><p>1. we cluster edges into groups, or clusters, C i which have strong geometrical and optionally attribute-based similarity;</p><p>2. for each cluster C, we compute a thin shape Ω surrounding its edges using a distance-based method;</p><p>3. for each shape Ω, we compute its skeleton S Ω and feature transform of the skeleton FT S ;</p><p>4. for each cluster C, we attract its edges towards S Ω using FT S ;</p><p>5. we repeat the process from step 1 or step 2 until the desired bundling level is reached;</p><p>6. we perform a final smoothing and next render the graph using a cushion-like technique to help understanding bundle overlaps.</p><p>We start with an unbundled graph G = (V, E) with nodes V and edges E. We assume that we have node positions v i ∈ R 2 , either from input data, or from laying out G with any existing method e.g. spring embedders <ref type="bibr" target="#b16">[17]</ref>. Edges e i ∈ E are sampled as a set of points connected by linear interpolation; other schemes such as splines work equally well. The start and end points of an edge, denoted e s i and e e i respectively, are the positions of the nodes the edge connects. Edge points may come from input data, e.g. when we bundle a graph which has explicit edge geometry. If no edge positions are available, we initialize the edge points by uniformly sampling the line segments (e s i , e e i ) with some small step. Our bundling algorithm iteratively updates these edge points. Its output is a bundled layout of G which keeps node positions intact and adjusts the edge points to represent bundled edges.</p><p>The six steps of our method are explained next.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Clustering</head><p>To obtain elongated 2D shapes, needed for our bundling (described next in Sec. 3.3), we first cluster edges using a similarity metric which groups same-direction, spatially close, edges, using the clustering method described in <ref type="bibr" target="#b31">[32]</ref>. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Shape construction</head><p>Clustering delivers sets of spatially close edges, i.e., the bundling candidates. Given such a cluster C = {e i }, we consider its drawing ∆(C) ⊂ R 2 , e.g. the set of polylines corresponding to its edges e i if we use the default linear edge interpolation. We construct a compact 2D shape Ω ⊂ R 2 surrounding ∆(C), as follows (see also <ref type="figure" target="#fig_0">Fig. 2</ref>). Given any shape Φ ⊂ R 2 , we first define its distance transform DT Φ : Given a distance value ω, we next define our shape Ω as</p><formula xml:id="formula_0">R 2 → R + as DT Φ (x ∈ R 2 ) = min y∈Φ x − y (2)</formula><formula xml:id="formula_1">Ω = {x ∈ R 2 |DT ∆(C) (x) ≤ ω} (3)</formula><p>where DT ∆(C) is the distance transform of the drawing ∆(C) of C's edges. The shape's boundary ∂ Ω is the level set of value ω of DT ∆(C) (see <ref type="figure" target="#fig_0">Fig. 2 a)</ref>. This is equivalent to inflating ∆(C) with a distance ω in all directions. In practice, we set ω to a small fraction (e.g. 0.05) of the bounding box of G. Efficient computation of distance transforms is detailed further in Sec. 4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Shape creation</head><p>Given a shape Ω computed from an edge cluster drawing as outlined above, we next compute its skeleton S Ω defined as</p><formula xml:id="formula_2">S Ω = {x ∈ Ω|∃y, z ∈ ∂ Ω, y = z, x − y = x − z = DT ∂ Ω (x)} (4)</formula><p>i.e. the set of points in Ω which admit at least two different so-called feature points on ∂ Ω, at distance equal to the distance transform of ∂ Ω <ref type="figure" target="#fig_0">(Fig. 2 a)</ref>. Given S, we now compute its so-called one-point feature transform</p><formula xml:id="formula_3">FT S : R 2 → R 2 , defined as FT S (x) = {y ∈ S|DT S (x) = x − y }<label>(5)</label></formula><p>i.e. one of the feature points of x.  <ref type="bibr" target="#b32">[33]</ref>. The skeleton is the identity set of FT S , i.e. ∀x ∈ S, FT S (x) = x. Note that, in Eqn. 5, we use the distance transform DT S of the skeleton S, and not the distance transform DT ∂ Ω of the shape. Also, note that the one-point feature transform is simpler than the so-called full feature transform which records all feature points of x <ref type="bibr" target="#b5">[6]</ref>. In practice, we compute distance transforms, one-point feature transforms, and skeletons in discrete image (screen) space. This allows efficient implementation (see Sec. 4) and also further processing of the skeleton for edge bundling, as described next.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Edge attraction</head><p>Using the skeleton S and its feature transform FT S , we now bundle the edges e i ∈ C by attracting a discrete representation of each edge towards S. This idea is based on the following observations. First, given the way we combine clustering and edge bundling, a cluster contains only edges having close trajectories; the reasons for this are detailed in Sec. 3.5. By construction, the skeleton S of a cluster is locally centered with respect to the (similar) edges in that cluster, i.e. a good candidate for the position to bundle towards. Secondly, FT S (x) − x gives, for each point x ∈ R 2 , the direction vector from x to the closest skeleton point to x, i.e. the direction to bundle towards. We use these observations to bundle e i as follows.</p><p>First, we compute all branch termination points, or tips, T = {t i } of S. Given that S is represented in image space, we use a simple and efficient 3 × 3 pixel template-based method <ref type="bibr" target="#b18">[19]</ref> to locate t i . Next, we compute all skeleton paths Π = {π i ⊂ S} between any two tips t i and t j . The paths are represented as pixel chains and are found using depth-first search from each t i on the skeleton pixel-adjacencygraph. We next use these paths to robustly attract the edges towards the skeleton.</p><p>For each e i ∈ C with start and end points e s i and e e i respectively, we select a skeleton path π(e i ) ∈ Π so that {FT S (e s i ), FT S (e e i )} ⊂ π(e i ), i.e. a path passing through the feature points of both edge end points. If there are several such paths in Π, we pick any one of them, the particular choice having no influence on the algorithm.</p><p>We now use π(e i ) to bundle e i along the skeleton, as follows. Consider a point x ∈ e i located at arc-length distance λ (x) from e s i . We move x towards FT S (x) with a distance which is large if x is far away from FT S (x) and/or close to the middle of the edge:</p><formula xml:id="formula_4">x new = 1 − αφ λ (x) λ (e e i )</formula><p>x</p><formula xml:id="formula_5">+ αφ λ (x) λ (e e i ) FT S (x)<label>(7)</label></formula><p>Here, α ∈ [0, 1] controls the tightness of bundling: Large values bring the edge closer to the skeleton, whereas small values bundle less. The function φ :</p><formula xml:id="formula_6">[0, 1] → [0, 1] defined as φ (t) = [2 min(t, 1 − t)] K<label>(8)</label></formula><p>modulates the motion amount so that the edge's end points e s i and e e i do not move at all, points close to these end points move less, and points around the middle of the edge move most. This produces the curved edge profile we require for bundling, and also keeps edge end points fixed to their node locations. The parameter K controls how smoothly edges twist, or curve, from their nodes to reach their bundled location. Higher K values produce more twists, and low K values produce smoother twists. Values of K ∈ <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b5">6]</ref> give very similar results to known bundling methods e.g. <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b14">15,</ref><ref type="bibr" target="#b21">22]</ref>. Also, for any x ∈ S, FT S (x) = x (Sec. 3.3), so for such points we have x new = x (Eqn. 7), i.e. points which have reached the skeleton, the extreme bundling location, do not move any longer. Equation 7 is equivalent to advecting edge points x in the gradient field −∇DT S . Distance transforms of any shape except a straight line have div ∇DT S = 0 <ref type="bibr" target="#b27">[28]</ref>. Hence, our attraction typically shortens and/or lengthens edges, since these get immediately curved after one application of Eqn. 7. We compute the edge points x used in Eqn. 7 by uniformly sampling edges in arc-length space with a distance equal to a small fixed fraction (0.05) of the layout's bounding box. This removes points where the edge contracts (div ∇DT S &lt; 0) and inserts points where the edge dilates (div ∇DT S &gt; 0) as needed, thus ensuring a uniform edge sampling density.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4.1">Attraction singularities</head><p>As explained, Eqn. 7 is equivalent to advecting x in the field −∇DT S . This field is smooth everywhere in R 2 except on points x where FT f ull S (x) &gt; 1, i.e. points located on the skeleton of the skeleton's complement, or Voronoi diagram of S, S = S R 2 \S . Intuitively, S corresponds in <ref type="figure" target="#fig_0">Fig. 2</ref> c to color discontinuities. Although this singularity set is small, i.e. a set of curves in 2D, we need special treatment for such situations. If we were to directly advect a curve using Eqn. 7 with no further precaution, singularities would appear where the curve crosses S, since ∇DT S has a high absolute divergence, i.e. changes direction rapidly, in such areas <ref type="bibr" target="#b27">[28]</ref>. Such singularities appear as sharp kinks in the curve, which defeats our purpose of creating smooth bundles. For example, attracting the blue edge e in <ref type="figure" target="#fig_3">Fig. 3</ref> a towards the Y-shaped skeleton yields the red line which shows two kinks, where e crosses S (dotted line) at points a and b. The problem is made only more complex by the fact that we use a sampled edge representation, so x may be close, but not on, S.</p><p>We solve such situations by an implicit regularization of the advection field determined by FT S . First, we enforce the constraint that points x ∈ e can only be advected to points on the edge's path π(e). This ensures that, during advection, parts of e cannot be attracted towards other skeleton branches than the set of contiguous branches which form π. Intuitively, Eqn. 7 should not pull e towards nonconnected skeleton branches. We achieve this constraint as follows (see <ref type="figure" target="#fig_3">Fig. 3 b)</ref>. For each x ∈ e, we evaluate its FT S (x). If FT S (x) ∈ π(e), we attract the 'regular' point x using Eqn. 7, else we mark x as special case. Special points along e (yellow in <ref type="figure" target="#fig_3">Fig. 3 b)</ref> form compact sets σ i , which are preceded and followed on e by regular points σ start i and σ end i respectively, whose feature points belong to π(e) by construction. We next map each special point x to a corresponding point x map on π(e) using arc-length interpolation along both σ i and their corresponding path fragments  . This ensures that both special and regular points are attracted to the same path π(e), and thus, since π(e) is a compact curve, that the motion of e is smooth.</p><formula xml:id="formula_7">[FT S (σ start i ), FT S (σ end i )] ⊂ S (dark green in</formula><p>However, the above regularization does not eliminate all sharp kinks in the advection of an edge: Consecutive points of the edge can 'see' points on the same skeleton path π, and still be separated by a singularity (see point a in <ref type="figure" target="#fig_3">Fig. 3 c)</ref>. As explained, advecting such points a using Eqn. 7 would produce undesirable bends. Since the featurepoint of a is located on the same path π(e) as those of a's neighbors on the edge, we cannot find a using the path-based detection criterion outlined above. We solve this problem by using an angle-based criterion: Given our discrete edge representation e = {x i }, we test if the feature vectors FT S (x i ) − x i and FT S (x i+1 ) − x i+1 of consecutive edge sample points x i and x i+1 form a large angle β . If β exceeds a user-defined value β max , we mark x i as a special point and treat it as explained earlier for the path-based detection criterion. In practice, β max = π/4 has given good results for all graphs we tested. The overall effect is that sharp edge angles are eliminated and edges are advected smoothly towards the skeleton <ref type="figure" target="#fig_3">(Fig. 3 d)</ref>. As a more complex example of our regularization, <ref type="figure" target="#fig_0">Fig. 2 d</ref> shows the bundling of a set of edges (green) close to the skeleton in <ref type="figure" target="#fig_0">Fig. 2 a.</ref> Our angle criterion is a one-dimensional version of the divergencebased Hamilton-Jacobi skeleton detector of <ref type="bibr" target="#b27">[28]</ref>. It subsumes the pathbased criterion. In theory, it would be sufficient to use the angle criterion to achieve smooth motion. However, the path-based criterion is more numerically robust as it involves no angle estimation or thresholding. Since its application is equally fast (we need paths anyway to regularize the attraction in both cases), we use it when applicable to reduce any chance for numerical instabilities.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Iterative algorithm</head><p>For a given graph layout, one application of the clustering, shape construction, and edge attraction steps outlined above yields a new layout whose edges are closer to their respective cluster skeletons. To achieve full bundling, we repeat this process iteratively until a user-specified number of iterations I is reached. More iterations yield tighter bundled edges. This process is strictly monotonic, i.e. edges can only get closer to their clusters' skeletons (hence to each other) by construction, as explained below (see also <ref type="figure" target="#fig_5">Fig. 4)</ref>.</p><p>First, let us explain why clustering needs to be repeated during the iterative process. For the first clustering, we use a high similarity threshold δ in order to guarantee elongated, thin, clusters regardless of the edge spatial distribution in the input graph (Sec. 3.1). This is essential for getting the initial bundling under way. Indeed, if we had weakly coherent clusters, these would contain edges that intersect each other at large angles, hence the shapes surrounding them, and their skeletons, would be meaningless as bundling cues. For subsequent iterations, we decrease δ and recluster the graph each few (3to5) iterations. This produces fewer, increasingly larger, clusters, which allows fine-scale bundles to group into coarse-scale ones. However, these large clusters are locally elongated, since they contain already partially bundled edges. Hence, coarsening the clustering will not group unrelated edges. The overall effect is bottom-up bundling: First, the closest edges get bundled, yielding fine-scale local bundles, followed by increasingly coarser-scale bundle merging.</p><p>Similarly, we decrease α during the iterative process. Initial large α values yield strongly coherent initial bundles, needed for clustering stability as explained above. Subsequent relaxed α values allow edges in more complex, larger, bundles to adjust themselves. Concrete values for δ and α are given in Sec. 4.2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6">Postprocessing</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6.1">Relaxation and smoothing</head><p>The output of our bundling algorithm has a strong branch-like structure (see e.g. <ref type="figure" target="#fig_7">Fig. 6 f)</ref>. This is the inherent effect of using skeletons as bundling cues. Indeed, skeleton branches asymptotically meet at large angles <ref type="bibr" target="#b24">[25]</ref>. This visual signature of our bundles may be desirable for use-cases where one is interested to see the branching structure of a graph. However, often the fact that two bundles join at some point in a thicker bundle is irrelevant, and should not be over-emphasized. We offer this possibility by performing a final postprocessing on the bundled layout. Here, two variations are proposed. First, we apply a simple Laplacian smoothing filter along the edges γ s times, much like <ref type="bibr" target="#b14">[15]</ref>. This removes sharp bundle turns, which by construction appear precisely, and only, where skeleton branches meet. Indeed, as known from medial axis theory, a skeleton branch is always a smooth curve; the only curvature discontinuities along a skeleton appear at branch junctions <ref type="bibr" target="#b24">[25]</ref>. A second postprocessing we found useful is to interpolate linearly with a value γ r ∈ [0, 1] between the bundled graph and its initial layout. This relaxes the bundling, which is desirable when users want to see the individual edges within a bundle and/or where these come from in the initial layout. The effect is similar to the spline tightness parameter in <ref type="bibr" target="#b13">[14]</ref>. <ref type="figure" target="#fig_7">Figure 6</ref> a,b show the effect of smoothing on a graph whose nodes use a radial layout. Smoothing (b) removes the strong branching effect visible in (a) at the locations indicated by arrows. The result is very similar to the HEB layout <ref type="bibr" target="#b13">[14]</ref>. However, it is important to stress that we obtain our bundling with no graph hierarchy information. <ref type="figure">Figures</ref> 6 e,f show the effect of smoothing and relaxation on the wellknown US airlines graph, whose bundled layout is shown in <ref type="figure" target="#fig_8">Fig. 7</ref> j. Smoothing removes the 'skeleton effect' from the bundles, while relaxation makes these thicker with less effect on their curvature. As such, the two effects serve complementary goals.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6.2">Rendering</head><p>Finally, we propose a simple but effective rendering technique for easier visual following of the rendered bundles ( <ref type="figure" target="#fig_7">Fig. 6 c,d</ref>). The principle follows <ref type="bibr" target="#b31">[32]</ref>: We render each bundle in back-to-front order, decreasingly sorted by skeleton pixel count |S|, as if they were covered by a 3D cushion profile bright at the bundle's center and dark at its periphery. This helps following a given bundle, especially in regions where several bundles cross. In contrast to <ref type="bibr" target="#b31">[32]</ref>, we use a much simpler technique (see <ref type="figure" target="#fig_6">Fig. 5</ref>). Edges are rendered as alpha-blended polylines. We modulate the saturation S and brightness B of each polyline point x based on its distance to the skeleton d(x) = DT S (x), which is already computed for the attraction phase (Sec. 3.3). For this, we use</p><formula xml:id="formula_8">S(d) = 1 − d/δ S (9) B(d) = 1 − √ d/δ B<label>(10)</label></formula><p>This yields thin, specular-like, white highlights in the middle of the bundles (where the skeleton is located) and darkens the edges as they get further from the skeleton. The parameter δ B is the local thickness of the bundle. For an edge point x ∈ Ω, δ B (x) = DT S (FT ∂ Ω (x)), i.e. the distance of the closest point on the shape boundary ∂ Ω to the shape's skeleton. This does not require any extra computations, since we anyway compute FT ∂ Ω and DT S as part of the shape construction (Sec. 3.2, see also Sec. 4 for implementation details). The parameter δ S &lt; δ B controls the highlight thickness and is set to a small fraction (e.g. 0.2) of δ B . This technique has several differences as compared to splatting-based shading techniques for bundles <ref type="bibr" target="#b31">[32,</ref><ref type="bibr" target="#b21">22]</ref>. First, our rendering does not change the screen-space thickness of a bundle, which is determined by the bundling layout -thin bundles stay thin. In contrast, splatting techniques tend to make thin bundles relatively thicker, which consumes screen space and increases occlusion chances. Secondly, if we relax the bundling as described earlier, individual edges become visible but still show up as a coherent whole due to the cushion shading. <ref type="figure" target="#fig_7">Figure 6</ref> d shows this. To better illustrate the effect, we decreased here the overall opacity of the edges. The inset shows how bundles appear as shaded profiles even though they are not, technically speaking, compact surfaces. Thirdly, although we could use a physically correct shading model (like <ref type="bibr" target="#b21">[22]</ref>), we found our pseudoillumination adequate in terms of our goal of understanding overlapping bundles. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6.3">Interaction</head><p>We have experimented with several types of interactive exploration atop of our method. In particular, our image-based pipeline and explicit representation of edge clusters allows us to easily brush or select groups of edges showing up as bundles or branches thereof. Three types of selection were found useful, as follows (see also <ref type="figure" target="#fig_9">Fig. 8</ref> e-g and example discussed in Sec. 5). Given the mouse position x, we first select all bundled edges within a disc of small radius r centered at x by computing the feature transform of the bundled edges and then selecting all edges which contain feature points in the disc. This query is useful for basic edge brushing and for building the next two queries. Secondly, we want to select all edges in the most prominent bundle, or bundle branch, passing through the disc. We repeat the basic selection, count the number of selected edges having the same cluster id, and retain the ones having the cluster id for which the most edges were found. This selects the thickest bundle branch close to the mouse, since edges within any bundle branch always have the same cluster ids, by construction. Finally, to select an entire cluster, we do the basic selection and return all edges in the cluster whose id is the one for which the most edges were found.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">IMPLEMENTATION</head><p>Several implementation details are crucial to the efficiency and robustness of our method, as follows.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Image-based operations</head><p>We compute shapes, skeletons, skeleton tips, and distance and feature transforms in an image-based setting. First, we render all edges using standard OpenGL polylines. Next, we use a Nvidia CUDA 1.1 based implementation of exact Euclidean distance-and-feature transforms <ref type="bibr" target="#b3">[4]</ref>. We extended this technique to compute robust skeletons based on the augmented fast marching method (AFMM) in <ref type="bibr" target="#b32">[33]</ref>. In brief, we arc-length parameterize the shape boundary ∂ Ω and detect S Ω as pixels whose neighbors' feature points subtend an arc on ∂ Ω larger than a given value ρ. The value ρ indicates the minimal detail size on ∂ Ω which creates a skeleton point. Since ∂ Ω is a level-set of a distance transform at value ω of a set of smooth curves (edges), it only contains 'sharp' details at the curve end points. Hence, setting ρ = πω, i.e. half the perimeter of a circle of radius ω, guarantees that skeleton tips correspond to edge end points. The skeletonization method choice is essential: the AFMM guarantees that no spurious branches appear due to boundary perturbations, which in turn guarantees stable bundling cues. However, even if all skeleton tips correspond to edge end points, this does not mean that all edge end points correspond to skeleton tips. Short edges within a large cluster do not produce skeleton tips. This is another reason for using the displacement function φ (Eqn. 8) to guarantee that no edge end points move during bundling.  The original CPU-based AFMM <ref type="bibr" target="#b32">[33]</ref> is too slow for our task. <ref type="table" target="#tab_4">Table 2</ref> show the inflation (Eqn. 2) and skeletonization times (Eqn. 4), the latter also including the skeleton feature transform, on a 2.8 GHz quad-core Windows PC (Sec. 5) for several graphs at an image size of 1024 <ref type="bibr" target="#b1">2</ref> . <ref type="table" target="#tab_3">Table 1</ref> gives statistics on these graphs, including the (decreasing) number of clusters at several iterations. On the average, the time needed by the AFMM to process a cluster sums up to 0.4 seconds (in line with <ref type="bibr" target="#b32">[33]</ref>). For a graph with 200 clusters <ref type="figure" target="#fig_8">(Fig. 7 a-b)</ref>, this yields 80 seconds/iteration. The AFMM is O(δ |C| log(δ |C|)) where |C| is the number of pixels on all edges in a cluster C, since the AFMM computes within a band of thickness δ around its input shape, i.e. |Ω| = O(δ |C|). In contrast, our CUDA implementation takes 4 milliseconds per distance, feature transform, and skeletonization for the same image on a Nvidia GT 330M GT card, in line with performance reported in <ref type="bibr" target="#b3">[4]</ref>, i.e. 0.8 seconds per iteration for the graph in <ref type="figure" target="#fig_8">Fig. 7</ref> ab. Graphs with fewer clusters require proportionally less time, since the speed of the CUDA method is O(N) for an image of N pixels, thus image-size-bounded. Overall, the CUDA solution is roughly 100 times faster than the CPU-based AFMM.</p><p>The complexity of the skeleton path computations (Sec. 3.4) is discussed next. Following earlier comments on the distance-levelset nature of ∂ Ω, the number of skeleton tips |T | for a shape is O(|∂ Ω|/(πω)). Since we set ω to a fixed fraction of the image size (0.05, see Sec. 3.2), we get on the average a few tens of tips per skeleton, regardless of the number of edges in a cluster (Tab. 2 (Tips)). AFMM guarantees 1-pixel-thin skeletons <ref type="bibr" target="#b32">[33]</ref>, so all nodes in the skeleton pixel-adjacency-graph are of degree 2, except skeleton junc-tions which are O(|T |) in number. The length of the skeleton of a shape ∂ Ω is O(|∂ Ω|). Hence, the depth-first-search finding of skeleton paths between tips (Sec. 3.4) is O(|T | 2 |∂ Ω|) using a brute-force method. <ref type="table" target="#tab_4">Table 2</ref> (Paths) shows the costs for the graphs in this paper using quad-core multithreading with one depth-first-search per thread. The same implementation on CUDA reduces the costs to 12 milliseconds (or less for skeletons with fewer tips) as more cores are available. This cost could be reduced further, if desired, by using the same depth-first search on the much simpler graph whose nodes are skeleton tips and skeleton branch junctions and edge weights given by skeleton branch lengths, or faster all-pairs shortest path algorithms at the expense of a more complex implementation <ref type="bibr" target="#b17">[18]</ref>.</p><p>The attraction step is linear in the number of edge discretization points, i.e. tens of thousands for large graphs (Tab. 2 (Points)). Edges are attracted independently to their cluster skeleton, so CUDA parallelization of this step is immediate.</p><p>Inflating edges can produce shapes of genus &gt; 0, i.e. with holes. Technically, this is not a problem, as skeletonization, path computation, and attraction can handle this. However, we noticed that such holes are rarely meaningful. Holes create loops in the skeleton and thus loops in a single bundle, which is supposed to be a tight object. To remove this, we fill all holes in our shapes prior to skeletonization using an efficient CUDA-based scan fill method, as follows: Given a background seed pixel outside the image Ω, e.g. the pixel (0, 0), we mark it with a special value v. Next, we fill horizontal scan line segments of background value from each v-valued pixel in parallel, one scan line per thread. We repeat alternating horizontal with vertical scan line passes until no pixel is filled any more. Checking the stop condition requires only non-synchronized writing to a global boolean variable, set to false before each pass. This parallelizes more efficiently than classical scan line or flood fill. Marking all non-v pixels as foreground fills all holes in Ω. The entire fill takes under 20 scan iterations for all images we examined. CUDA filling adds around 8 milliseconds/image of 1024 2 pixels in comparison with around 0.15 seconds/image for classical CPU flood fill (Tab. 2 (Holes)) up to a total of roughly 25 milliseconds per cluster per iteration. Note that, due to filling, all skeletons, and thus the created bundles, become trees rather than graphs. Although we do not use this property now, it may enable future interaction work such as user manipulation of the layout by means of bundle handles.</p><p>Clustering using HBA is fast. The CPU implementation in <ref type="bibr" target="#b7">[8]</ref> constructs the complete dendrogram of a graph of 10K edges in 0.1 seconds on our considered machine. We next added the GPU-based clustering in <ref type="bibr" target="#b4">[5]</ref>, which is roughly 10 to 15 times faster. Note that only a few clustering passes are needed for a complete layout (Sec. 3.5). Also, we do not need to construct the entire dendrogram, but only the bottom-most part thereof, until we reach the cut value δ (Sec. 3.1) at which we extract the clusters to bundle further.</p><p>Finally, postprocessing (Sec. 3.6) poses no performance problems, so we implement it in real-time using standard OpenGL polyline rendering and CPU-based smoothing and relaxation. All in all, the CUDA-based bundling takes 5 to 30 seconds for producing a final layout for the graphs we tested (Tab. 1, right column), i.e. 25 milliseconds per cluster times the total number of clusters processed during the I = 10 iterations plus the clustering time. In terms of memory, our method is scalable: we only need a few 1024 2 images (distance and feature transforms and skeletons) and discard these once a cluster is processed; all paths between skeleton tips for the current cluster; and the graph edge polylines. For all graphs presented here, this amounts to under 100 MB total application memory requirements per graph.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Parameter setting</head><p>Our entire method has a few parameters: the clustering similarity threshold δ , edge advection factor α, total number of iterations I, and smoothing and relaxation amounts γ s and γ r . These parameters allow covering a number of different scenarios, as follows.</p><p>Clustering similarity threshold δ : This parameter specifies the granularity level at which we cut the cluster dendrogram to obtain sets of edges to bundle at the current iteration (Sec. 3.1). We set δ as a linearly decreasing function on the iteration number t ∈ [1, I] from δ (1) = 0.95 to δ (I) = 0.7. This yields strongly coherent clusters in the first iteration, regardless of the initial edge position distribution, and also locally strongly coherent clusters in the subsequent iterations (Sec. 3.5).</p><p>Edge advection factor α: The advection value α ∈ (0, 1) controls how much edges approach the skeleton at one iteration. This implicitly controls the bundling convergence speed. Too high values yield tight bundles and convergence after the first few iterations, which is fine for graphs which already have relatively grouped edges, but limits the freedom in decluttering complex graphs. Too low values allow the iterative process to adapt itself better to newly discovered clusters as the edges approach each other, but convergence requires more iterations. In practice, we set α as a linearly decreasing function of the iteration number from α(0) = 0.9 to α(I) = 0.2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Number of iterations:</head><p>In practice, after I ∈ <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b14">15]</ref> iterations, we obtain tight bundles of a few pixels in width for all graphs we worked with. This is expectable, given that (1 − α) I becomes very small for α &lt; 1, I &gt; 10. In practice, we always set I = 10 and then use smoothing and relaxation to interactively adjust the result as desired.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Smoothing:</head><p>The smoothing amount γ s ∈ N describes the number of Laplacian smoothing steps executed on the bundled layout (Sec. 3.6).</p><p>Values γ s ∈ <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b9">10]</ref> give an optimal amount of smoothing which keeps the structured aspect of the layout but eliminates the skeleton-like look. Larger values make our layout look similar to the force-directed method of <ref type="bibr" target="#b14">[15]</ref>. In practice, we noticed that the smoothing amount strongly depends on the task at hand: In some cases, users attach semantics to the branching structure, i.e. want to clearly see which groups of edges get merged together, so no smoothing is needed. In the general case, however, the exact bundle merging events are not relevant, so we use by default γ s = 5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Relaxation:</head><p>The relaxation amount γ r ∈ [0, 1] controls the interpolation between the fully bundled layout and original one (Sec. 3.6). Relaxation is most conveniently applied interactively, after a bundled layout has been computed. Values γ r ∈ [0, 0.2] give a good trade-off between bundling and overdraw.</p><p>Overall, the entire method is not sensitive to precise parameter settings. For the graphs in this paper and other ones we investigated, we have obtained largely identical bundled layouts with different parameter settings in the ranges indicated above. We explain this by the stability of the inflated shape skeletons to small local variations of the positions of edges, and the smoothing effect of the entire iterative process on the layout. As such, the only two parameters we expose to users are γ s and γ r , the others being set to predefined values as explained above.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">APPLICATIONS</head><p>We now demonstrate our skeleton-based edge bundling (SBEB) method for several large, real-world, graphs. Statistics on these graphs are shown in Tab. 1. <ref type="figure" target="#fig_8">Figure 7</ref> illustrates the SBEB and compares it with several existing bundling methods. Note that in all images here generated with our method, we used simple additive edge blending only, as our focus here is the layout, not the rendering. Images (a,b) show an air traffic graph (nodes are city locations, edges are interconnecting flights). Images (c,d) show a graph of poker players from a social network. Edges indicate pairs of players that played against each other. The node layout is done with the spring embedder provided by the Tulip framework <ref type="bibr" target="#b2">[3]</ref>. Given the average node degree and node layout algorithm used, related nodes tend to form relatively equal-size cliques. Bundling further simplifies this structure; here, bundles can be used to find sets of players which played against each other. Images (e-h) show the US migrations graph bundled with the WR, GBEB, FDEB, and our method (SBEB) respectively. Overall, SBEB produces stronger bundling, due to the many iterations I = being used), and emphasizes the structure of connections between groups of close cities (due to the skeleton layout cues). If less bundling is desired, fewer iterations can be used <ref type="figure" target="#fig_5">(Fig. 4)</ref>. Adjusting the postprocessing smoothing and relaxation parameters, SBEB can create bundling styles similar to either GBEB (higher bundle curvatures, more emphasis on the graph structure) or FDEB (smoother bundles). Finally, images (i,j) show the US airlines graph bundled with the FDEB and SBEB respectively. SBEB generates stronger bundling (more overdraw) but arguably less clutter. Note also that SBEB generates treelike bundle structures which is useful when the exploration task at hand has an inherent (local) hierarchical nature, e.g. see how traffic connections merge into and/or split from main traffic routes. <ref type="figure" target="#fig_9">Figure 8</ref> shows further examples. The images (a,b) show flight paths within France, as recorded by the air traffic authorities <ref type="bibr" target="#b15">[16]</ref>. Edge endpoints indicate start and end locations of flight records. The original edges are not straight lines, but actual flight paths (polylines). Note that this dataset is not a graph in the strict sense, since only very few edge endpoints are exactly identical within the dataset. This has to do with the fact that flight monitoring systems record flights (trails). However, edge endpoints are spatially grouped since flights typically start and end in geographically concentrated locations such as airports. Given this, our method is able to create a bundled layout of this dataset with the same ease as for actual graphs. Bundling puts close flight paths naturally into the same cluster. The bundled version emphasizes the connection pattern between concentrated take-off and landing locations, which are naturally the airports. The zoom-in details <ref type="figure" target="#fig_9">(Fig. 8 c,d)</ref> show the organic effect achieved by bundling. <ref type="figure" target="#fig_9">Figure 8</ref> e-g show a citations graph (433 nodes, 1446 edges). Nodes are InfoVis papers, laid out according to content similarity: close nodes indicate papers within the same, or strongly related, topics. The layout algorithm used for the nodes is multidimensional scaling with least-square projection <ref type="bibr" target="#b22">[23]</ref>. Paper similarity is measured using cosine-based distance between term feature vectors <ref type="bibr" target="#b26">[27]</ref>. Topics were added as annotations to the image to help explanation. Bundling exposes a structure of the citations between topics. We use the bundlebased selection (Sec. 3.6.3) to highlight one of the bundles, which becomes now dark blue <ref type="figure" target="#fig_9">(Fig. 8 f)</ref>. It appears that this bundle connects papers related to the Graph drawing and Treemap topics. The direction of edges is indicated by node label colors: citing papers are green, cited papers are blue. Green and blue labels are mixed within this bundle, which is expected, since papers in these two topics typically cross-reference each other. <ref type="figure" target="#fig_9">Figure 8</ref> g shows a selection of all edges which end at nodes within the ball centered at the mouse cursor. Concretely, we highlighted here all papers citing papers in the Graph drawing topic. Note that this selection is a purely node-based one, i.e. it does not use bundles for choosing the edges. However, bundles have now another use: they allow highlighting specific edges in the graph without increasing clutter, since these edges follow the already computed bundles. Also, note that for this type of node layout, our clustering-based bundling makes sense: edges will be grouped in the same bundle if they have similar positions, meaning start/end from similar topics; if the node layout effectively groups nodes into related topics, then bundles have a good chance to show inter-topic relations in a simplified manner.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">DISCUSSION</head><p>In comparison to existing bundling techniques, our method has the following advantages and limitations:</p><p>Generality: Our method can treat directed or undirected graphs. By default, we assume the graph is directed, so edges running between the same sets of nodes in opposite directions will belong to different clusters, hence create different bundles. For undirected graphs, we only need to symmetrize the edge similarity function (Eqn. 1).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Structured look control:</head><p>Users can control the 'structured look' of a bundled layout, ranging between smoothly merging bundles and bundles meeting at sharp angles, by manipulating a single parameter (smoothing γ s , Sec. 3.6). This implicitly allows removing sharp ramifications when these are meaningless. Other methods, with the exception of HEB, do not allow explicit control of this aspect, since there is no explicit hierarchy aspect in the bundles. In our case, hierarchy is modeled by the cluster skeletons (at fine level) and by the progressively simplified cluster structures (at coarse level).</p><p>Robustness: Our method operates robustly on all graphs we experimented on, i.e. yields a set of stable skeletons and bundles progressively converging towards an equilibrium state. This is explained by the regularization of the feature transform (Sec. 3.4) and the inherent robustness of the skeletonization method used (Sec. 3.3). Briefly put, adding or removing a small number of nodes or edges will not change the bundling since the distance-based shapes are robust to small changes in the input graph and so are their skeletons too.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Speed and simplicity:</head><p>Due to the CUDA implementation of its core image-based operations, our method is considerably faster than <ref type="bibr" target="#b14">[15]</ref> and slightly faster than <ref type="bibr" target="#b21">[22]</ref>. However, we should note that it is not clear if the timings reported in <ref type="bibr" target="#b21">[22]</ref> include also the cost of computing the Voronoi diagram underlying the grid graph. The only faster bundled method we are aware of is the MINGLE method <ref type="bibr" target="#b11">[12]</ref>, which takes 1 second for the US migrations graph and 0.1 seconds for the US airlines graph, in contrast to our 4.1 seconds and 6.3 seconds respectively. MINGLE and SBEB share some resemblance in bottom-up aggregation of edges, but also have some differences. MINGLE compares edges essentially based on end point positions, whereas we use the entire edge trajectory (which may allow us to bundle graphs with curved edges better). The complexity of MINGLE is O(|E|log|E|) for a graph with E edges, whereas SBEB is essentially O(|C|) where C is the average cluster size. By using a better cluster selection than our current iso-linkage cut in the cluster tree (Sec. 3.1), it is possible to reduce |C| and thus make SBEB faster. Apart from this, our method works entirely image-based, rather than manipulating a combination of hierarchical mesh-based and image-based data structures. The CUDA-based image processing code used by our method is available at <ref type="bibr" target="#b30">[31]</ref>.</p><p>Apart from the above, there are several other differences between our method and recent edge bundling techniques. In contrast to force-directed bundling <ref type="bibr" target="#b14">[15]</ref> which bundles pairs of edges iteratively, in a point-by-point manner, we bundle increasingly larger groups of edges (our clusters) along their common center in one single step, using skeletons. In the limit, our method can behave like the force-directed bundling, i.e. if we were to treat, at each iteration, only the most cohesive leaf cluster. However, this is practically not interesting, as it would artificially increase the computational cost without any foreseeable benefits. Further, while Lambert et al. <ref type="bibr" target="#b21">[22]</ref> use shortest paths in a node-based grid graph to route edges, in our method edges bundle themselves using only edge information. As such, there is no relation between the Voronoi diagrams used in <ref type="bibr" target="#b21">[22]</ref> and our skeletons (which, formally, can be seen as a Voronoi diagram in which inflated edges are the sites). Distance fields and skeletons are also used in <ref type="bibr" target="#b31">[32]</ref>, but in different ways; first, an edge distance field is computed using a considerably less accurate quad-splat-based method, whereas our distance transform is pixel-accurate. Secondly, skeletons are used as shading cues and not for layout, whereas we use skeletons to actually compute edge layouts. In comparison to <ref type="bibr" target="#b23">[24]</ref>, where bundles split in exactly two sub-bundles, our bundle splits can have in general any degree, as implied by the underlying skeletons. Also, our method can handle general graphs.</p><p>Limitations: There is no fundamental reason why a skeleton-based layout should be preferable to other bundling heuristics, apart from the intuition that a skeleton represents the local center of a shape. Hence, the quality of our layouts (or any other bundled layout) is still to be judged subjectively. Moreover, any bundling inherently destroys information: edges are overdrawn, so cannot be identified separately; and edge directions are distorted. Hence, bundling should be used for those applications where one is interested in coarse-scale connectivity patterns and when one cannot apply explicit graph simplification e.g. due to the lack of suitable node clustering guidelines and metrics. If desired, SBEB can be modified to incorporate additional bundling constraints e.g. maximal deformation of certain edges -the skeletons provide only bundling cues but the attraction phase can decide whether, and how much, to bundle any given edge. In the longer run, it is interesting to use shape perception results from computer vision <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b19">20]</ref> to quantitatively reason about the quality of a bundled layout. Here, our image-based approach may prove more amenable to quantitative analysis than other bundling heuristics which are harder to describe in terms of operators having well-known perceptual properties. However, this is a challenging task and requires further in-depth study.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>Shape construction: a) ∂ Ω and S; b) DT S ; c) FT S ; d) bundling result. See Secs. 3.2-3.4 for details.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 b</head><label>2</label><figDesc>,c show the DT S and FT S of a skeleton. Gray values in Fig. 2 b indicate the DT S value (low=black, high=white). Colors in Fig. 2 c indicate the identity of different feature points: same-color regions correspond roughly to the Voronoi regions of the skeleton branches</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 3 .</head><label>3</label><figDesc>[FT S (σ start ),FT S (σ end )] x map Attraction singularities. Naive solution (a,c) and corresponding solutions with regularization (b,d). Final bundled curve is shown in red. Voronoi regions of the branches of S are shown in different hues.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 3 b</head><label>3</label><figDesc>), and use x map in Eqn. 7 instead of FT S (x)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 4 .</head><label>4</label><figDesc>Iterative bundling of the US migrations graph. Colors indicate edge clusters (see Sec. 3.5).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 5 .</head><label>5</label><figDesc>Cushion shading for bundles (Sec. 3.6.2).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 6 .</head><label>6</label><figDesc>Layout postprocessing. Edge smoothing (a vs b,Fig. 7j vs e). Edge relaxation (Fig. 7 j vs f). Cushion shading (c), see-through detail (d).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 7 .</head><label>7</label><figDesc>Air traffic graph (a: original, b: bundled). Poker graph (c: original, d: bundled). US migrations graph (e: FDEB, f: GBEB, g: WR, h: SBEB). US airlines graph (i: FDEB, j: SBEB). Colors in (a-d,h,j) indicate clusters (displayed for method illustration only).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 8 .</head><label>8</label><figDesc>Bundling of airline trails (a,b) and details (c,d). Bundling of citations graph (e). Selected bundle (in dark blue) shows citations involving two topics (f). Citations to a selected topic (g). In (f,g), node labels indicate edge direction (citing papers=green,cited papers=blue).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>• O. Ersoy and A. Telea are with the University of Groningen, the Netherlands, E.mail: o.ersoy@rug.nl, a.c.telea@rug.nl. • C. Hurter is with DGAC-DTI R&amp; D, ENAC/Univ. Toulouse, France, E.mail: christophe-hurter@aviation-civile.gouv.fr. • F. V. Paulovich and G. Cantareira are with the University of Sao Paulo, Brazil, E-mail: paulovic@icmc.usp.br, cantareira@icmc.usp.br.</figDesc><table /><note>Manuscript received 31 March 2011; accepted 1 August 2011; posted online 23 October 2011; mailed on 14 October 2011. For information on obtaining reprints of this article, please send email to: tvcg@computer.org.</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 1 .</head><label>1</label><figDesc>Graph statistics for datasets used in this paper.</figDesc><table><row><cell>Graph</cell><cell>Nodes</cell><cell>Edges</cell><cell cols="3">Clusters/iteration</cell><cell>Total (GPU)</cell></row><row><cell></cell><cell></cell><cell></cell><cell>I = 1</cell><cell>I = 5</cell><cell>I = 10</cell><cell>(sec.)</cell></row><row><cell>US airlines</cell><cell>235</cell><cell>2099</cell><cell>90</cell><cell>15</cell><cell>9</cell><cell>6.3</cell></row><row><cell>US migrations</cell><cell>1715</cell><cell>9780</cell><cell>57</cell><cell>14</cell><cell>7</cell><cell>4.1</cell></row><row><cell>Radial</cell><cell>1024</cell><cell>4021</cell><cell>94</cell><cell>30</cell><cell>24</cell><cell>7.4</cell></row><row><cell>France air</cell><cell>34550</cell><cell>17275</cell><cell></cell><cell>40</cell><cell>26</cell><cell>29.2</cell></row><row><cell>Poker</cell><cell>859</cell><cell>2127</cell><cell>86</cell><cell>28</cell><cell>23</cell><cell>5.2</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 2 .</head><label>2</label><figDesc>SBEB performance. Figures are averages for all clusters at iteration I = 5 for different graphs. First rows show CPU timings. Last row shows CUDA-based timings (which are uniform for the tested graphs).</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>The work of F. V. Paulovich and G. Cantareira has been supported by FAPESP-Brazil. We also thank D. Holten for insightful discussions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION</head><p>We have presented a new method for creating bundled layouts of general graphs. Using the property of 2D skeletons of being locally centered in a shape, we create elongated shapes from a graph with given node positions, and use skeletons as guidelines to bundle similar edges. To guarantee the stability and smoothness of the result, we regularize the feature transforms of 2D skeletons. Our layout amounts to a sequence of edge clustering and image processing operations. Using a CUDA-based implementation we achieve comparable or higher performance than existing comparable methods, and keep implementation simple. Finally, we emphasize edge bundles using shaded cushion techniques computed directly on the bundled edges.</p><p>We plan to exploit skeleton properties to generate bundling variations. Modifying the Euclidean distance metric would yield layouts similar to cartographic diagrams <ref type="bibr" target="#b29">[30]</ref>. We plan to use bundlebundle and bundle-node distance fields to globally optimize the layout for maximal readability and incorporate spatial constraints like labels, bundle crossing minimization, and node-edge overlap reduction. In the long run, we plan to study the optimality criteria of bundled layouts by using existing results from shape perception in computer vision which are directly applicable to our skeleton-based layout method.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">AskGraphView: A large graph visualisation system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Abello</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Van Ham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Krishnan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="669" to="676" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Grouse: Feature-based and steerable graph hierarchy exploration</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Archambault</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Munzner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Auber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. EuroVis</title>
+		<meeting>EuroVis</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="67" to="74" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Tulip visualization framework</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Auber</surname></persName>
+		</author>
+		<ptr target="tulip.labri.fr" />
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Parallel banding algorithm to compute exact distance transform with the GPU</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mohamed</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Tan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM SIG-GRAPH Symp. on Interactive 3D Graphics and Games</title>
+		<meeting>ACM SIG-GRAPH Symp. on Interactive 3D Graphics and Games</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="134" to="141" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Hierarchical clustering with cuda/gpu</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kantardzic</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ouyang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ISCA</title>
+		<meeting>ISCA</meeting>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="130" to="135" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Shape analysis and classification: Theory and practice</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Costa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Cesar</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+			<publisher>CRC Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Geometry-based edge clustering for graph visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Cui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Qu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Wong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1277" to="1284" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Open source clustering software</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>De Hoon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Imoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Nolan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Myiano</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Bioinformatics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="1453" to="1454" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Confluent drawings: Visualizing non-planar diagrams in a planar way</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Dickerson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Eppstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Goodrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Meng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Graph Drawing</title>
+		<meeting>Graph Drawing</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="1" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Integrating edge routing into forcedirected layout</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Dwyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Marriott</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wybrow</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Graph Drawing</title>
+		<meeting>Graph Drawing</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="8" to="19" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A taxonomy of clutter reduction for information visualisation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Ellis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dix</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1216" to="1223" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Multilevel agglomerative edge bundling for visualizing large graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Gansner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>North</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Scheidegger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. PacificVis</title>
+		<meeting>PacificVis</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="187" to="194" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Improved circular layouts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Gansner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Koren</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Graph Drawing</title>
+		<meeting>Graph Drawing</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="386" to="398" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Hierarchical edge bundles: Visualization of adjacency relations in hierarchical data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Holten</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="741" to="748" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Force-directed edge bundling for graph visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Holten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Van Wijk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comp. Graph. Forum</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="670" to="677" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">FromDaDy: Spreading data across views to support iterative exploration of aircraft trajectories</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hurter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Tissoires</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Conversy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1017" to="1024" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Graph drawing: Algorithms for the visualization of graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Tollis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">D</forename><surname>Battista</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Eades</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Tamassia</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+			<publisher>Prentice Hall</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">All-pairs shortest-paths for large graphs on the GPU</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Katz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kider</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Graphics Hardware</title>
+		<meeting>Graphics Hardware</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="208" to="216" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Digital geometry: Geometric methods for digital picture analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Klette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Rosenfeld</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2004" />
+			<publisher>Morgan Kaufmann</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Medial-point description of shape: A representation for action coding and its phychophysical correlates</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Kovacs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Feher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Julesz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Vision research</title>
+		<imprint>
+			<biblScope unit="volume">38</biblScope>
+			<biblScope unit="page" from="2323" to="2333" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">3D edge bundling for geographical data visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lambert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bourqui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Auber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Information Visualisation</title>
+		<meeting>Information Visualisation</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="329" to="335" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Winding roads: Routing edges into bundles</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lambert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bourqui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Auber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comp. Graph. Forum</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="432" to="439" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Least square projection: A fast high-precision multidimensional projection technique and its application to document mapping</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Paulovich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Nonato</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Minghim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Levkowitz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="564" to="575" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Flow map layout</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Phan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Xiao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yeh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Winograd</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. InfoVis</title>
+		<meeting>InfoVis</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="219" to="224" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Multiscale medial loci and their properties</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Pizer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Siddiqi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Szekely</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Damon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zucker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IJCV</title>
+		<imprint>
+			<biblScope unit="volume">55</biblScope>
+			<biblScope unit="issue">2-3</biblScope>
+			<biblScope unit="page" from="155" to="179" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Controllable and progressive edge clustering for large networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Qu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Graph Drawing</title>
+		<meeting>Graph Drawing</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="399" to="404" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Developments in automatic text retrieval</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Salton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Science</title>
+		<imprint>
+			<biblScope unit="volume">253</biblScope>
+			<biblScope unit="page" from="974" to="980" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Hamilton-Jacobi skeletons</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Siddiqi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Bouix</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tannenbaum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zucker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IJCV</title>
+		<imprint>
+			<biblScope unit="volume">48</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="215" to="231" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Siddiqi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Pizer</surname></persName>
+		</author>
+		<title level="m">Medial Representations: Mathematics, Algorithms and Applications</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Generalized distance transforms and skeletons in graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Strzodka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Telea</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. VisSym</title>
+		<meeting>VisSym</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="221" to="230" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">CUDA skeletonization and image processing toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Telea</surname></persName>
+		</author>
+		<ptr target="www.cs.rug.nl/˜alext/CUDASKEL" />
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Image-based edge bundles: Simplified visualization of large graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Telea</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Ersoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comp. Graph. Forum</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="543" to="551" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">An augmented fast marching method for computing skeletons and centerlines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Telea</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Van Wijk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. VisSym</title>
+		<meeting>VisSym</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="251" to="259" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Using multilevel call matrices in large software projects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Ham</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. InfoVis</title>
+		<meeting>InfoVis</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="227" to="232" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">GraphSplatting: Visualizing graphs as continuous fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Van Liere</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>De Leeuw</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="206" to="212" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Energy-based hierarchical edge clustering of graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Yuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Cui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Qu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. PacificVis</title>
+		<meeting>PacificVis</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="55" to="62" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

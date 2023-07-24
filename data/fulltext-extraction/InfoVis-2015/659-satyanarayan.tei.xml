@@ -1,0 +1,1032 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main"></title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<idno type="DOI">10.1109/TVCG.2015.2467091</idno>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T19:15+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<abstract/>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Declarative languages such as D3 <ref type="bibr" target="#b9">[10]</ref>, ggplot2 <ref type="bibr" target="#b36">[38]</ref> and Vega <ref type="bibr" target="#b33">[35]</ref> have become popular tools for authoring visualizations. By deferring control flow and execution concerns to the runtime, they free designers to focus on visual encoding decisions. The separation of specification and execution can also facilitate retargeting across platforms <ref type="bibr" target="#b18">[20]</ref> and enable programmatic generation of visualizations in graphical design tools <ref type="bibr" target="#b29">[31]</ref>, statistical packages <ref type="bibr" target="#b16">[18]</ref> and computational notebooks <ref type="bibr" target="#b19">[21]</ref>.</p><p>Although interaction is a critical aspect of effective data visualization <ref type="bibr" target="#b24">[26,</ref><ref type="bibr" target="#b28">30]</ref>, existing languages lack support for declarative interaction design. Our recent work <ref type="bibr" target="#b30">[32]</ref>  interaction primitives that model input events as first-class streaming data. As a result, user input can be processed through the full range of data transformation operators and participate in visual encoding rules. The primitives are grounded in Event-Driven Functional Reactive Programming (E-FRP) <ref type="bibr" target="#b34">[36]</ref> semantics to shift responsibility for coordinating event-driven state changes from the designer to the language runtime. However, we developed only a proof-of-concept system sufficient for demonstrating the viability of declarative interaction design.</p><p>Here, we contribute Reactive Vega, the first system architecture to provide robust and comprehensive support for declarative, interactive visualization design. Our design is motivated by four primary goals.</p><p>A Unified Data Model. Existing reactive visualization toolkits <ref type="bibr" target="#b20">[22,</ref><ref type="bibr" target="#b30">32]</ref> feature fragmented architectures where only interaction events are modeled as time-varying. Other input datasets remain static and batch-processed. This artificial disconnect restricts expressivity and can result in wasteful computation. For example, interaction events that manipulate only a subset of input tuples may trigger recomputation over the entire dataset. In contrast, Reactive Vega features a unified data model in which input data, scene graph elements, and interaction events are all treated as first-class streaming data sources.</p><p>Streaming Relational Data. Modeling input relational data with E-FRP semantics alone does not supply sufficient granularity for targeted recomputation. As E-FRP semantics consider only time-varying scalar values, operators would observe an entire relation as having changed and so would need to reprocess all tuples. Instead, Reactive Vega integrates techniques from streaming databases <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b1">2,</ref><ref type="bibr" target="#b3">4,</ref><ref type="bibr" target="#b4">5,</ref><ref type="bibr" target="#b11">12]</ref> alongside E-FRP, including tracking state at the tuple-level and only propagating modified tuples through the dataflow graph.</p><p>Streaming Nested Data. Interactive visualizations, particularly those involving small multiples, often require hierarchical structures. Processing such data poses an additional challenge not faced by prior reactive or streaming database systems. To support streaming nested data, Reactive Vega's dataflow graph rewrites itself in a data-driven fashion at runtime: new branches are extended, or existing branches pruned, in response to observed hierarchies. Each dataflow branch models its corresponding part of the hierarchy as a standard relation, enabling operators to remain agnostic to higher-level structure.</p><p>Interactive Performance. Reactive Vega performs both compileand run-time optimizations to increase throughput and reduce memory footprint, including tracking metadata to prune unnecessary computation, and optimizing scheduling by inlining linear chains of operators.</p><p>Reactive Vega offers composable primitives for both visual encoding and interaction, and enables portability of rendering and interaction modalities across devices. We demonstrate these advantages through a variety of example applications. In addition, we conduct benchmark evaluations of streaming and interactive visualizations and find that Reactive Vega meets or exceeds the performance of both D3 and the original, unreactive Vega system.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Reactive Vega draws on prior work in functional reactive programming, data stream management, and visualization systems. We defer discussion of declarative visualization tools to the subsequent section.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Functional Reactive Programming</head><p>Functional Reactive Programming (FRP) models mutable values as continuous, time-varying data streams <ref type="bibr" target="#b5">[6]</ref>. We focus on a discrete variant called Event-Driven FRP (E-FRP) <ref type="bibr" target="#b34">[36]</ref>. To capture value changes as they occur, E-FRP provides streams, which are infinite time-ordered sequences of discrete events. Streams can be composed into signals to build expressions that react to events. The E-FRP runtime constructs the necessary dataflow graph such that, when a new event fires, it propagates to corresponding streams. Dependent signals are evaluated in a two-phase update: signals reevaluated in the first phase use prior computed values of their dependents, which are subsequently updated in the second phase. E-FRP has been shown to be viable for authoring interactive web applications <ref type="bibr" target="#b14">[16,</ref><ref type="bibr" target="#b26">28]</ref> and visualizations <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b20">22,</ref><ref type="bibr" target="#b30">32]</ref>.</p><p>However, naive applications of E-FRP to visualization tasks can result in wasteful recomputation. Traditional E-FRP primitives support only scalar values, whereas visualization pipelines must also process relational and hierarchical data. Modeling these latter data types as scalar values provides insufficient granularity to perform targeted recomputation. Reactive Vega's declarative interaction primitives remain grounded in E-FRP semantics, and they preserve the two-phase update: interdependent signals are updated in the order in which they are defined in the specification. However, to efficiently support relational data, Reactive Vega integrates methods from the streaming database literature. To support streaming hierarchical data, Reactive Vega's dataflow graph dynamically rewrites itself at runtime, instantiating new branches to process nested relations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Data Stream Management</head><p>The problem of managing streaming data has been well studied in the database community. Researchers have developed an arsenal of techniques through the development of systems such as Aurora <ref type="bibr" target="#b1">[2]</ref>, Eddies <ref type="bibr" target="#b4">[5]</ref>, STREAM <ref type="bibr" target="#b3">[4]</ref>, and TelegraphCQ <ref type="bibr" target="#b11">[12]</ref>. As tuples are observed by these systems, they are flagged as either new or removed. Tuples, rather than full relations, are passed between operators in a query plan (realized as a dataflow graph). As a result, operators can inspect just the updated tuples to perform efficient computation. However, for some operations a set of changed tuples is insufficient. For example, a join of two relations requires access to all tuples within a specified window. In such cases, caches (sometimes referred to as views <ref type="bibr" target="#b1">[2]</ref> or synopses <ref type="bibr" target="#b3">[4]</ref>) are used to materialize a relation, and shared among dependent operators.</p><p>Borealis <ref type="bibr" target="#b0">[1]</ref> extends this work in two ways. To support streaming modifications to tuples, the system introduces a revision processing scheme. An operator can be replayed with revised tuples in place of the original data; the operator will then only emit corresponding revisions. Similarly, to enable dynamic operator parameters, Borealis introduces time travel. When an operator parameter changes, an undo is issued to the nearest cache. The cache emits tuple deletions, effectively "rewinding" the system to a previous time. A subsequent replay then performs recomputation with the new parameter value.</p><p>However, existing streaming data systems concern flat relations. Reactive Vega instantiates these techniques, alongside E-FRP, within a visualization pipeline and extends them to support streaming nested data. To do so, Reactive Vega's dataflow graph dynamically rewrites itself at runtime with new branches. These branches unpack nested relations, enabling downstream operators to remain agnostic to higherlevel structure while supporting arbitrary levels of nesting.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Imperative and Dataflow Visualization Systems</head><p>Dataflow architectures are common in scientific visualization systems, such as IBM Data Explorer <ref type="bibr" target="#b2">[3]</ref> and VTK <ref type="bibr" target="#b31">[33]</ref>. Developers must manually specify and connect each required operator into a network, which can support updates in a demand-driven fashion (e.g., as data is modified) or an event-driven fashion (e.g., in response to user input). These systems expose fine-grained control over the construction of the dataflow graph. For example, VTK developers can choose to favor memory efficiency over processing speed, which causes dataflow operators to delete their output after computation. While Reactive Vega shares some dataflow strategies with these systems -for example, using pass-by-reference for unchanged tuples to reduce memory consumption -it abstracts such execution concerns away from the user. The dataflow graph is automatically assembled based on definitions found in a declarative Vega specification, and optimizations are transparently performed such that output data is only stored when needed by downstream operators and shared wherever possible.</p><p>Within the domain of information visualization, the Stencil language <ref type="bibr" target="#b13">[14]</ref> is also grounded in FRP and uses a dataflow model. Like Reactive Vega, it provides a unified data model where both input data and interaction events are modeled as first-class streaming data sources. However, Reactive Vega is more expressive than Stencil in two important ways. Building on prior work <ref type="bibr" target="#b30">[32]</ref>, Reactive Vega offers interaction primitives which enable fine-grained manipulation that event streams alone lack. Moreover, graphical primitives can be arbitrarily nested with Reactive Vega, drawing from either hierarchical or distinct data sources. This ability is critical to concisely specifying small multiples displays, and requires Reactive Vega's dataflow graph to dynamically rewrite itself at runtime. To the best of our knowledge, Stencil's architecture does not support self-instantiating dataflows.</p><p>Improvise <ref type="bibr" target="#b35">[37]</ref> features active variables called "live properties," which may be bound to control widgets and parameterize a visualization. Using an expression language, live properties are assembled into a coordination graph to dynamically evaluate visual encodings and generate views of data. While Improvise and Reactive Vega share some conceptual underpinnings, Improvise places a higher burden on users to correctly construct the necessary graph. As Reactive Vega takes a declarative approach to visualization design, users need only compose the necessary primitives into a specification. Reactive Vega parses this specification to build the corresponding dataflow graph.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">BACKGROUND: DECLARATIVE VISUALIZATION DESIGN</head><p>Reactive Vega builds on a long-running thread of research on declarative visualization design, popularized by the Grammar of Graphics <ref type="bibr" target="#b37">[39]</ref> and Polaris <ref type="bibr" target="#b32">[34]</ref> (now Tableau). Here, we aim to provide readers with sufficient background to understand the remainder of the paper. In particular, we focus on concepts used by Vega <ref type="bibr" target="#b30">[32,</ref><ref type="bibr" target="#b33">35]</ref>, and its predecessors Protovis <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b18">20]</ref> and D3 <ref type="bibr" target="#b9">[10]</ref>.</p><p>"scales": [{"name": "x"}], "signals": [ {"name": "brush_start", "stream": "mousedown"}, {"name": "brush_end", "stream": "mouseup, [mousedown, mouseup] &gt; mousemove"} ], "predicates": [{ "name": "inside_brush", "type": "in", "set": { "range": [{"signal": "brush_start.event.x"}, {"signal": "brush_end.event.x"}], "scale": "-x" }, "item": {"arg": "key"} } ], "marks": [{ "type": "symbol", "properties": { "update": { "rule": [ { "predicate": "inside_brush", "input": {"key": {"field": "data.key"}}, "fill": {"scale": "color", "field": "data.key"} }, { "fill": {"value": "grey" Visual encodings are defined by composing graphical primitives called marks <ref type="bibr" target="#b8">[9]</ref>, which include arcs, areas, bars, lines, plotting symbols and text. Marks are associated with datasets, and their specifications describe how tuple values map to visual properties such as position and color. Scales and guides (i.e., axes and legends) are provided as first-class primitives for mapping a domain of data values to a range of visual properties. Special group marks serve as containers to express nested or small multiple displays. Child marks and scales can inherit a group mark's data, or draw from independent datasets.</p><p>Mark specifications are processed by a multi-stage pipeline <ref type="bibr" target="#b18">[20]</ref> to produce a visualization. Of note are the build and evaluate phases, which generate one mark instance per data tuple through a data join <ref type="bibr" target="#b9">[10]</ref> and set appropriate properties based on a status flag. The status of a mark instance is determined by whether its backing data tuple has been added (enter), retained (update), or removed (exit).</p><p>Although interaction is a crucial component of effective visualization <ref type="bibr" target="#b24">[26,</ref><ref type="bibr" target="#b28">30]</ref>, existing declarative visualization models, including widely used tools such as D3 <ref type="bibr" target="#b9">[10]</ref> and ggplot2 <ref type="bibr" target="#b36">[38]</ref>, do not offer composable primitives for interaction design. Instead, if they support interaction, they do so through either a palette of standard techniques <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b9">10]</ref> or imperative event handling callbacks. While the former restricts expressivity, the later undoes many of the benefits of declarative design. In particular, users are forced to contend with interaction execution details, such as interleaved events and coordinating external state, which can be complex and error-prone <ref type="bibr" target="#b12">[13,</ref><ref type="bibr" target="#b15">17,</ref><ref type="bibr" target="#b27">29]</ref>.</p><p>To address this gap, our recent work <ref type="bibr" target="#b30">[32]</ref> introduces a model for declarative interaction design. Our approach draws on Event-Driven Functional Reactive Programming (E-FRP) <ref type="bibr" target="#b34">[36]</ref> to abstract input events as time-varying streaming data. An event selector syntax facilitates composing and sequencing events together, for example [mousedown, mouseup] &gt; mousemove is a single stream of mousemove events that occur between a mousedown and mouseup (i.e., "drag" events). Event streams are modeled as firstclass data sources and can thus drive visual encoding primitives, or be run through the full gamut of data transformations.</p><p>For added expressivity, event streams can be composed into reactive expressions called signals. Signals can be used directly to specify visual primitive properties. For example, a signal can dynamically determine a mark's fill color or a scale's domain. Signals can also parameterize interactive selection rules for visual elements called predicates. Predicates define membership within the selection (e.g., by specifying the conditions that must hold true) and can be used within sequences of production rules to drive conditional visual encodings. <ref type="figure">Figure 2</ref> shows how to use these interaction primitives to specify a brushing interaction. Using this model, declaratively-specified interaction techniques can be encapsulated and parameterized into a standalone "interactor" definition. An interactor can then be reused and repurposed with any number of visualizations, functioning like a mixin.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">THE REACTIVE VEGA ARCHITECTURE</head><p>The Reactive Vega system architecture integrates streaming database techniques with Event-Driven Functional Reactive Programming (E-FRP), and extends both to support expressive visualization design. It comprises the necessary set of dataflow operators and methods to model both raw data and interactions events as streaming input in a uniform fashion. Dataflow operators are instantiated and connected by the Reactive Vega parser, which traverses a declarative specification containing definitions for input datasets, visual encoding rules, and interaction primitives as described in § 3. When data tuples are observed, or when interaction events occur, they are propagated (or "pulsed") through the graph with each operator being evaluated in turn. Propagation ends at the graph's sole sink: the renderer.</p><p>The Reactive Vega architecture and parser are implemented in the JavaScript programming language, and are intended to run either in a web browser or server-side using node.js. By default, Reactive Vega renders to an HTML5 Canvas element; however, it also supports Scalable Vector Graphics (SVG) and server-side image rendering.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Data, Interaction, and Scene Graph Operators</head><p>Reactive Vega dataflow operators fall into one of three categories: input data processing, interaction handling, or scene graph construction.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.1">Processing Input Data</head><p>Reactive Vega parses each dataset definition and constructs a corresponding branch in the dataflow graph, as shown in <ref type="figure" target="#fig_0">Figure 3</ref>. These branches comprise input and output nodes connected by a pipeline of data transformation operators. Input nodes receive raw tuples as a linear stream (tree and graph structures are supported via parent-child or neighbor pointers, respectively). Upon data source updates, tuples are flagged as either added, modified, or removed, and each tuple is given a unique identifier. Data transformation operators use this metadata to perform targeted computation and, in the process, may derive new tuples from existing ones. Derived tuples retain access to their "parent" via prototypal inheritance. This relieves operators of the burden of propagating unrelated upstream changes.</p><p>Some operators require additional inspection of tuple state. Consider an aggregate operator that calculates running statistics over a dataset (e.g., mean and variance). When the operator observes added or removed tuples, the statistics can be updated based on the current tuple values. With modified tuples, the previous value must be subtracted from the calculation and the new value added. Correspondingly, tuples include a previous property. Writes to a tuple attribute are done through a setter function that copies current values to the previous object.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.2">Handling Interaction</head><p>Reactive Vega instantiates an event listener node in the dataflow graph for each low-level event type required by the visualization (e.g., mousedown or touchstart). These nodes are directly connected to dependent signals as specified by event selectors <ref type="bibr" target="#b30">[32]</ref>. In the case of ordered selectors (e.g., a "drag" event specified by [mousedown, mouseup] &gt; mousemove), each constituent event is connected to "data": [ { "name": "stocks", "url": "data/stocks.csv"}}, { "name": "index point", "source": "stocks", "transform": [{ "type": "filter", "test": "month(d.date) == month(indexDate) &amp;&amp; year(d.date) == year(indexDate)" }] }, { "name": "indexed_stocks", "source": "stocks", "transform": [ { "type": "zip", "with": "index", "as": "index_term", "key": "symbol", "withKey": "symbol", "default": {"price": 0} }, { "type": "formula", "field": "indexed_price", "expr </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Group Builder</head><p>{ "data": [{ "name": "table", "url": "data/groupedBar.json"}], "scales": [ … ], "axes": [ … ], "marks": [{ "type": "group", "from": { "data": "table", "transform": [{"type":"facet", "keys":["category"]}] }, "properties": { "enter": { "y": {"scale": "cat", "field": "key"}, "height": {"scale": "cat", "band": true} }}, "marks": [ { "name": "bars", "type": "rect", "properties": { "enter": { "y": {"scale": "pos", "field": "position"}, "height": {"scale": "pos", "band": true}, "x": {"scale": "val", "field": "value"}, "</p><p>x2": {"scale": "val", "value": 0} }}}, { "type": "text", "from": {"mark": "bars"}, "properties": { "enter": { "x": {"field": "x2", "offset": 2}, "y": {"field": "y"}, "dy": {"field": "height", "mult": 0.5}, "align": {"value": "left"}, "baseline": {"value": "middle"}, "text": {"field": "datum.  an automatically created anonymous signal; an additional anonymous signal connects them to serve as a gatekeeper, and only propagates the final signal value when appropriate. Individual signals can be dependent on multiple event nodes and/or other signals, and value propagation follows E-FRP's two-phase update <ref type="bibr" target="#b34">[36]</ref> as described in § 4.3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.3">Constructing the Scene Graph</head><p>To construct a scene graph, Reactive Vega follows a process akin to the Protovis bind-build-evaluate pipeline <ref type="bibr" target="#b18">[20]</ref>. When a declarative specification is parsed, Reactive Vega traverses the mark hierarchy to bind property definitions: property sets are compiled into encoding functions and stored with the specification. At run-time, build and evaluate operators are created for each bound mark. The build operator performs a data join <ref type="bibr" target="#b9">[10]</ref> to generate one scene graph element (or "mark") per tuple in the backing dataset, and the evaluate operator runs the appropriate encoding functions. A downstream bounds operator calculates the bounding boxes of generated marks. For a nested scene graph to be rendered correctly, the order of operations is critical: parent marks must be built and encoded before their children, but the bounds of the children must be calculated before their parents. The resultant scene graph exhibits an alternating structure, with individual mark elements grouped under a sentinel node that holds the mark specification. <ref type="figure" target="#fig_1">Figure 4</ref> illustrates this process for a simple grouped bar chart example. Generated scene graph elements are modeled as data tuples and can serve as the input data for downstream visual encoding primitives. This establishes a reactive geometry that accelerates common layout tasks, such as label positioning, and expands the expressiveness of the specification language (prior versions of Vega do not support reactive geometry). As generated marks can be run through subsequent data transformations, higher-level layout algorithms (e.g., those that require a pre-computed initial layout [15]) are now supported in a fully declarative fashion.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Changesets and Materialization</head><p>All data does not flow through the system at all times. Instead, operators receive and transmit changesets. A changeset consists of tuples that have been observed, new signal values, and updates to other dependencies that have transpired since the last render event. The propagation of a changeset begins in response to streaming tuples or user interaction. The corresponding input node creates a fresh changeset, and populates it with the detected update. As the changeset flows through the graph, operators use it to perform targeted recomputation, and may augment it in a variety of ways. For example, a Filter operator might remove tuples from a changeset if they do not meet the filter predicate, or may mark modified tuples as added if they previously had been filtered. A Cartesian product operator, on the other hand, would replace all the tuples in the incoming changeset with the results of a cross-product with another data stream.</p><p>While changesets only include updated data, some operators require a complete dataset. For example, a windowed-join requires access to all tuples in the current windows of the joined data sources. For such scenarios, special collector operators (akin to views <ref type="bibr" target="#b1">[2]</ref> or synopses <ref type="bibr" target="#b3">[4]</ref> in streaming databases) exist to materialize the data currently in a branch. In order to mitigate the associated time and memory expenses, Reactive Vega automatically shares collectors between dependent operators. Upon instatiation, such operators must be annotated as requiring a collector; at run-time they can then request a complete dataset from the dataflow graph scheduler.</p><p>Finally, if animated transitions are specified, a changeset contains an interpolation queue to which mark evaluators add generated mark instances; the interpolators are then run when the changeset is evaluated by the renderer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Coordinating Changeset Propagation</head><p>A centralized dataflow graph scheduler is responsible for dispatching changesets to appropriate operators. The scheduler ensures that changeset propagation occurs in topological order so that an operator is only evaluated after all of its dependencies are up-to-date. This schedule prevents wasteful intermediary computation or momentary inconsistencies, known as glitches <ref type="bibr" target="#b12">[13]</ref>. Centralizing this responsibility, rather than delegating it to operators, enables more aggressive pruning of unnecessary computation. As the scheduler has access to the full graph structure, it has more insight into the state of individual operators and the progress of the propagation. We describe scheduling optimizations in § 5.2.</p><p>When an interaction event occurs, however, an initial nontopological update of signals is performed. Dependent signals are reevaluated according to the order of their definitions within the declarative specification. As a result, signals may use prior computed values of their dependencies, which will subsequently be updated. This process mimics E-FRP's two-phase update <ref type="bibr" target="#b34">[36]</ref>, and is necessary to enable expressive signal composition. Once all necessary signals have been reevaluated, a changeset with the new signal values is sent to the scheduler for propagation to the rest of the dataflow graph.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Pushing Internal and Pulling External Changesets</head><p>Two types of edges connect operators in the dataflow graph. The first connects pairs of operators that work with the same data; for example a pipeline of data transformation operators for the same data source, or a mark's build and evaluate operators. Changesets are pushed along these edges, and operators directly use, augment, and propagate them.   <ref type="table">Temporary   table  table  table   Group  Builder   table  table   Fig.</ref>  The second type of edge connects operators with external dependencies such as other data sources, signals, and scale functions. As these edges connect disparate data spaces, they cannot directly connect operators with their dependencies. To do otherwise would result in operators performing computation over mismatched data types. Instead, external dependencies are connected to their dependents' nearest upstream Collector node, and changesets that flow along these edges are flagged as reflow changesets. When a Collector receives a reflow changeset, it propagates its tuples forward, flagging them as modified. The dependents now receive correct input data and request the latest values of their dependencies from the scheduler.</p><p>The only exception to this pattern is when signals rely on other signals. Reflow changesets still flow along these edges but, as they operate in scalar data space, they are not mediated by Collectors.</p><p>This hybrid push/pull system enables a complex web of interdependent operators while reducing the implementation complexity of individual elements. For example, regardless of whether a signal parameterizes data transforms or visual encoding primitives, it simply needs to output a reflow changeset. Without such a system in place, the signal would instead have to construct a different changeset for each dependency edge it was a part of, and determine the correct dataset to supply. <ref type="figure" target="#fig_0">Figures 1, 3, 4</ref>, 5, and 11 use filled and unfilled arrows for internal and external connections, respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Dynamically Restructuring the Graph</head><p>To support streaming nested data structures, operators can dynamically restructure the graph at runtime by extending new branches, or pruning existing ones, based on observed data. These dataflow branches model their corresponding hierarchies as standard relations, thereby enabling subsequent operators to remain agnostic to higher-level structure. For example, a Facet operator partitions tuples by key fields; each partition then propagates down a unique, dynamically-constructed dataflow branch, which can include other operators such as Filter or Sort.</p><p>In order to maintain interactive performance, new branches are queued for evaluation as part of the same propagation in which they were created. To ensure changeset propagation continues to occur in topological order, operators are given a rank upon instantiation to uniquely identify their place in the ordering. When new edges are added to the dataflow graph, the ranks are updated such that an operator's rank is always greater than those of its dependencies. When the scheduler queues operators for propagation, it also stores the ranks it observes. Before propagating a changeset to an operator, the scheduler compares the operator's current rank to the stored rank. If the ranks match, the operator is evaluated; if the ranks do not match, the graph was restructured and the scheduler requeues the operator.</p><p>The most common source of restructuring operations are scene graph operators, as building a nested scene graph is entirely datadriven. Dataflow branches for child marks (consisting of buildevaluate-bound chains) cannot be instantiated until the parent mark instances have been generated. As a result, only a single branch, corresponding to the root node of the scene graph, is constructed at compile-time. As data streams through the graph, or as interaction events occur, additional branches are created to build and encode corresponding nested marks. To ensure their marks are rendered in the same propagation cycle, new branches are temporarily connected to their parents. These connections are subsequently removed so that children marks will only be rebuilt and re-encoded when their backing data source updates. <ref type="figure" target="#fig_3">Figure 5</ref> provides a step-by-step illustration of how scene graph operators are constructed during a propagation cycle for the grouped bar chart in <ref type="figure" target="#fig_1">Figure 4</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">ARCHITECTURE PERFORMANCE OPTIMIZATIONS</head><p>Declarative language runtimes can transparently perform a number of performance optimizations <ref type="bibr" target="#b18">[20]</ref>. In this section, we describe optimization strategies Reactive Vega uses to increase throughput and reduce memory usage. We evaluate the effect of each strategy through benchmark studies. Each benchmark was run with datasets sized at N = 100, 1,000, 10,000, and 100,000 tuples. For ecological validity, benchmarks were run with Google Chrome 42 (64-bit) and, to prevent confounds with browser-based just-in-time (JIT) optimizations, each iteration was run in a fresh instance. All tests were conducted on a MacBook Pro system running Mac OS X 10.10.2, with a quad-core 2.5GHz Intel Core i7 processor and 16GB of 1600 MHz DDR3 RAM.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">On-Demand Tuple Revision Tracking</head><p>Some operators (e.g., statistical aggregates) require both a tuple's current and previous values. Tracking prior values can affect both running time and memory consumption. One strategy to minimize this cost is to track tuple revisions only when necessary. Operators must declare their need for prior values. Then, when tuples are ingested, their previous values are only tracked if the scheduler determines that they will flow through an operator that requires revision tracking.</p><p>We ran a benchmark comparing three conditions: always track revisions, never track revisions, and on-demand tracking. Although the "never" condition produces incorrect results, it provides a lower-bound for performance. We measured the system's throughput as well as memory allocated when initializing a scatterplot specification, and after modifying either 1% or 100% of input tuples. The scatterplot features two symbol marks fed by two distinct dataflows, A and B. Both     branches ingest the same set of tuples, and include operators that derive new attributes. However, B includes additional aggregation operators that require revision tracking.</p><p>The results are shown in <ref type="figure" target="#fig_5">Figure 6</ref>, with the effects of revision tracking most salient at larger dataset sizes. Always tracking revisions can require 20-40% more memory, and can take up to 50% longer to initialize a visualization due to object instantiation overhead for storing previous values. Our on-demand strategy effectively reduces these costs, requiring only 5-10% more memory and taking 5% longer to initialize than the "never" condition.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Pruning Unnecessary Recomputation</head><p>By centralizing responsibility for operator scheduling and changeset dispatch, we can aggressively prune unnecessary recomputation. The dataflow graph scheduler knows the current state of the propagation, and dependency requirements for each queued operator, allowing us to perform two types of optimizations.</p><p>Pruning multiple reflows of the same branch: As the scheduler ensures a topological propagation ordering, a branch can be safely pruned for the current propagation if it has already been reflowed.</p><p>Skipping unchanged operators: Operators identify their dependencies -including signals, data fields, and scale functions -and changesets maintain a tally of updated dependencies as they flow through the graph. The scheduler skips evaluation of an individual operator if it is not responsible for deriving new tuples, or if a changeset contains only modified tuples and no dependencies have been updated.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Downstream operators are still queued for propagation.</head><p>To measure the impact of these optimizations, we created a grouped bar chart with five data transformation operators: Derive → Fold → Derive → Filter → Facet. The first Derive is parameterized by a signal, and the latter Derive and Filter operators are parameterized by a second, distinct signal. We then benchmarked the effect of four conditions (processing all recomputations, pruning multiple reflows only, skipping unchanged operators only, and applying both optimizations) across four tasks (initializing the visualization, updating each signal in turn, and updating both signals simultaneously).</p><p>Results are shown in <ref type="figure">Figure 7</ref>. Preventing multiple reflows is the most effective strategy, increasing throughput 1.4 times on average. Skipping unchanged operators sees little benefit by itself as, in our benchmark setup, only the two operators following a fold are skipped when changing signal1, and only the first derivation operator is skipped when changing signal2. When the two strategies are combined, however, we see a 1.6x increase in performance. This result was consistent across multiple benchmark trials. After careful handverification to ensure no additional nodes were erroneously skipped, we hypothesize that the JavaScript runtime is able to perform just-intime optimizations that it is unable to apply to the other conditions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Inlining Sequential Operators</head><p>To propagate changesets through the dataflow graph, the scheduler adds operators to a priority queue, backed by a binary heap sorted in topological order. This incurs an O(log N) cost for enqueueing and  <ref type="table">500  2k  5k  20k  50k  100  1k  10k  100k  200  500  2k  5k  20k  50k   Number of Data Points   100  1k  10k  100k  100  1k  10k  100k  200  500  2k  5k  20k  50k</ref> Number  dequeueing operators, which can be assessed multiple times per operator if the graph is dynamically restructured. However, branching only occurs as a result of operators registering dependencies, and dependencies are only connected to Collector nodes. As a result, much of the dataflow graph comprises linear paths. This is particularly true for scene graph operators, which are grouped into hundreds (or even thousands) of independent mark build-evaluate-bound branches. We explore the effect of inline evaluation of linear branches, whereby operators indicate that their neighbors can be called directly rather than queued for evaluation. The scheduler remains responsible for propagating the changeset, and thus can continue to apply the optimizations previously discussed. Although inline evaluation can be applied in a general fashion by coalescing linear branches into "super nodes," for simplicity we only evaluate inlining of scene graph operators here. Mark builders directly call evaluators and bounders, and group mark builders directly call new child mark builders rather than forming a temporary connection. <ref type="figure">Figure 8</ref> shows the results of this optimization applied to a parallel coordinates plot (PCP). The plot uses a nested scene graph in which each line segment is built by a dedicated build-evaluate-bound branch. As we can see, inlining does not have much impact on the initialization time. This is unsurprising, as the largest initialization cost is due to unavoidable graph restructuring. However, inlining improves streaming operations by a 1.9x factor on average. As streaming updates only propagate down specific branches of the dataflow graph, inline evaluation results in at least 4 fewer queuing operations by the scheduler.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">COMPARATIVE PERFORMANCE BENCHMARKS</head><p>We now evaluate the performance of Reactive Vega against D3 <ref type="bibr" target="#b9">[10]</ref> and the original, non-reactive Vega system (v1.5.0) <ref type="bibr" target="#b33">[35]</ref>. These performance evaluations use the setup previously described. <ref type="figure">Figure 9</ref> shows the average performance of (non-interactive) streaming scatter plots, parallel coordinates plots, and trellis plots. We first measured the average time to initially parse and render the visualizations. To gauge streaming performance, we next measured the average time taken to update and re-render upon adding, modifying, or removing 1% of tuples. We tested with datasets sized between 100 and 100,000 tuples, and ran 10 trials per size.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Streaming Visualizations</head><p>Reactive Vega has the greatest effect with the parallel coordinates plot, displaying 2x and 4x performance increases over D3 and Vega 1.5, respectively. This effect is the result of each line in the plot being built and encoded by its own branch of the dataflow graph. Across the other two examples, and averaging between the Canvas and SVG renderers, we find that although Reactive Vega takes 1.7x longer to initialize the visualizations, subsequent streaming operations are 1.9x faster than D3. Against Vega 1.5, Reactive Vega is again 1.7x slower at initializing visualizations; streaming updates perform roughly op-par with the Canvas renderer, but are 2x faster with the SVG renderer.</p><p>Slower initialization times for Reactive Vega are to be expected. D3 does not have to parse and compile a JSON specification, and a streaming dataflow graph is a more complex execution model, with higher overheads, than batch processing. However, with streaming visualizations this cost amortizes and performance in response to data changes becomes more important. In this case, Reactive Vega makes up the difference in a single update cycle.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Interactive Visualizations</head><p>We evaluated the performance of interactive visualizations (measured in terms of interactive frame rate) using three common examples: brushing &amp; linking a scatterplot matrix, a time-series overview+detail visualization, and panning &amp; zooming a scatterplot. We chose these examples as they all leverage interactive behaviors supported by D3, with canonical implementations available for each <ref type="bibr" target="#b0">1,</ref><ref type="bibr" target="#b1">2,</ref><ref type="bibr" target="#b2">3</ref> . For Reactive Vega, we expressed these visualizations with a single declarative specification. For D3 and Vega 1.5, we use custom event handling callbacks. The Vega 1.5 callbacks mimic the behavior of the fragmented reactive approach used in prior work <ref type="bibr" target="#b30">[32]</ref>. We tested these visualizations with datasets sized between 100 and 10,000 tuples. <ref type="figure">Figure 10</ref> shows the results -on average, and across both Canvas and SVG renderers, Reactive Vega offers superior interactive performance to custom D3 and Vega event handling callbacks. This effect primarily stems from Reactive Vega's unified data model, and is most noticeable with brushing &amp; linking a scatterplot matrix and the timeseries overview+detail visualization. In both examples, interactions manipulate only a subset of all data tuples. With Reactive Vega, only these tuples are processed, and their corresponding scene graph elements re-encoded and re-rendered. By comparison, with Vega 1.5's fragmented reactive approach, the entire scene graph must be reconstructed and rendered in response to changes in input data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">EXAMPLE STREAMING AND INTERACTIVE VISUALIZATIONS</head><p>Prior work <ref type="bibr" target="#b30">[32]</ref> demonstrates the expressivity of declarative interaction design with example visualizations that cover a taxonomy of interaction techniques <ref type="bibr" target="#b39">[41]</ref>. <ref type="figure" target="#fig_9">Figure 12</ref> illustrates several of these interactive visualizations using Reactive Vega. We now describe additional examples that illustrate new use cases that Reactive Vega enables, highlighting advantages of declarative interactive visualization design.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">Streaming Financial Index Chart</head><p>Prior work <ref type="bibr" target="#b30">[32]</ref> used declarative interaction primitives to specify a financial index chart. A static snapshot of time-series stock price data for several companies is visualized as a line chart and interactively normalized by an index point.</p><p>With Reactive Vega, we can extend this example to use real-time stock prices, rather than static historical data, by leveraging the Yahoo! Finance API. We initialize the visualization by requesting the stock prices of companies over the past 24 hours, at a minute-level resolution. Then, every minute, we poll the API endpoints again to request the most recent prices. A predicate checks the timestamp property of incoming tuples to ensure that only new data is added to the visualization. This guards against adding duplicate data when our update cycle does not coincide with Yahoo's, or when the markets are closed. API calls are synchronized and a changeset is only fired through the graph once all requests have received responses. As a result, all lines update together every minute. The resulting real-time index chart and corresponding dataflow graph are shown in <ref type="figure">Figure 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">DimpVis: Touch Navigation with Time-Series Data</head><p>DimpVis <ref type="bibr" target="#b21">[23]</ref> is a recently introduced interaction technique that allows direct manipulation navigation of time-series data. Starting with a scatterplot depicting data at a particular time slice, users can touch plotted points to reveal a "hint path": a line graph that displays the trajectory of the selected element over time. Dragging the selected point along this path triggers temporal navigation, with the rest of the points updating to reflect the new time. In evaluation studies, users reported feeling more engaged when exploring their data using DimpVis <ref type="bibr" target="#b21">[23</ref>  <ref type="figure">Fig. 11</ref>. The dataflow graph produced by parsing a declarative specification for the DimpVis interaction technique <ref type="bibr" target="#b21">[23]</ref>. Users tap and drag points to navigate the data through time. Signals calculate distances and scoring functions to smoothly interpolate the points in response.</p><p>We can recreate this technique with Reactive Vega's declarative interaction primitives and the GapMinder country-fertility-lifeexpectancy dataset used by the original. Input data is passed through a Window transform, such that every tuple contains references to the tuples that come before and after it in time, and filtered to remove triplets that span multiple countries. Signals constructed over mouse and touch events capture the selected point, and downstream signals calculate distances between the user's current position and the previous and next points. A scalar projection over these distances gives us scoring functions that determine whether the user is moving forwards or backwards in time. Scores feed a signal that is used in a derived data source to calculate new interpolated properties for the remaining points in the dataset. These interpolated properties determine the position of plotted points, thereby producing smooth transitions as the user drags back-and-forth. To draw the hint map, an additional derived data source filters data tuples for the currently country across all years. <ref type="figure">Figure 11</ref> shows the dataflow graph produced by this specification.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.3">Reusable Touch Interaction Abstractions</head><p>With the proliferation of touch-enabled devices, particularly smartphones and tablets, supporting touch-based interaction has become an increasingly important part of interactive visualization design. However, HTML5 provides a low-level API for touch events, with only three event types broadly supportedtouchstart, touchmove, and touchend. On multitouch devices these events contain an array of touch points. The application developer is responsible for the book- keeping involved with tracking multiple points across interactions, a cumbersome and difficult process. Declarative interaction design enables us to abstract low-level details away, and instead expose higher-level, semantic events in a reusable fashion. Definitions for signals and other interaction primitives can be encapsulated and parameterized as standalone "interactors." When an interactor is added to a visualization, Reactive Vega merges the two specifications together, name-spacing components to prevent conflicts. In this way, we can build an interactor comprising signals that perform the necessary logic for common multitouch gestures. When included in a host visualization, the visualization designer can safely ignore lower-level events, and instead build interactions driven by signals provided by the interactor. For example, after including a touch interactor as part of a scatterplot specification, the designer can use twotouchmove and pinchDelta signals to drive panning and zooming interactions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">DISCUSSION AND FUTURE WORK</head><p>Declarative languages are a popular means of authoring visualizations <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b9">10,</ref><ref type="bibr" target="#b18">20]</ref>, but have lacked first-class support for interaction design. Though recent work <ref type="bibr" target="#b30">[32]</ref> addresses this gap with composable interaction primitives, it provides only a proof-of-concept system. In response, we contribute Reactive Vega, the first system architecture to support declarative visualization and interaction design in a comprehensive and performant fashion.</p><p>It is important to note that although Reactive Vega provides an complete end-to-end system -whereby users invoke the parser to traverse an input declarative specification and instantiate the necessary architecture components to render a visualization -this process can be decoupled. Alternate parsers can be supplied, and higher-level tools can opt to manually construct and connect required operators. Regardless of the specification process, the Reactive Vega system architecture provides the dataflow operators and management necessary to support expressive visualization design, with streaming raw data and interaction events modeled uniformly.</p><p>Authoring a declarative specification, however, can present a hurdle to users. Although separating specification and execution frees designers to focus on visual encoding decisions, it also hides the underlying execution model. Language-level optimizations and delayed property evaluations make debugging particularly difficult <ref type="bibr" target="#b9">[10]</ref>, with internal structures exposed only when errors arise. To better understand these tradeoffs, we evaluated Reactive Vega's declarative model in our prior work <ref type="bibr" target="#b30">[32]</ref>. Using the Cognitive Dimensions of Notation <ref type="bibr" target="#b7">[8]</ref>, we determined that although declarative specification introduces hidden dependencies and decreases visibility, these are outweighed by an increase in the specification consistency of visual encoding and interaction, and a decrease in viscosity of abstraction primitives. Moveover, Vega's declarative JSON syntax simplifies programmatic generation of visualizations, enabling the creation of programs that generate and reason about visualizations at a higher level.</p><p>These findings are mirrored in the real-world adoption of Vega. For example, Wikipedia, a security-concious environment where it would be difficult to allow users to write imperative visualization code, has recently integrated Vega <ref type="bibr" target="#b25">[27]</ref> to enable visualization of data embedded in articles. Similarly, Vega's declarative format is well-suited for generation by higher-level tools. For example, Lyra <ref type="bibr" target="#b29">[31]</ref> allows designers to create Vega visualizations through direct-manipulation; and Voyager <ref type="bibr" target="#b38">[40]</ref> eschews the specification process for data exploration, by providing faceted search over a gallery of Vega visualizations. Still, improved support for authoring and debugging Vega specifications remains a promising avenue for future work. Visualizations of program behavior have been shown to improve learnability <ref type="bibr" target="#b17">[19]</ref>, and Reactive Vega's dataflow graph offers an execution model that can be readily visualized. Linked selection among specification text, data sources, a dataflow graph diagram, and the output visualization could aid understanding and debugging. New debugging environments for Reactive Vega could instrument the dataflow graph to enable inspection, for example stepping through changeset propagation.</p><p>Reactive Vega's architecture also offers opportunities to study scalable visualization design. Interactive visualization of large-scale datasets often requires offloading computation to server-side architectures. For example, Nanocubes <ref type="bibr" target="#b22">[24]</ref> and imMens <ref type="bibr" target="#b23">[25]</ref> assemble multidimensional data cubes that can be decomposed into smaller data tiles and pushed to the client. Such components could be integrated into a dataflow graph with execution distributed across server and client. For example, as the dataflow graph scheduler is responsible for propagation, it might anticipate possible user interactions and prefetch data tiles in order to reduce latency <ref type="bibr" target="#b6">[7]</ref>.</p><p>Finally, as previously mentioned, an ecosystem of higher-level systems is developing around Vega. Statistical packages (ggvis <ref type="bibr" target="#b16">[18]</ref>), data exploration tools (Voyager <ref type="bibr" target="#b38">[40]</ref>), computational notebooks (iPython <ref type="bibr" target="#b19">[21]</ref>), and graphical design tools (Lyra <ref type="bibr" target="#b29">[31]</ref>) use earlier versions of Vega to automatically construct visualizations as part of the data analysis process, or to facilitate visualization prototyping and publishing. With Reactive Vega, these systems can extend the types of visualizations they support to include interactive and streaming examples. This expressivity, in turn, may spur development of alternate forms of specifying interactions, for example through higher-level languages or via direct manipulation and demonstration.</p><p>Reactive Vega is an open source system, and we have merged it with the existing Vega project. It is available at http://vega. github.io/vega/, along with a "live editor" and a number of example interactive visualizations.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 3 .</head><label>3</label><figDesc>: "d.index_term.price &gt; 0 ? (d.price -d.index_term.price) / d.index_term.price : The declarative specification (left) and resultant dataflow graph (right) for processing the input data of the streaming index chart in Fig. 1.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 4 .</head><label>4</label><figDesc>(a) The specification for (b) a grouped bar chart, with (c) the underlying scene graph, and (d) corresponding portion of the dataflow graph.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Root</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>5 .</head><label>5</label><figDesc>Dataflow operators responsible for scene graph construction are dynamically instantiated at run-time, a process that results in the graph seen inFig. 4. (a) At compile-time, a branch corresponding to the root scene graph node is instantiated. (b-c) As the changeset (in blue) propagates through nodes, group-mark builders instantiate builders for their children. Parent and child builders are temporarily connected (dotted lines) to ensure children are built in the same timecycle. (d-e) When the changeset propagates to the children, the temporary connection is replaced with a connection to the mark's backing data source (also in blue).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head></head><label></label><figDesc>0</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 .</head><label>6</label><figDesc>Effects of tuple revision optimizations on average processing speed (top) and memory footprint (bottom). Left-hand figures show relative changes using no-tracking as a baseline (closer to 1.0 are better), and right-hand figures show the absolute values on a log 10 scale (lower is better).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 7 .Fig. 8 .</head><label>78</label><figDesc>The effects of pruning unnecessary computation on average processing speed. (a) A relative difference between conditions (higher is better). (b) Absolute values for time taken, plotted on a log 10 scale (lower is better). The effects of inlining sequential operators on average processing speed. (a) A relative difference between conditions (higher is better). (b) Absolute values for time taken, plotted on a log 10 scale (lower is better).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 9 .Fig. 10 .</head><label>910</label><figDesc>Average performance of rendering (non-interactive) streaming visualizations: (top-bottom) scatterplot, parallel coordinates, and trellis plot; (left-right) initialization time, average frame time, and average frame rate. Dashed lines indicate the threshold of interactive updates<ref type="bibr" target="#b10">[11]</ref>. Average frame rates for three interactive visualizations: (left-right) brushing and linking on a scatterplot matrix; brushing and linking on an overview+detail visualization; panning and zooming on a scatterplot. Dashed lines indicate the threshold of interactive updates<ref type="bibr" target="#b10">[11]</ref>.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 12 .</head><label>12</label><figDesc>Example declarative interactive visualizations [32] that cover an existing taxonomy of interaction techniques [41]: (a) Reconfigure with an Index Chart; (b) Explore by panning &amp; zooming; (c) Select &amp; Connect with brushing &amp; linking; (d) Abstract/Elaborate with overview+detail;</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>closes this gap through composable • Arvind Satyanarayan is with Stanford University. E-mail: arvindsatya@cs.stanford.edu. • Ryan Russell, Jane Hoffwell, and Jeffrey Heer are with the University of Washington. E-mails: {ryan16, jhoffs, jheer}@uw.edu.</figDesc><table /><note>Manuscript received 31 Mar. 2015; accepted 1 Aug. 2015; date of publication xx Aug 2015; date of current version 25 Oct. 2015. For information on obtaining reprints of this article, please send e-mail to: tvcg@computer.org.</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>Manuscript received 31 Mar. 2015; accepted 1 Aug. 2015; date of publication 20 Aug. 2015; date of current version 25 Oct. 2015. For information on obtaining reprints of this article, please send e-mail to: tvcg@computer.org. Digital Object Identifier no. 10.1109/TVCG.2015.2467091</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>This work was supported by an SAP Stanford Graduate Fellowship, the Intel Big Data ISTC, the Moore Foundation, and DARPA XDATA.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">The design of the borealis stream processing engine</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Ahmad</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Balazinska</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Cetintemel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Cherniack</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-H</forename><surname>Hwang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Lindner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Maskey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Rasin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Ryvkina</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CIDR</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="277" to="289" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Aurora: a new model and architecture for data stream management</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Carney</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Cherniack</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Convey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Stonebraker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Tatbul</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zdonik</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The VLDB JournalThe International Journal on Very Large Data Bases</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="120" to="139" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">An extended data-flow architecture for data analysis and visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Abram</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Treinish</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 6th conference on Visualization&apos;95</title>
+		<meeting>the 6th conference on Visualization&apos;95</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="1995" />
+			<biblScope unit="page">263</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Stream: The stanford data stream management system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Arasu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Babcock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Babu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cieslewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Datar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ito</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Motwani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Srivastava</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Widom</surname></persName>
+		</author>
+		<idno>2004-20</idno>
+		<imprint>
+			<date type="published" when="2004" />
+			<pubPlace>Stanford InfoLab</pubPlace>
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Eddies: Continuously adaptive query processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Avnur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM SIGMOD Record</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="261" to="272" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">A survey on reactive programming</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Bainomugisha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">L</forename><surname>Carreton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">V</forename><surname>Cutsem</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Mostinckx</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">D</forename><surname>Meuter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computing Surveys (CSUR)</title>
+		<imprint>
+			<biblScope unit="volume">45</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page">52</biblScope>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Dynamic generation and prefetching of data chunks for exploratory visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Battle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Stonebraker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE InfoVis Posters Track</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Cognitive dimensions of notations: Design tools for cognitive technology</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">F</forename><surname>Blackwell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Britton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Cox</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">R</forename><surname>Green</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gurr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Kadoda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kutar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Loomes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">L</forename><surname>Nehaniv</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Petre</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Cognitive Technology: Instruments of Mind</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="325" to="341" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Protovis: A graphical toolkit for visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bostock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Visualization &amp; Comp. Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1121" to="1128" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">D3: Data-Driven Documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bostock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Ogievetsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Visualization &amp; Comp. Graphics</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2301" to="2309" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">An engineering model of human performance</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Card</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">P</forename><surname>Moran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Newell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Ergonomics: Psychological mechanisms and models in ergonomics</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page">382</biblScope>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Telegraphcq: continuous dataflow processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chandrasekaran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Cooper</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Deshpande</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">J</forename><surname>Franklin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Krishnamurthy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">R</forename><surname>Madden</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Reiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Shah</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2003 ACM SIGMOD international conference on Management of data</title>
+		<meeting>the 2003 ACM SIGMOD international conference on Management of data</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="668" to="668" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Embedding dynamic dataflow in a call-by-value language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">H</forename><surname>Cooper</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Krishnamurthi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Programming Languages and Systems</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="294" to="308" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Stencil: a conceptual model for representation and interaction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cottam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lumsdaine</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Information Visualisation</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="51" to="56" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Asynchronous functional reactive programming for guis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Czaplicki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM SIGPLAN</title>
+		<meeting>ACM SIGPLAN</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="411" to="422" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Coherent reaction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Edwards</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM SIGPLAN</title>
+		<meeting>ACM SIGPLAN</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="925" to="932" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<ptr target="http://ggvis.rstudio.com/" />
+		<title level="m">ggvis: Interactive grammar of graphics for R</title>
+		<imprint>
+			<date type="published" when="2015-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Online python tutor: embeddable web-based program visualization for cs education</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Guo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceeding of the 44th ACM technical symposium on Computer science education</title>
+		<meeting>eeding of the 44th ACM technical symposium on Computer science education</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="579" to="584" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Declarative language design for interactive visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bostock</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Visualization &amp; Comp. Graphics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1149" to="1156" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<ptr target="http://ipython.org/notebook.html" />
+		<title level="m">The IPython Notebook</title>
+		<imprint>
+			<date type="published" when="2015-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Reactive data visualizations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Kelleher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Levkowitz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IS&amp;T/SPIE Electronic Imaging, pages 93970N-93970N. International Society for Optics and Photonics</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Dimpvis: Exploring time-varying information visualizations by direct manipulation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Kondo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Collins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2003" to="2012" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Nanocubes for real-time exploration of spatiotemporal datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Lins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">T</forename><surname>Klosowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Scheidegger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2456" to="2465" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">immens: Real-time visual querying of big data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Jiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. EuroVis)</title>
+		<meeting>EuroVis)</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page">32</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Mental models, visual reasoning and interaction in information visualization: A top-down perspective</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">T</forename><surname>Stasko</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Visualization &amp; Comp. Graphics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="999" to="1008" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mediawiki</forename><surname>Extension</surname></persName>
+		</author>
+		<ptr target="https://www.mediawiki.org/wiki/Extension:Graph" />
+		<imprint>
+			<date type="published" when="2015-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Flapjax: a programming language for ajax applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">A</forename><surname>Meyerovich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Guha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Baskin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">H</forename><surname>Cooper</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Greenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bromfield</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Krishnamurthi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM SIGPLAN Notices</title>
+		<imprint>
+			<biblScope unit="volume">44</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page" from="1" to="20" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Separating application code from toolkits: eliminating the spaghetti of call-backs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">A</forename><surname>Myers</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM UIST</title>
+		<meeting>ACM UIST</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="211" to="220" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">The science of interaction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">A</forename><surname>Pike</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Stasko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">A</forename><surname>O'connell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Visualization</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="263" to="274" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Lyra: An interactive visualization design environment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics Forum (Proc. EuroVis)</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Declarative interaction design for data visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Satyanarayan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Wongsuphasawat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 27th annual ACM symposium on User interface software and technology</title>
+		<meeting>the 27th annual ACM symposium on User interface software and technology</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="669" to="678" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">The design and implementation of an object-oriented toolkit for 3d graphics and visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">J</forename><surname>Schroeder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">M</forename><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 7th conference on Visualization&apos;96</title>
+		<meeting>the 7th conference on Visualization&apos;96</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page">93</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Polaris: A system for query, analysis, and visualization of multidimensional relational databases</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Stolte</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Visualization &amp; Comp. Graphics</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="52" to="65" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<ptr target="http://trifacta.github.io/vega" />
+		<title level="m">Vega: A Visualization Grammar</title>
+		<imprint>
+			<date type="published" when="2015-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Event-driven FRP</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Taha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hudak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Practical Aspects of Declarative Languages</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="155" to="172" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Building highly-coordinated visualizations in Improvise</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Weaver</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Information Visualization</title>
+		<meeting>IEEE Information Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="159" to="166" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">ggplot2: Elegant Graphics for Data Analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Wickham</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2009" />
+			<publisher>Springer</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">The Grammar of Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wilkinson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<publisher>Springer</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Voyager: Exploratory Analysis via Faceted Browsing of Visualization Recommendations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Wongsuphasawat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Moritz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Anand</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mackinlay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Howe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Visualization &amp; Comp. Graphics</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Toward a deeper understanding of the role of interaction in information visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S</forename><surname>Yi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">T</forename><surname>Stasko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Jacko</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1224" to="1231" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

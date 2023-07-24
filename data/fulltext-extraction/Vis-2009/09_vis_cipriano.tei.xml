@@ -1,0 +1,892 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Multi-Scale Surface Descriptors</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Student Member, IEEE</roleName><forename type="first">Gregory</forename><surname>Cipriano</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">George</forename><forename type="middle">N</forename><surname>Phillips</surname><genName>Jr</genName></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Michael</forename><surname>Gleicher</surname></persName>
+						</author>
+						<title level="a" type="main">Multi-Scale Surface Descriptors</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:51+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Curvature</term>
+					<term>descriptors</term>
+					<term>npr</term>
+					<term>stylized rendering</term>
+					<term>shape matching</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Local shape descriptors compactly characterize regions of a surface, and have been applied to tasks in visualization, shape matching, and analysis. Classically, curvature has be used as a shape descriptor; however, this differential property characterizes only an infinitesimal neighborhood. In this paper, we provide shape descriptors for surface meshes designed to be multi-scale, that is, capable of characterizing regions of varying size. These descriptors capture statistically the shape of a neighborhood around a central point by fitting a quadratic surface. They therefore mimic differential curvature, are efficient to compute, and encode anisotropy. We show how simple variants of mesh operations can be used to compute the descriptors without resorting to expensive parameterizations, and additionally provide a statistical approximation for reduced computational cost. We show how these descriptors apply to a number of uses in visualization, analysis, and matching of surfaces, particularly to tasks in protein surface analysis.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Local shape descriptors distill the shape of a region of a surface into a short vector of numbers, each corresponding to a property of the region. These descriptors have broad application when working with shapes: for example, they are used in visualizing and analyzing scientific data, shape matching, and in stylized rendering. While various local shape descriptors and methods for computing them exist, their inability to summarize the shape of larger regions limits their utility.</p><p>Our goal is a local surface shape descriptor that is applicable at different scales to summarize the shapes of differently sized neighborhoods. This allows it to be applied to smaller regions to capture small-scale detail, or to larger neighborhoods to summarize their overall shape. Regions of the surface may have one shape at a small scale, but a different shape at a larger scale (e.g. a small bump within a large bowl). This paper introduces an approach called multi-scale surface descriptors that meets this goal. We present a local shape descriptor that can be applied at multiple scales, along with techniques for computing them efficiently on a triangle mesh.</p><p>The shape of any finite region may contain arbitrary amounts of detail, therefore a shape descriptor can only provide a summary. For an infinitesimal region, the amount of detail is limited, so the shape can be completely described by its curvature. Curvature provides a compact local descriptor: three or four numbers are sufficient to characterize the shape for an infinitesimally small region. For finite-sized regions, however, the mathematics of curvature do not apply.</p><p>We provide a descriptor that captures the most significant features of the shape of a local surface region. The descriptor considers a local neighborhood around a central point with a roughly circular area specified by radial distance. It measures the degree and type of nonplanarity of the region, for example encoding whether something is a steep bump or a shallow bowl. It also captures the degree and direction of anisotropy, identifying troughs and ridges. A key insight of our approach is that while these quantities are not sufficient to capture all details of the shape of a finite region, they do capture the most significant aspects of shape. We introduce robust and practical methods for computing these larger-scale surface descriptors, and show their usefulness in a number of applications.</p><p>One of our key motivating applications is the matching of molecular surface regions to identify potentially similar chemical functionality. An important aspect of this functionality is surface shape complemen- tarity: a binding partner for a protein will often have locally complementary shape to its region of binding. Much as a key fits only its matching lock, complementarity implies that binding is highly stereospecific. Therefore, by characterizing the shape of a known binding pocket, and then using this information to identify similar regions in other proteins, we may find new targets for a given partner. This application, which we discuss in more detail in §5.2, highlights many of the requirements for practical, effective local shape descriptors and the methods to compute them: they must operate over large enough neighborhoods to be chemically significant; they must be efficient, as we need to compute the descriptors for all points on each molecule in a database; they must be robust against poorly tesselated surfaces; and they must correspond to domain scientists' intuition about shape and neighborhood. We provide the first shape descriptors that we feel are able to meet these needs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.1">Contribution</head><p>The contribution of this paper is an approach to local shape descriptors that provides a method for characterizing neighborhoods at multiple scales on the surface of a mesh. Our approach is the first to address all of the following goals for such descriptors:</p><p>• It scales to describe larger neighborhoods. Curvature captures only infinitesimal regions and prior approaches to curvature computation focus on minimizing the size of regions to better approximate the differential case. In §3 we present methods that summarize a non-trivial region statistically. • It corresponds to intuitions about curvature. Like curvature, our descriptor captures the degree and type of non-planarity of a region, and the degree and direction of anisotropy. • It allows for control of scale in a simple way. Neighborhoods are specified by their center and a radius, so regions are controlled by physically relevant quantities of the surface. In contrast, methods such as mesh pre-filtering require a less direct specification of neighborhood size in terms of frequency (which can be difficult to explain to domain scientists), and filtering causes points to move, precluding localized assessment. • It compensates for issues in tessellation. The methods of §3.1 account for discretization, allowing our descriptor to be robust to poorly tesselated surfaces. • It affords efficient computation. Throughout §3 we present methods for computing the descriptors efficiently. In particular, our approach avoids expensive parameterizations and our approximations can provide good performance without resorting to expensive mesh operations such as exact geodesic computations. • It works in applications. In §5 we describe how our descriptor is effective in applications. By providing a larger-scale summarization of surface regions, it allows for simpler algorithms to make effective use of descriptors across a number of applications. A demonstration of the steps involved in generating a descriptor for a single neighborhood. Our method starts with a vertex on the surface (a). It then generates a set of patches surrounding that vertex. One is shown in (b), with color given according to each vertex's weight (greener vertices have high weight, and redder have low weight). A plane is constructed using a weighted average of the normals of that patch (c), onto which all points are projected. Finally, a quadratic surface is found to approximate that height field (d).</p><p>Our approach is closely related to prior work on using planar parameterizations and polynomial fitting for curvature estimation, which will be discussed in §2.1. However, unlike these methods that focus on the challenge of being robust with as small a region of surface as possible, our approach is designed to work with larger surface regions. This requires us to provide effective methods for finding the correct regions ( §3.1) as well as to provide techniques for statistically summarizing the shape over these regions (</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Curvature</head><p>Many papers deal with the task of computing curvature for points on the surface: see <ref type="bibr" target="#b6">[7]</ref> for an overview. Petitjean <ref type="bibr" target="#b24">[25]</ref> surveys methods for estimating local surface quadratics, several of which inform our work. We draw inspiration for our point-and normal-weighting techniques from <ref type="bibr" target="#b23">[24]</ref>, who use a technique they describe as "normal vector voting" to compute curvature in the presence of noise.</p><p>Curvature estimation may break down in certain cases, as shown in <ref type="bibr" target="#b9">[10]</ref>. Rusinkiewicz <ref type="bibr" target="#b27">[28]</ref> shows how to avoid similar issues in pervertex curvature computation by estimating the second fundamental tensor per-face, and incorporating that into a description of the 1-ring curvature about a point. In some cases, only a minimal description of the surface may be required, such as its radius of curvature. This can be found by fitting spheres to points on the surface <ref type="bibr" target="#b3">[4]</ref>. Though more involved, ellipsoid fitting can indicate anisotropy <ref type="bibr" target="#b20">[21]</ref>.</p><p>Most discrete curvature fitting methods, such as Angle Deficit and Angle Excess, are very fast, but do not provide principle directions, and so cannot give anisotropy information <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b31">32]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Applications</head><p>Local shape descriptors are useful for a number of applications. Many have been developed, in numerous forms, for the task of shape matching, and share a subset of our goals. Körtgen, et al. <ref type="bibr" target="#b18">[19]</ref> and Gatzke, et al. <ref type="bibr" target="#b7">[8]</ref> both use the statistics over the neighborhood surrounding a point to perform robust matching. Unlike ours, the former does not directly utilize the surface. The latter, while more similar to ours, differs in that they build up their descriptor using differential curvature estimates, rather than estimating curvature on the patch as a whole. Spinimages <ref type="bibr" target="#b15">[16]</ref> represent such a neighborhood as a 2D texture, which can be quickly built, and can be used to perform rotationally-invariant matching. While fast, these are best suited for local feature comparison.</p><p>Gal <ref type="bibr" target="#b5">[6]</ref> models the surface using local shape descriptors to construct partial matches, while <ref type="bibr" target="#b2">[3]</ref> uses point signatures to detect rigid structures on a set of faces, which are then compared to one another. Goldman, et al. <ref type="bibr" target="#b10">[11]</ref> describe a local quadratic shape descriptor that they use for molecular similarity searching. Though these methods each have similarities to ours, none satisfy all of our goals.</p><p>Many graphics and visualization techniques use curvature, and therefore may benefit from our improved descriptor. Gumhold <ref type="bibr" target="#b13">[14]</ref> describes an algorithm to optimize the placement of lights in a scene, in order to emphasize high-curvature regions. Lee, et al. <ref type="bibr" target="#b19">[20]</ref> have On the left is the result of performing a search along edges for those points that are less than a particular distance from a single vertex. Though, intuitively, this should form a circular patch because of the mesh's tessellation, the patch has a non-circular shape. By adding virtual edges to 2-neighbors, we achieve a better result, at minimal incremental cost. <ref type="figure">Fig. 3</ref>. Here, directions of least curvature are found for a radially symmetric cosine wave. On the left, we show the result from computing distance along edges of the mesh. On the right, we add edges between 2-neighbors to better avoid tessellation issues. Note that the resulting directions are not symmetric on the left, but are on the right.</p><p>used curvature, along with globally discrepant lighting, to similarly emphasize the placement of specularities on the surface.</p><p>Toler-Franklin, et al. <ref type="bibr" target="#b33">[34]</ref> describe how lighting derived from largescale curvature can approximate local ambient occlusion, to better emphasize large concave features. Real-time rendering techniques also consider curvature: <ref type="bibr" target="#b34">[35]</ref> show how extracting curvature information from image space can produce compelling lighting and shading in realtime, while <ref type="bibr" target="#b17">[18]</ref> extracts curvature from volumetric data to enhance their visualizations.</p><p>Stylized rendering techniques benefit from the use of curvature as well. Principle curvatures can be used to depict the flow of curvature over the surface <ref type="bibr" target="#b8">[9]</ref>, and to then place textures along those flows, emphasizing important shape cues <ref type="bibr" target="#b12">[13,</ref><ref type="bibr" target="#b26">27,</ref><ref type="bibr" target="#b1">2]</ref>. Line drawing techniques also utilize curvature <ref type="bibr" target="#b16">[17,</ref><ref type="bibr" target="#b4">5]</ref>.</p><p>Curvature can directly inform another task, surface partitioning, by using high-water curvature as partition boundaries <ref type="bibr" target="#b21">[22]</ref>, or by placing seams in high-curvature regions to better hide them <ref type="bibr" target="#b30">[31]</ref>. Mortara, et al. <ref type="bibr" target="#b22">[23]</ref> uses the intersection of the surface and bubbles at multiple scales to estimate curvature for surface segmentation. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">MULTI-SCALE DESCRIPTORS</head><p>Given a triangle mesh and a neighborhood defined by a center point i (a vertex in the mesh) and size d, our approach computes a local descriptor of this region as a statistical characterization of its shape. See <ref type="figure">Figure 1</ref> for a depiction of this process. The radius, d, gives control over the scale of the neighborhood and has units of length with the same scale as the surface itself. The choice of radius depends on the application domain. For example, when considering molecular surfaces we choose d to be a size of biological relevance. Our approach has the following steps:</p><p>1. The set of points, N (i), in the neighborhood around i are determined and a weight computed for each to compensate for issues in tessellation. In §3.1 we describe how the points can be determined efficiently and how the weights are chosen. 2. N (i) is represented as a height field on the surface tangent plane at i. This representation, motivated by methods in curvature estimation, simplifies the computation of the statistics in the next step. In §3.2 we describe how the tangent plane is determined and explain the height field representation. 3. The height field is characterized statistically to yield the descriptor. We provide two methods for this summarization. In §3.3 we describe an approach using robust least-squares fitting that directly applies the intuitions of curvature. In §3.4 we provide a method that is based on simpler intuitions of shape. In §4.2.1 we compare both approaches.</p><p>The result of these steps is: one number that describes the type and degree of non-planarity of the neighborhood, one number assessing the degree of anisotropy, and a vector giving the direction of anisotropy, assuming that there is sufficient anisotropy to determine the direction.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Neighborhood Construction</head><p>To characterize a given vertex, our method first finds the neighborhood of all vertices that are within a distance d from that vertex along the surface of the mesh, called a d-disc. Descriptors at multiple scales are constructed, then, by choosing a set of d values for a given surface. Small values characterize local regions, while larger values take more of the surface into account. In the latter case, small surface variations are deemphasized. <ref type="figure" target="#fig_2">Figure 4</ref> shows the effect of varying patch sizes over the mesh.</p><p>To create uniformly-shaped patches on the surface, the geodesic distance should be used between points, as geodesics follow the shortest path on the surface. Computing geodesic distance on a mesh, however, is difficult because this path does not necessarily follow edges on the mesh. Even with efficient algorithms, such as <ref type="bibr" target="#b32">[33]</ref>, exact geodesic computation is prohibitively time-consuming and, as we describe below, unnecessary.</p><p>A common approximation to geodesic distance is simply to follow the edges between vertices. The distance between any two vertices, then, is the shortest patch along the edges connecting those vertices. This so-called Dijkstra path is an approximation to the true geodesic distance. Though fast to compute, Dijkstra distance can be an arbitrarily poor approximation to geodesic distance. This problem is significant in practice, as the use of Dijkstra distance in determining the neighborhood gives irregularly shaped regions, as shown in <ref type="figure" target="#fig_1">Figure 2</ref>, and is unacceptable for descriptor computation. The problem is not pathological, but rather, occurs frequently on real meshes.</p><p>We introduce a modification to Dijkstra distance that improves its distance estimates. Our insight is that a large discrepancy in the distance computed between two vertices results from a large difference between the geodesic path and the edgewise path. Further, the majority of these cases arise in an edgewise path of length 2 (e.g., two hops). To close the gap, we simply add virtual edges between each point and all of its 2-neighbors, and perform a Dijkstra computation on the original mesh with these added neighbors. In theory, these "corner cutting paths" may still have lengths that are arbitrarily poor approximations of the geodesic distances, but we have not encountered such pathological cases in practice. <ref type="figure" target="#fig_1">Figures 2 and 3</ref> show the results of this simple modification. We compare this method with true geodesics in §4.2.2.</p><p>Values for d can be chosen in one of two ways. For surfaces with an inherent scale, such as proteins, d may be set according to the size of known features, to describe, for instance, atom-or residue-sized neighborhoods on the surface; for molecular examples in this paper, we set d to 4 and 8Ångströms, respectively. For surfaces that have no inherent scale, we can simply let the user choose their own, or use a heuristic, such as a multiple of the median edge length, to automatically pick a reasonable size.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.1">Weighting</head><p>Before using the constructed neighborhood, N (i), our algorithm first adjusts the weights of its individual vertices:</p><p>• Points are weighted according to the area of the surface nearest to them. This reduces the effect of any variability of the size of triangles on a surface. • Points closer to the edge of the patch are weighted to contribute less to the overall shape description than those closer to the center. This compensates for the fact that, for any given angular wedge, outer regions will contain more surface area than inner regions.</p><p>Given these two factors, our equation for the weight of a vertex p ∈ N (i) is:</p><formula xml:id="formula_0">Wi(p) = A(p) D(i, p) + ǫ<label>(1)</label></formula><p>where A(p) refers to the area of the faces surrounding p and D(i, p) refers to the shortest distance from p to i. Note that dividing by D(i, p) ensures that concentric rings in the neighborhood have equal weight. Normalizing these weights produces the final values:</p><formula xml:id="formula_1">Wi(p) = Wi(p) v∈N (i) Wi(v)<label>(2)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Height Field</head><p>As described in <ref type="bibr" target="#b6">[7]</ref>, a common method for estimating curvature on the surface of a mesh is to construct a height-field function, parameterized by two variables, u and v:</p><formula xml:id="formula_2">F (u, v) = (u, v, f (u, v))<label>(3)</label></formula><p>There are several reasons one might want to do this. First, projection to a height field acts as a change of coordinate system. In this case, the height field approximates a tangent plane, and is therefore a more natural basis for computing differential curvature, as well as our curvature. Second, by projecting a set of points onto a height-field, a 3D problem is reduced to a 2D problem, reducing its degrees of freedom, and therefore, its complexity.</p><p>The coordinates for each point on the patch are found by projecting that point onto a plane. The choice of plane will affect how good the overall parameterization will be. As we will describe below in §3.2.1, one measure of 'goodness' is to minimize the difference between the normals on the surface, and the normal of the plane of projection. So our method finds the plane normal Ni(p) as the weighted average of all surrounding vertex normals:</p><formula xml:id="formula_3">N h (p) = v∈N (i) Wi(v) • normal(v)<label>(4)</label></formula><p>This vector is normalized to produce the final height-field normal, N h (p). It should be noted that while <ref type="bibr" target="#b0">[1]</ref> give a more accurate method for averaging normals than our linear approximation, we have not seen a case in practice that would benefit from their method.</p><p>As a final step, we ensure that the central vertex in a patch is placed at the origin (so u0 = v0 = 0). This is accomplished by subtracting the projected u, v for that vertex from the u and v of all other vertices.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.1">Avoiding Issues with Height Fields</head><p>Several problems can arise from the use of height functions: first, projection does not preserve relative distances in the (u, v) parameter space. Second is the issue of foldover: F (u, v) may have multiple, conflicting values at a given u and v. This is generally the result of including triangles that face away from the plane of projection.</p><p>We have experimented with various parameterization techniques, including exponential maps <ref type="bibr" target="#b29">[30]</ref>, to directly address both of these issues. Though this is a viable alternative, our techniques do not require a parameterization of the surface. Also, because we are using an orthonormal projection, relative 3D distance is preserved. Thus we are still able to achieve a reliable fit and projection isn't a large issue. Local parameterizations, on the other hand, besides being slower to compute than height-field projections, may break down with distance; since we fit relatively large patches, this presents a problem.</p><p>The second problem, foldover, is more of a concern, but it can be mitigated by simply throwing away those vertices whose normals point away from the plane of projection. While this doesn't completely remove foldover, remaining conflicting vertices have very low weight, so they do not tend to affect the result, as described in §4.2.5. Usage of robust statistics to lower the weight of outliers, as described below in §3.3.1, further improves matters.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Fitting with Quadratics</head><p>After representing the surface region as a height field, our approach must compute a descriptor that summarizes its shape statistically. Because the region may consist of a large number of points, the height field may have an arbitrarily complex shape. To summarize this shape, we first approximate it by a simpler shape that is easier to characterize. We fit a quadratic function to the height field. We choose quadratic functions because they are the simplest form that can sufficiently express the shape variability we need to encode.</p><p>Note that if the region were infinitesimal, its shape would exactly fit the quadratic form, and the coefficients of this quadratic would yield the curvature at the center point of the region. This is the basis of several curvature estimation approaches <ref type="bibr" target="#b6">[7]</ref>. However, rather than trying to find a minimal set of points to constrain the quadratic, we instead use a large collection of points over the neighborhood and find the best-fit quadratic.</p><p>The form of equation to fit is:</p><formula xml:id="formula_4">zi = f (ui, vi) = Au 2 i + Buivi + Cv 2 i + Dui + Evi (5)</formula><p>Each point of the height field (ui, vi, zi) provides a linear constraint on the 5 degrees of freedom of the quadratic. Note that we do not include a constant term, which forces our function through the central vertex in a patch. The simplest fitting method is to solve the set of linear constraints according to a weighted least-squares metric, with the weights Wi(v) from §3.1.1. Because there is a small number of variables, our implementation solves these linear least-squares problems by forming the normal equations (multiplying the matrix by its transpose), and solving the resulting linear system using the Cholesky factorization. The use of linear least squares for polynomial fitting is discussed in <ref type="bibr" target="#b25">[26]</ref>.</p><p>Once parameters have been found for the quadratic, the principle directions and magnitude of curvature of the quadratic patch can be estimated by finding the eigenvectors and eigenvalues, respectively, of the second fundamental form:</p><formula xml:id="formula_5">II = A B 2 B 2 C .<label>(6)</label></formula><p>For our descriptor, we use these principle curvatures of the quadratic. Specifically, we include the eigenvector corresponding to the smallest eigenvalue (i.e., with shallowest curvature), along with the degree of anisotropy, which is derived from the ratio of the largest absolute eigenvalue to the smallest.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3.1">Robust Statistics</head><p>When there are many points, even the best fit quadratic surface may be a poor approximation. In particular, the least squares metric used for fitting is sensitive to outliers: a small number of badly fit points can skew the results. In local descriptor computations, outliers can come from surface foldovers, sharp discontinuities, as well as noise on the surface itself.</p><p>We find that by applying robust statistical techniques <ref type="bibr" target="#b14">[15]</ref> to our initial fit, we can lessen the impact of outliers. Using M-estimation, with the original quadratic fit as a prior, regions that have folded under are quickly identified as outliers. Their weights are then lowered, reducing their contribution, and a new surface is fit. This can be iteratively applied to reweight points, driving the least-squares solution toward a better fit with those points that remain. In practice, we find that a single iteration of this re-weighting is required to provide sufficient robustness.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Moment-Based Surface Description</head><p>A different description of the shape of the local region is based on a simpler intuition that less directly corresponds with curvature. In §4.2.3, we contrast the two descriptors and show that their results are similar.</p><p>Consider the height field patch from the region as a rigid object, with the points having mass proportional to their weights. If the center of mass of the object is above the plane, the center point is likely to be at the bottom of a bowlike shape (or the top of a peak if the mass center is below). The distance between the center and the plane gives an assessment of how peak/bowl-like the shape is. Similarly, we can consider the statistical trend of the mass distribution. If the moment of inertia is strongly directional, then the region is anisotropic.</p><p>These simple intuitions lead to a very efficient statistical characterization of the height field. The centroid of the neighborhood is found quickly by averaging, and its height value gives the assessment of nonplanarity. By treating the height field as an image (with the height mapping to intensity), image statistic methods can be used to determine the distribution. Image moment computations <ref type="bibr" target="#b11">[12]</ref> determine the degree and direction of anisotropy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4.1">2D Moment Computation</head><p>Image moments can be used to statistically deconstruct an image to find, for instance, its area, center of mass, and orientation. It is this last property, described using the second central moment, that we use to interpret anisotropy in a height field.</p><p>The second central moment is used to find the direction of highest intensity in an image, which can be used to uncover its orientation. For our method, consider the projected distance (or height) of a point on the plane as 'intensity'. Intuitively, ridges in the height field will have the highest such intensity. Ridges, by definition, have lowest curvature along their major axis. By finding this direction, we then find an approximation to the direction of least curvature of the neighborhood.</p><p>These major and minor axes of intensity can be found by first constructing the central moments <ref type="bibr" target="#b11">[12]</ref> up to order two:</p><formula xml:id="formula_6">Mpq = i u p i v q i F (ui, vi) (7) µ20 = M20/M00 −ū 2 µ02 = M02/M00 −v 2 µ11 = M11/M00 −ūv (8)</formula><p>Axes of intensity are then found by taking solving for the eigenvectors and eigenvalues of the covariance matrix:</p><formula xml:id="formula_7">cov[F (u, v)] = μ20μ11 µ11μ02 .<label>(9)</label></formula><p>One minor wrinkle: as described, this technique works only for ridges. To properly characterize neighborhoods that represent valleys, we simply invert the heights, replacing F (u, v) with −F (u, v) in equation <ref type="formula">7</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">RESULTS</head><p>In this section, we discuss the performance and correctness of our descriptors. For all results below, the symbol '±' represents a range of one standard deviation from a given value.</p><p>In this paper, we have implemented our multi-scale surface descriptors in a visualization testbed that runs under Windows on PCs. All figures in this paper are generated from within this testbed. For all molecular examples in this paper, we use MSMS <ref type="bibr" target="#b28">[29]</ref> to generate an initial molecular surface as a triangle mesh.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Performance</head><p>To assess performance of our method, we built a corpus of 30 meshes, ranging in size from 2,600 to 170,000 vertices. Descriptors were computed over the surface of each mesh. On our test set, the time needed to construct these descriptors using quadratics ranged from 3 seconds to 4 minutes per mesh on an Intel Core 2 Duo, E8500 with 3GB of RAM. Runtime was generally a function of the largest neighborhood size, as a larger neighborhood has more vertices to consider, as well as the size of the mesh itself, as a set of descriptors is built for each vertex. In our testing, construction of vertex neighborhoods takes about the same amount of time as fitting the quadratics over those neighborhoods. We found moment computation to run three times faster than quadratic fitting. Combining these timings, moments can be calculated, on average, 50% faster than quadratics.</p><p>Our system provides the ability to cache the results of computing our descriptors onto disk for future use, so in cases when meshes must be visited many times, such as in the matching scenario we describe in §5.2, we do not have to repeatedly reconstruct them.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Evaluation</head><p>Tradeoffs were made in the construction of our descriptor to achieve high performance. In the following sections we assess the impact of these tradeoffs, both in terms of accuracy, as well as in terms of our sensitivity to both noise and to differences in surface tessellation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">Descriptor Equivalence</head><p>We describe a set of moment-based descriptors which further reduce computational requirements. These may not necessarily agree with quadratic descriptors. In these cases, we consider the quadratic descriptors to be the the 'correct' result. To assess the degree to which moments get the wrong answer, we ran both algorithms against the same corpus of meshes. On each mesh, we found the average angular difference over each mesh between the principle direction produced by moments and the direction produced by quadratics. For all meshes, this value averaged 16 • ± 12 • . The curvature values produced agreed with each other with an R 2 value ranging from .81 to .95. This suggests that moments, by and large, produce similar results to quadratics, a result reinforced by visual inspection. We found that the majority of the cases where moments fail to agree with quadratic fitting occurred in two problem areas: edges, where quadratics were better able to fit in the absence of data, and regions with significant foldover. We are investigating methods to compensate for these scenarios.</p><p>We also compared our method to Rusinkiewicz's local curvature estimation <ref type="bibr" target="#b27">[28]</ref>. To do so, we constructed descriptors with small neighborhoods (equivalent, approximately, to 2-rings). We found that the principle directions found by quadratic descriptors deviated, on average, 14 • ± 11 • . Our curvature values agreed with the mean of theirs with an average R 2 value of .83. It is difficult, however, to compare our methods directly as their method aims to deal with instantaneous neighborhoods directly, while ours cannot.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">Geodesics vs. 2-Ring Approximation</head><p>We described in §3.1 a simple method for improving Dijkstra searches by adding virtual edges between 2-ring neighbors. This method, while more tolerant of issues with tessellation, is still an approximation to true geodesic distance. To quantify the improvements our method produces, and to determine how close our approximation comes, we compare geodesic neighborhoods of varying size, generated using the accurate method in <ref type="bibr" target="#b32">[33]</ref>, on the surface of our corpus to both our method, as well as to standard Dijkstra distance.</p><p>We find that for all protein surfaces in our corpus, for a patch radius of 8Ångströms, our 2-ring approximation finds between 97 − 100% of the vertices in a geodesic patch of the same radius, with an average distance for the missing vertices of .1Ångströms from the patch boundary. Standard Dijkstra finds 84 − 90%, with an average distance within .5Ångströms of the boundary.</p><p>We also tested against a torus model, containing a "grain" in its tessellation. Because, unlike proteins, this model does not have an intrinsic scale, we assign one according to its median edge length, 'em' = .8. For patches of size d = 10 * em ≃ .6, our approximation finds 92 − 95% of the vertices, with an average distance of .02. Standard Dijkstra finds only 76 − 80%, with average distance of .05.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.3">Noise Sensitivity</head><p>To gauge the ability of our surface descriptor to tolerate noise, we used the same models as above, and then perturbed each vertex a random distance, up to .5Ångströms, along its normal. <ref type="figure">Figure 5</ref> shows one example protein, before and after this process. For all other models, vertices were perturbed up to .75 * em. Curvatures were assessed for each vertex on the original model, then compared against the same vertex on the perturbed model.</p><p>For small patch sizes of around 2Ångströms (or 2 * em), we found that this difference between respective vertices, on average, accounted for 19%±26% error in the reported curvature, versus the actual curvature. For patches 4 times larger, this dropped to 2% ± 6%. In contrast, local curvature had 25% ± 36% error. This is in accord with our visual observations that descriptors formed from larger neighborhoods seem more resilient to noise.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.4">Tessellation Sensitivity</head><p>To test our method's sensitivity to varying tessellation, we used models with uniform tessellation and known curvature. Tessellation "noise" was introduced by repeatedly selecting a triangle from the mesh, inserting a new vertex in the center of this triangle, and projecting this new vertex onto the surface of the model (for this reason, models with known analytic forms were used). This process creates meshes with high variability in the tessellation, and many examples of bad tessellations, such as high valence vertices and sliver triangles. Two models were used in testing, a unit sphere and a unit torus; the sphere model began with 2,562 vertices, to which 5,000 more are added during subdivision. <ref type="figure">Figure 6</ref> shows the sphere before and after subdivision. The torus begins with 4,800 vertices, and again 5,000 are added. One minor wrinkle in our testing: because the tesselated meshes had a much smaller em relative to the non-tesselated meshes, we set the tesselated model's scale equal the original.</p><p>Tests were conducted in a similar manner as in §4.2.3: each vertex in the original mesh was compared against the same vertex in the tesselated mesh. In the sphere, average error ranged from .02% ± .01% for small patches to .07% ± .1% in large patches. In the torus, error ranged from .2% ± .1% to 1% ± .3%, respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.5">Foldover</head><p>As discussed in §3.2.1, we discard vertices that face away from the plane to avoid having foldover bias our results. In our protein corpus, we have found that, on average, 23% ± 12% of the vertices of the largest patches (8Ångströms) are discarded. Though this sounds wasteful, on average the closest discarded vertex is 2.75 ± .73 Angströms from the center of the patch, which means that, on average, only the largest descriptors have any foldover, and those have enough samples to be meaningful. Other meshes in our test set performed similarly, or better.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">APPLICATIONS</head><p>We have found a number of applications that benefit from our multiscale, anisotropic descriptors. In the following sections, we describe several of these applications. This list is not intended to be comprehensive, but rather a sampling of the possible uses for our method.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Multi-scale Lighting</head><p>Rusinkiewicz, et al., <ref type="bibr" target="#b33">[34]</ref> describe a method for multi-scale lighting which uses curvature information at large scales. They show that by darkening regions of the mesh that are concave at these scales, they produce results similar to those of local ambient occlusion.</p><p>Our system does not use curvature directly, but rather uses a descriptor built from large neighborhoods to identify concave regions. These are similarly darkened. <ref type="figure" target="#fig_4">Figure 7</ref> demonstrates our results, and compares it against simply lighting using local curvature. Note that, especially with larger descriptors, lighting with a multi-scale descriptor produces similar results to ambient occlusion. Because, however, we only capture local phenomena, we are unable to correctly shade flat areas that are deep within a groove. Nevertheless, we achieve interesting lighting results, which can, for instance, darken features of a particular size for better emphasis.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Multi-scale/Anisotropic Matching</head><p>Next, we look at the task of surface matching: given a point on the surface, find similar points, either on the same model, or on other models. We are interested in this task as a component of matching functional sites between proteins. <ref type="figure" target="#fig_5">Figure 8</ref> demonstrates a preliminary result, produced by simply matching the curvature and degree of anisotropy for a source point against those of all other points. Each vertex is assigned a feature vector with 8 values, formed from the curvature and anisotropy of four differently-sized patches centered at that vertex. The match between two vertices is then given by the normalized dot product of the feature vector for each vertex.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Segmentation</head><p>We now look at the task of surface segmentation, which operates on the curvature of a surface to produce regions of similar curvature. An early surface segmentation technique, called the watershed method <ref type="bibr" target="#b21">[22]</ref>, segmented the surface according to curvature. Segments are demarcated by ridges of high curvature, such that all vertices within a segment have lesser or equal curvature than the boundary vertices. Segments can flow into neighbors if their height is lower than a threshold parameter. This parameter, defined by the difference between the curvature at the highest-curvature vertex in the segment and the lowest, has a large effect on the number of segments produced.</p><p>The watershed method, while fast and simple, is sensitive to noise in curvature. Tuning for the 'minimum height' of a segment can help by merging some small patches caused by noise. Unfortunately, this may also cause larger segments to merge, too, making precise segmentation difficult. In <ref type="figure">Figure 9</ref>, we show that by simply changing the segmentation to use larger patches, which in turn exhibit smoother variations in curvature, we see a significantly improved segmentation, without a need for excessive tuning.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Stylized Rendering</head><p>Finally, we demonstrate the effects of large-scale curvature on hatching. Hatching simulates the brush strokes an artist might make to convey the shape of a surface. Girshick, et al. <ref type="bibr" target="#b8">[9]</ref> note that these strokes very often are made along the lines of principle curvature on a surface, and that their length and distribution is directly related to the degree to which a surface is curved.</p><p>Flat regions, containing little detail, need only a few strokes, or possibly none at all, to convey their shape. Highly curved regions, meanwhile, need far more to properly convey.</p><p>We show that depending on application, it may not be desirable to emphasize all small features, especially bumps and wiggles. To do so may require adding numerous additional strokes, cluttering up the image, reducing understandability and increasing rendering times. On the surface of a protein, for instance, atom-scale features abound. Representing all of these using hatching strokes makes for a less comprehensible image (see <ref type="figure">Figure 10</ref>). <ref type="figure">Fig. 9</ref>. A demonstration of the usage of large-scale descriptors within the watershed algorithm <ref type="bibr" target="#b21">[22]</ref>. On the left, the result of segmenting the surface using local curvature values. On the right, shape is estimated using our descriptor, and the same algorithm run. Note the improvement in patch boundaries, and the lack of small, isolated segments. The same overflow threshold of .9 is used in both cases.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">DISCUSSION</head><p>Our prototype shows that multi-scale surface descriptors can provide intuitive shape characterization of regions in a triangulated mesh. These descriptors resemble curvature, but capture the shape of larger neighborhoods. They are practical to compute on modest hardware, are robust to poor tessellation, and are useful in a range of applications, including surface segmentation, shading and matching.</p><p>While our method works well for our desired applications, it does have a few limitations. First, unless the neighborhood being characterized is quadratic, which for our large patches is almost never true, our descriptor is a crude approximation of that neighborhood. This is a fundamental issue with our method, one which makes it unsuitable for applications which require analytical precision. We might partially address this by including the quality-of-fit, or residual error, in the descriptor itself. This, at least, could allow applications to factor in quality when using our descriptors. We do not yet know how much this would help.</p><p>Our method, as it produces values comparable to mean curvature, does not discriminate between saddle and planar regions. This is a shortcoming, and though our descriptors meet the requirements of our applications without such discrimination, we would like to address this in future work.</p><p>In the future, we would also like to expand each mentioned application to utilize multiple scales in concert. As our initial experiments indicate that the values found for a given point at various scales are highly correlated, we believe that we can incorporate a large number of scales into a compact, robust descriptor. <ref type="figure">Fig. 10</ref>. A demonstration of hatching using multi-scale descriptors, with lines drawn along directions of principle curvature. On the left, a Hydrolase molecule (PDB ID 6RNT). In the center, local curvature is used to place lines, using the method described in <ref type="bibr" target="#b27">[28]</ref>. On the right, curvature is estimated using a much larger patch (with a radius of 8Ångströms). Note that the stroke lines are more uniformly oriented, with fewer 'stray' lines.</p><p>Finally, we would like to improve the performance of our descriptors. To that end we are investigating techniques for using decimation to further reduce the number of descriptors required to fully describe a mesh. We are also looking into methods for directly aggregating descriptors, to achieve the same goals.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head></head><label></label><figDesc>Fig. 1. A demonstration of the steps involved in generating a descriptor for a single neighborhood. Our method starts with a vertex on the surface (a). It then generates a set of patches surrounding that vertex. One is shown in (b), with color given according to each vertex's weight (greener vertices have high weight, and redder have low weight). A plane is constructed using a weighted average of the normals of that patch (c), onto which all points are projected. Finally, a quadratic surface is found to approximate that height field (d).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 .</head><label>2</label><figDesc>Fig. 2. On the left is the result of performing a search along edges for those points that are less than a particular distance from a single vertex. Though, intuitively, this should form a circular patch because of the mesh's tessellation, the patch has a non-circular shape. By adding virtual edges to 2-neighbors, we achieve a better result, at minimal incremental cost.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 4 .</head><label>4</label><figDesc>Shape description, represented at multiple scales, with peak-like regions in green and bowl-like regions in red. From left to right, the radius of the region, indicated by d, is increased. Inset, a single patch is shown for each scale, representing the neighborhood used for a single vertex.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 5 .Fig. 6 .</head><label>56</label><figDesc>A depiction of the results from a test of our descriptors' sensitivity to surface noise. (a) Shows our results on the surface of a protein, with lighter colors denoting areas of higher positive curvature. (b) Shows the same surface after noise is introduced. This test is repeated in (c) and (d) using local curvature estimation. Note the similarities between the results in (a) and (b), indicating a resilience to noisy surfaces, unlike (c) and (d). (a) A sphere (b) Randomly tesselated This figure illustrates one of our test cases for tessellation sensitivity. (a) Shows a sphere, with 5,120 faces. (b) Shows the same sphere after 5,000 rounds of subdivision, with replacement. Also shown is a sample neighborhood on each sphere. Note the uneven distribution of sample points arising from subdivision.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 7 .</head><label>7</label><figDesc>(a) Lit using ambient occlusion (b) Lit using local curvature (c) Lit using small descriptors (d) Lit using large descriptors Depicted here are four lighting schemes applied to a ribonuclease molecule (PDB ID 1MO7). (a) Is lit using ambient occlusion, which darkens interior points. This is a global effect, which helps to emphasize the large active cleft. (b) Uses local curvature, darkening concave regions. Note that very small features are emphasized, but the cleft is hard to make out. (c) Uses our descriptor, with an atom-sized (4Ångström) neighborhood radius. (d) With a residue-sized (8Ångström) radius.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 8 .</head><label>8</label><figDesc>Matching two ribonuclease proteins (PDB IDs 1MO7 and 215S). Both have similar functional sites, occupying the center groove. (a) Shows large-scale curvature matching for the picked site (blue and white circle in the center of each top image). In (b), degree-of-anistropy is used instead. In (c), both metrics are combined, yielding a more accurate match in the bottom image to the picked point in the top image.Finally, (d)shows, for comparison, the results from matching using Rusinkiewicz's local curvature estimation technique<ref type="bibr" target="#b33">[34]</ref>.</figDesc></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>We thank the Center for Eukaryotic Structural Genomics for access to new structural results. Cipriano was supported by NIH training grant NLM-5T15LM007359.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Spherical averages and applications to spherical splines and interpolation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Buss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Fillmore</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="95" to="126" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Surface hatching for medical volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Cai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Dong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics, Imaging and Vision: New Trends, 2005. International Conference on</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="232" to="238" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Point signatures: A new representation for 3D object recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Chua</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Jarvis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal of Computer Vision</title>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">An intuitive approach to measuring protein surface curvature</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">G</forename><surname>Coleman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Burr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">L</forename><surname>Souvaine</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">C</forename><surname>Cheng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proteins: Structure, Function, and Bioinformatics</title>
+		<imprint>
+			<biblScope unit="volume">61</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="1068" to="1074" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Suggestive contours for conveying shape</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Decarlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Finkelstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rusinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Santella</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="848" to="855" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Salient geometric features for partial shape matching and similarity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Gal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Or</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="130" to="150" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Estimating curvature on triangular meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Gatzke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Grimm</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal of Shape Modeling</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="29" />
+			<date type="published" when="2006-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Curvature maps for local shape comparison</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Gatzke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Grimm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Garland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zelinka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Shape Modeling and Applications, 2005 International Conference</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="244" to="253" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Line direction matters: an argument for the use of principal directions in 3D line drawings</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Girshick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Interrante</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Haker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Lemoine</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 1st international symposium on Non-photorealistic animation and rendering</title>
+		<meeting>the 1st international symposium on Non-photorealistic animation and rendering<address><addrLine>Annecy, France</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="43" to="52" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A novel cubic-order algorithm for approximating principal direction vectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Goldfeather</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Interrante</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Quadratic shape descriptors. 1. rapid superposition of dissimilar molecules using geometrically invariant surface descriptors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Goldman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">T</forename><surname>Wipke</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Chemical Information and Computer Sciences</title>
+		<imprint>
+			<biblScope unit="volume">40</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="644" to="658" />
+			<date type="published" when="2000-05" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Gonzalez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Woods</surname></persName>
+		</author>
+		<title level="m">Digital Image Processing</title>
+		<imprint>
+			<publisher>Prentice-Hall</publisher>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Texture synthesis for 3D shape representation. Visualization and Computer Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Gorla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Interrante</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Sapiro</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="512" to="524" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Maximum entropy light source placement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gumhold</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on Visualization &apos;02</title>
+		<meeting>the conference on Visualization &apos;02<address><addrLine>Boston, Massachusetts</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="275" to="282" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Huber</surname></persName>
+		</author>
+		<title level="m">Robust Statistics</title>
+		<imprint>
+			<publisher>Wiley-Interscience</publisher>
+			<date type="published" when="1981-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Spin-images: a representation for 3-D surface matching</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Johnson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+		<respStmt>
+			<orgName>Carnegie Mellon University, The Robotics Institute</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Data-driven curvature for real-time line drawing of dynamic scenes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Kalogerakis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Nowrouzezahrai</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Simari</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mccrae</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Hertzmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Singh</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="13" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Curvature-Based transfer functions for direct volume rendering: Methods and applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Kindlmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Whitaker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Tasdizen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Moller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 14th IEEE Visualization 2003 (VIS&apos;03)</title>
+		<meeting>the 14th IEEE Visualization 2003 (VIS&apos;03)</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="page">67</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">3D shape matching with 3D shape contexts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Körtgen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Park</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Novotni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Klein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">the 7th Central European Seminar on Computer Graphics</title>
+		<imprint>
+			<date type="published" when="2003-04" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Geometry-dependent lighting. Visualization and Computer Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Hao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Varshney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions</title>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Least squares ellipsoid specific fitting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Griffiths</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Geometric Modeling and Processing</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="335" to="340" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Partitioning 3D surface meshes using watershed segmentation. Visualization and Computer Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mangan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Whitaker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="308" to="321" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Blowing bubbles for Multi-Scale analysis and decomposition of triangle meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mortara</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Patan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Spagnuolo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Falcidieno</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Rossignac</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Algorithmica</title>
+		<imprint>
+			<biblScope unit="volume">38</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="227" to="248" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Normal vector voting: crease detection and curvature estimation on large, noisy meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Page</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Koschan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Paik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Abidi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Graph. Models</title>
+		<imprint>
+			<biblScope unit="volume">64</biblScope>
+			<biblScope unit="issue">3/4</biblScope>
+			<biblScope unit="page" from="199" to="229" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">A survey of methods for recovering quadrics in triangle meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Petitjean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computing Surveys</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page">161</biblScope>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Direct least-squares fitting of algebraic surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pratt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIGGRAPH Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="145" to="152" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Real-time hatching</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Praun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Webb</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Finkelstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">PRO-CEEDINGS OF SIGGRAPH</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="579" to="584" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Estimating curvatures and their derivatives on triangle meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rusinkiewicz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 3D Data Processing, Visualization, and Transmission, 2nd International Symposium</title>
+		<meeting>the 3D Data Processing, Visualization, and Transmission, 2nd International Symposium</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="486" to="493" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Fast and robust computation of molecular surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sanner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Olson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Spehner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the eleventh annual symposium on Computational geometry</title>
+		<meeting>the eleventh annual symposium on Computational geometry<address><addrLine>Vancouver, British Columbia, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="406" to="407" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Interactive decal compositing with discrete exponential maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Schmidt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Grimm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Wyvill</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="603" to="613" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Seamster: inconspicuous low-distortion texture seam layout</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sheffer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Hart</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on Visualization &apos;02</title>
+		<meeting>the conference on Visualization &apos;02<address><addrLine>Boston, Massachusetts</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="291" to="298" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Surface parametrization and curvature measurement of arbitrary 3-D objects: five practical methods. Pattern Analysis and Machine Intelligence</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Stokely</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="833" to="840" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Fast exact and approximate geodesics on meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Surazhsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Surazhsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kirsanov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gortler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="553" to="560" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Illustration of complex real-world objects using images with normals</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Toler-Franklin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Finkelstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rusinkiewicz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 5th international symposium on Non-photorealistic animation and rendering</title>
+		<meeting>the 5th international symposium on Non-photorealistic animation and rendering<address><addrLine>San Diego, California</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="111" to="119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Apparent relief: a shape descriptor for stylized shading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Vergne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Barla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Granier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Schlick</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 6th international symposium on Non-photorealistic animation and rendering</title>
+		<meeting>the 6th international symposium on Non-photorealistic animation and rendering<address><addrLine>Annecy, France</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="23" to="29" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

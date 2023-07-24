@@ -1,0 +1,431 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Hardware-Accelerated 3D Visualization of Mass Spectrometry Data</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">José</forename><forename type="middle">De</forename><surname>Corral</surname></persName>
+							<email>jose.de.corral@waters.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hanspeter</forename><surname>Pfister</surname></persName>
+							<email>pfister@merl.com</email>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="institution">Waters Corporation</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff1">
+								<orgName type="laboratory">Mitsubishi Electric Research Labs (MERL)</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Hardware-Accelerated 3D Visualization of Mass Spectrometry Data</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:36+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>I.3.7 [Computing Methodologies]: Computer Graphics-Three-Dimensional Graphics and Realism; I.3.2 [Computing Methodologies]: Computer Graphics-Graphics Systems Mass Spectrometry</term>
+					<term>Terrain Rendering</term>
+					<term>GPU Rendering</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>We present a system for three-dimensional visualization of complex Liquid Chromatography-Mass Spectrometry (LCMS) data. Every LCMS data point has three attributes: time, mass, and intensity. Instead of the traditional visualization of two-dimensional subsets of the data, we visualize it as a height field or terrain in 3D. Unlike traditional terrains, LCMS data has non-linear sampling and consists mainly of tall needle-like features. We adapt the level-of-detail techniques of geometry clipmaps for hardware-accelerated rendering of LCMS data. The data is cached in video memory as a set of nested rectilinear grids centered about the view frustum. We introduce a simple compression scheme and dynamically stream data from the CPU to the GPU as the viewpoint moves. Our system allows interactive investigation of complex LCMS data with close to one billion data points at up to 130 frames per second, depending on the view conditions.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Liquid Chromatography -Mass Spectrometry (LCMS) is an analytical technique resulting from a combination of Liquid Chromatography (LC) and Mass Spectrometry (MS). It is widely used in the life sciences and in drug discovery for applications such as protein analysis. LCMS data has three components: time, mass, and relative intensity. Typically, two-dimensional subsets of the data are processed using numerical methods and then visualized in 2D.</p><p>In recent years, the demand for faster and more accurate analysis results have resulted in an increase in the size and complexity of data obtained from LCMS instruments. To keep up with this pace, analytical chemists use software tools to help them interpret the data. The system presented in this paper is one of these tools, allowing the users to interactively visualize LCMS data in 3D as shown in <ref type="figure" target="#fig_0">Figure 1</ref>, where relative mass detector intensity is plotted with respect to time and mass-to-charge ratio.</p><p>A three-dimensional visualization allows LCMS practitioners to have an overview of the entire dataset as well as detailed close-ups. It can help them to identify features in the data that simultaneously vary with mass and time. This is hard to do using just 2D plots and normally requires some prior knowledge about the sample. The 3D visualization also permits quick identification of peak clusters that are near the data noise level, confirmation of the presence of a peak predicted by numerical methods, and other interactive exploration of the data. Consulted LCMS users were unaware that this type of 3D visualization was possible. They encouraged the authors to develop this system, as they envisioned its great potential.</p><p>Modern LCMS datasets range from tens of millions to over a billion data points, making interactive 3D visualizations a non-trivial problem. Also, LCMS data spacing is non-uniform and varies greatly along each axis. Our system renders large LCMS datasets in 3D on modern graphics processing units (GPUs). We have adapted the level-of-detail (LOD) techniques of geometry clipmaps <ref type="bibr" target="#b14">[15,</ref><ref type="bibr" target="#b1">2]</ref> that were developed to render large terrain data at video frame rates. Geometry clipmaps are based on a pyramid of nested rectilinear grid rectangles at power of two resolution that are re-filled with new data as the view changes. We use the same conceptual LOD approach, but use different LOD levels, data compression, and storage formats. Our system is capable of interactively exploring LCMS datasets with close to one billion data points (355,329 mass points × 2,669 time steps).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">PREVIOUS WORK</head><p>Typically, LCMS data is viewed in 2D. There are several tools available for this, including plot programs that are part of the Matlab bioinformatics toolbox. Matlab and some recent software tools <ref type="bibr" target="#b11">[12]</ref> also allow a general or partial view of LCMS datasets in 3D. These tools are limited by either the size of data they can display or their rendering performance. We are not aware of any other attempt to visualize large LCMS datasets interactively with LOD techniques on modern GPUs.</p><p>LCMS data visualization in 3D has similarities with terrain rendering, as both use elevation maps. In recent years, terrain rendering has received a lot of attention. The focus of most of this work has been on real-time terrain visualization with LOD techniques (e.g., <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b3">4,</ref><ref type="bibr" target="#b4">5,</ref><ref type="bibr" target="#b10">11,</ref><ref type="bibr" target="#b12">13]</ref>). Others pursue a drastic reduction in the number of vertices necessary to render the terrain image, resulting in irregular grids for terrain representation (e.g., <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b7">8,</ref><ref type="bibr" target="#b2">3,</ref><ref type="bibr" target="#b6">7]</ref>).</p><p>LCMS data visualization in 3D has also substantial differences with terrain rendering that make most of the previous terrain ren-</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>439</head><p>Please see supplementary material on conference DVD.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>IEEE Visualization 2005</head><p>October 23-28, Minneapolis, MN, USA 0-7803-9462-3/05/$20.00 ©2005 IEEE.</p><p>dering work not directly applicable. Terrain is in general relatively smooth with no sharp features. On the other hand, LCMS data is full of spike-like features embedded in flat sections. For highest performance, terrain grids are sampled at regular intervals along both axes, making tessellation of the model easy <ref type="bibr" target="#b15">[16]</ref>. The sampling rate of LCMS data is different along each axis. It is nonlinear, and there are typically about one hundred times more samples along the mass axis than the time axis. <ref type="figure" target="#fig_1">Figure 2</ref> illustrates this issue. A typical terrain sampling grid is shown on the left, and a typical LCMS data grid on the right. The sampling rate is higher for low mass values than for high mass values and is broken occasionally with bursts of samples. Time sampling is normally regular, except that some samples might be missing when the instrument interleaves a mass scan for other purposes.</p><p>Initially, we considered an irregular grid approach <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b10">11,</ref><ref type="bibr" target="#b7">8]</ref> because LCMS data has contiguous regions of zero intensity. This is promising for vertex reduction techniques that result in irregular grids of vertices. However, we realized that some LCMS datasets have more noise and no regions of zero intensity, which reduces the benefit of this technique in those cases. In addition, every LCMS dataset would have a different vertex distribution, making it difficult to overlay and compare two LCMS datasets of the same size. Besides, rendering an irregular grid is usually slower and more difficult. Therefore, we decided that a rectilinear grid approach was a better solution. Although LCMS data is not evenly spaced along the time or mass axes, it is rectilinear in the sense that it is made of rows and columns of data points.</p><p>Among the terrain-rendering approaches we studied, we found the work by Losasso and Hoppe <ref type="bibr" target="#b14">[15]</ref> to be the best fit for our problem, although there are substantial differences between the two solutions. Losasso and Hoppe use a lossy compression algorithm, which we cannot use for reasons mentioned later. They use a pyramid structure of nested regular grid rectangles centered about the viewpoint (i.e., viewer position), with each rectangle representing the data at a power of two resolution, and equal resolution across the two horizontal axes. While we use a similar pyramid structure, ours is centered about the view frustum, and the sampling resolution along each axis is very different.</p><p>Losasso and Hoppe address visual continuity between levels of the pyramid in their work, but we found this not essential for our application. The spike-like nature of the LCMS data makes it difficult to see these transitions except in relatively flat regions of the data. Nevertheless, this is a subject for future work. Similar to Losasso and Hoppe, we store the entire dataset in main memory in compressed form, while the geometry that is being rendered is stored in video memory using vertex buffers. However, our method to perform the video memory updates from main memory is different. In both cases, viewer distance determines which pyramid levels are visible. Also, due to the toroidal addressing, Losasso and Hoppe recompute vertex indices each frame. We found a method to avoid this.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">OVERVIEW OF LCMS</head><p>Liquid Chromatography (LC), also commonly known as High Performance Liquid Chromatography (HPLC), is an analytical technique used to separate the chemical components of a sample mixture. The sample is dissolved in a solvent and pushed through a liquid chromatograph <ref type="figure" target="#fig_2">(Figure 3</ref>) that performs the separation into chemical components <ref type="bibr" target="#b16">[17,</ref><ref type="bibr" target="#b17">18]</ref>. A high-pressure pump pushes the solvent from a container into the rest of the elements at a steady flow. The sample injector inserts the sample solution into the solvent stream without disrupting the solvent flow. The device that performs the actual separation of the sample components is called a separation column or simply column. The column is a piece of tubing packed with material that allows the solvent to go through but has some physical or chemical affinity with the components of the sample. The components with strong affinity will be retained inside the column longer than those with less affinity. Therefore, the different components of the sample will be washed out from the column at different times. Finally, a detector device gives a response dependent on some physical property of the components, such as UV light transmission, index of refraction, electrical conductivity, etc. The response of the detector, therefore, varies with time as the different sample components emerge from the column. The duration of a LC analysis, also known as a run, can be anywhere from a few minutes to a couple of hours or more, depending on the type of sample.</p><p>The LC instrument provides data that varies with time. Most LC detectors provide a single data point per unit time, resulting in a 2D plot known as a chromatogram. Typically, the LC detector output stays flat and changes only (normally increasing) when a sample compound reaches it. This creates in the 2D plot what are known as chromatographic peaks. <ref type="figure" target="#fig_3">Figure 4</ref> shows an example of a LC chromatogram from an Ultraviolet (UV) detector showing several peaks with their amplitude in absorbance units (AU). Mass Spectrometry (MS), also known as Mass Spec, is a very powerful analytical spectroscopic technique to determine the mass of molecules <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b9">10,</ref><ref type="bibr" target="#b16">17]</ref>. A mass spectrometer has three major parts: the ionization source, the analyzer, and the detector.</p><p>The sample is introduced in the ionization source, where the molecules of the sample are fragmented and ionized. The analyzer is a device that uses electrical or magnetic fields, or both, to accelerate the ions and move them from the ionization source to the detector. The electrical or magnetic fields are chosen such that most of the ions hit the walls of the analyzer, and only those with a specific mass-to-charge ratio manage to reach the detector. Changing the electric or magnetic fields continuously allows different ions to reach the detector at different times, creating what is known as a mass scan. A mass scan normally takes less than a second, and covers a wide range of mass-to-charge ratios, typically from 50 to 2000 Atomic Mass Units (AMU) per charge. Another type of analyzer, known as Time of Flight (TOF), sets the electrical field such that none of the ions hit the analyzer walls and all ions reach the detector, although they do it at different times. Finally, the detector gives an intensity response proportional to the number of ions that reach it at any given time.</p><p>The mass spectrometer generates an array of data points of relative intensity that vary with mass (MS scan). An MS scan 2D plot shows peaks just like a LC chromatogram, although the peaks are sharper than those of a LC chromatogram and normally more abundant. <ref type="figure" target="#fig_4">Figure 5</ref> shows an example of an MS scan. These two analytical techniques, LC and MS, are used independently in many applications . However, they can also be combined such that the output of the LC column ( <ref type="figure" target="#fig_2">Figure 3</ref>) is sent to the ionization source of the mass spectrometer. In other words, the mass spectrometer becomes the LC detector. This is the hybrid technique known as LCMS. The data produced by an LCMS system is a 3D surface plot with the three axes being time, mass-to-charge ratio (the independent variables), and intensity (the dependent variable). Considering that an MS scan may contain anywhere from a few thousands to almost half a million data points, and that the LC chromatogram may have from a few hundred data points to a few thousand, it is easy to see that the LCMS technique creates a huge amount of data.</p><p>An LCMS practitioner uses different methods to tackle this massive amount of data. For example, in virtually all LCMS datasets there are areas of no interest. If the user knows something about the sample being analyzed, he or she may focus on specific areas. Another common approach is to process the data using numerical methods on 2D subsets of the data, specifically on individual scans. Normally, a scan produced at a particular time of the LC run is compared with another scan containing known information. The other scan may come from a library of known compounds, in which case the user is looking for compound identification <ref type="bibr" target="#b0">[1]</ref>. Alternatively, the second scan may come from a different analysis by the user, in which case he or she is looking for scan differences that may reveal certain drug interactions on a subject.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">SYSTEM OVERVIEW</head><p>Our intent is to display in 3D an entire LCMS dataset or sections of it at any desired resolution. This visualization may be used as a tool to gain insight into a sample analysis, which otherwise may be difficult to grasp using traditional methods. The user should be able to observe the 3D plot from far away to get a general view, or zoom up to the full resolution of the data. One fundamental requirement in this application is that the compression method used to store the data in memory is lossless. Given the important and precise relation that exists between the coordinates of different peaks, the data should be preserved without degradation. Also, since the user may request these coordinates with a mouse click, their exact value should be accessible.</p><p>The system uses a simple, efficient, lossless compression algorithm to store an entire LCMS dataset in main memory. The user has the option to use the raw data, or to reduce the data specifying a fixed sampling interval along the mass axis. The data in main memory is used to stream data into video memory for rendering. To render the image, the system uses a LOD approach based on a pyramid of nested rectangles (PlotMaps) centered about the view frustum. The PlotMaps are stored as vertex buffers in video memory and are refilled with data from main memory as the viewpoint moves. To allow small viewpoint movements without the need for memory updates, each PlotMap has in video memory twice the size of data required for rendering. When an update is necessary, we use toroidal addressing <ref type="bibr" target="#b14">[15]</ref> to update the PlotMap with the new data only.</p><p>The system provides independent scale adjustments for each of the three axes to help with the interpretation of the data. Improperly set scales can alter the aspect ratio of the data enough to make it difficult, or even impossible, to see any relation between the peaks. We use ordinary Phong shading and color the surface based on height. The system also provides a picking mechanism to help the user identify a peak by its coordinates (mass, time, intensity).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">DATA FORMAT AND COMPRESSION</head><p>The raw LCMS data from a single analysis comes in different files grouped in a directory. The instrument interleaves mass scans obtained with different instrument conditions. Each file contains the scans acquired under a particular instrument condition. Inside each file, the scans are stored in time-ascending order. Each scan is marked with the time of acquisition and consists of a sequence of mass value and intensity value pairs sorted in ascending order of mass value.</p><p>In a typical mass scan there are many mass values with associated zero intensity. None of these mass/intensity pairs are saved to the file, except for those that are adjacent to a non-zero intensity value. This lossless compression technique reduces the size of the data file, but can be improved further. Our data structure to store the LCMS data in main memory eliminates the remaining zero intensity pairs. It also replaces the mass/intensity value pairs with mass index/intensity value pairs. In a typical large LCMS file the reduction in size with our method is about 35%.</p><p>Our mass scan configuration maps a mass index to an intensity value. The intensities data structure is then made of an array of these scans, one for each mass scan in the data. <ref type="figure" target="#fig_5">Figure 6</ref> show a diagram of the resulting data structure in main memory. The figure shows a mass array with m elements of distinct mass values, a time array with n elements, and n scans, one per element of the time array. The number of elements for each scan is different (typically) and it is smaller than m.</p><p>Given a time index t and a mass index m we get the time, mass, and intensity values from the data structure as follows. We use the time index t to read the time value from the time array and to address one of the mass scans. We use the mass index m to read the mass value from the mass array and to read the intensity value from the addressed scan at the same m index. If index m is not present in the scan, the intensity is zero.</p><p>We use this data structure to fill the PlotMaps with data of the appropriate subsampling level. A distinct characteristic in this application is that the data reduction may be different in the mass versus the time axis because the PlotMap resolution is different along each axis. Since each PlotMap needs the data at a different power of two resolution depending on its LOD level, we subsample the data appropriately while filling the PlotMaps. However, we cannot use straightforward subsampling because the high frequency of the data would result in severe and unacceptable aliasing. Similarly, filtering the data would produce visible intensity value (height) transitions between PlotMaps. Instead, during subsampling we keep track of the maximum intensity value of all raw data points and assign the maximum intensity value found to the reduced sample. The time and mass values are subsampled normally, though.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">LEVEL-OF-DETAIL HIERARCHY</head><p>We use a LOD structure consisting of a pyramid of nested PlotMaps at power of two resolutions, just like Losasso and Hoppe. Each PlotMap represents a rectangular section of the data, not necessarily square as in the case of geometry clipmaps. The tessellation value is the number of data points (minus one) along each side of the PlotMap rectangle, and it is normally different along each axis (time and mass). In addition, the system has a maximum tessellation value for each of the axes that will not be exceeded. An important difference with Losasso and Hoppe is that the PlotMap points are not evenly spaced as in the case of regular terrain grids.</p><p>When a new data file is read, the system examines the size of the data and decides how many LOD levels are required to cover the data with the LOD structure. In particular, it checks how many data points there are across the mass axis and across the time axis, and computes the mass and time tessellation values. The system then defines a different number of LOD levels for the mass axis and for the time axis.</p><p>For each axis, given the tessellation value, the number of LOD levels are the number of levels necessary such that the highest resolution PlotMap covers a section of the data at full resolution, each of the next lower resolution PlotMaps covers a section of the data double in size but at half the resolution than the previous PlotMap, and the lowest resolution PlotMap covers the entire data. The tessellation value along each axis, which remain the same for PlotMaps at all levels, is chosen to be smaller than the defined maximum, and is forced to be an even number so that the points at adjacent levels align.</p><p>For example, assume that the maximum mass tessellation value is 200 and the number of points across the mass axis for a particular file is 50,000. We first compute the maximum even number under 200 that multiplied by a power of two results in the closest number under 50,000. In this case, 194 × 2 8 = 49, 664. The exponent is the number of LOD levels minus one. Thus, the mass tessellation value is 194 and the number of mass levels is 9. 49,664 is the number of raw data points actually covered by the lowest resolution PlotMap, 194 is the number of points of the PlotMap across the mass axis, and 2 8 = 256 is the number of consecutive raw data points we have to read from the data structure to get to each of the subsampled 194 points. For the next higher level PlotMap results 194×2 7 = 24, 832, and similarly for higher level PlotMaps. The same method is used for the time tessellation and number of time LOD levels.</p><p>Note that the lowest resolution PlotMap does not cover the entire 50,000 mass points. The number of points that are not covered is always a small percentage of the data. This is generally not an issue for LCMS data because the users set the instruments to acquire data well before and after the region of interest. However, an alternate tessellation method that overcomes this limitation involves choosing a larger tessellation value such that the number of data points covered is greater than the number of points in the file. The system then displays zero intensity value for data points that are beyond the data range. This method, however, requires more video memory as each PlotMap is larger.</p><p>Given that typically there are more data points across the mass axis than the time axis, there are almost always more mass LOD levels than time LOD levels. The system creates as many PlotMaps as the largest of the two LOD levels. <ref type="figure" target="#fig_6">Figure 7</ref> shows an example with nine PlotMaps that have nine mass LOD levels and four time LOD levels. The correspondence between LOD level, mass axis LOD level, and time axis LOD level is shown using dashed lines in the figure. To maintain the maximum time resolution in as many PlotMaps as possible, time level zero is repeated for LOD levels zero through five. These PlotMaps were generated from a data file with 53,006 points in the mass axis, 322 points in the time axis, a maximum mass tessellation of 400, and a maximum time tessellation of 50. The computed tessellation was 206 in the mass axis and 40 in the time axis. In this example, the maximum time tessellation was purposely set too low to force four time levels to illustrate the level distribution.</p><p>Using a flat grid and different colors, <ref type="figure" target="#fig_7">Figure 8</ref> shows a vertical view of the data area covered by each PlotMap with this method. The user-defined mass and time scalings (see Section 8) Instead of repeating the highest resolution time level, we repeat the lowest resolution (level three) to solve this problem <ref type="figure" target="#fig_8">(Figure 9</ref>). <ref type="figure" target="#fig_0">Figure 10</ref> shows a vertical view of the data area covered by each PlotMap with this method, but only PlotMaps zero through six are shown in this case. Again, the mass and time user-defined scal- ings were set to render PlotMap level zero (in green) approximately square. Note that all adjacent PlotMaps are only one LOD level apart. The PlotMap data is stored in an array organized as rows along the mass axis and columns along the time axis. The number of columns is the mass tessellation value, and the number of rows is the time tessellation value. The PlotMap data array is stored in video memory using Vertex Buffer Objects (VBO) <ref type="bibr" target="#b8">[9]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">DATA STREAMING</head><p>We define three regions within each PlotMap: the memory area, the draw area, and the hole area ( <ref type="figure" target="#fig_0">Figure 11</ref>). The regions typically are rectangular. Their relative size in each direction is shown in the figure. The draw area can be anywhere within the memory area, and the hole area can be anywhere within the draw area.</p><p>The draw area is the region that is actually shown on the screen, the hole area is the region occupied by the PlotMap of the next LOD level, and the memory area is the region that the PlotMap keeps in video memory (i.e., the entire PlotMap data). The memory area is set to be twice the size of the draw area in each direction. This allows the PlotMap to draw without delay if the draw area moves slightly within the memory area. The hole area is by definition half the size of the draw area in each direction, because adjacent PlotMap levels vary by a factor of two.</p><p>The position of the PlotMap draw area within the entire data moves with the view frustum. If the movement is small, the PlotMap draw area moves within the memory area and the drawing is immediate. However, if the draw area moves too close to or beyond the memory area border, the PlotMap moves its memory area such that it becomes centered with the new draw area <ref type="figure" target="#fig_0">(Figure 12</ref>). To move the memory area, the PlotMap updates it with new data from the data structure in main memory. However, the PlotMap does not refill the memory area entirely; it only updates the new data that is necessary. The PlotMap uses toroidal addressing to store the data in the PlotMap data array, and a pair of toroidal offset indices to keep track of where the memory area origin is within the array.</p><p>As stated earlier, the PlotMap data array is organized as rows along the mass axis and columns along the time axis. When the array is loaded for the first time, the rows are in time-sequential order, each row is in mass-sequential order, the memory area origin coincides with the array origin, and the toroidal offsets are zero. <ref type="figure" target="#fig_0">Figure 13</ref> shows an example of a PlotMap data array with a mass tessellation of 200 and a time tessellation of 50 that has been updated with new data. The figure shows a mass toroidal offset of three and a time toroidal offset of two. The memory area origin (the shaded square) and the array origin do not coincide anymore.</p><p>To draw the data in the PlotMap draw area, we use triangle strips parallel to the mass axis with one triangle strip per time value. To avoid drawing the hole area, we partition the draw area in four sectors and draws each one of them separately.</p><p>The PlotMap needs to locate the draw area data origin within the PlotMap data array, and dereference the toroidal addressing. Dereferencing the toroidal addressing along the time axis determines which triangle strip inside the array is going to be drawn, and dereferencing the toroidal addressing in the mass axis determines where within the triangle strip the drawing should start.</p><p>We use different methods to dereference the time and the mass axes. For the time axis, we add the toroidal time offset to the position of the triangle strip and apply the modulo operand to get the actual position inside the data array. For the mass axis, we use the indices that are used to draw the triangle strips. Normally the indices need to be re-computed as the toroidal offset changes. We use a simple approach to avoid this re-computation ( <ref type="figure" target="#fig_0">Figure 14)</ref>. The size of the array of indices is doubled and the same index sequence is repeated. Now, instead of starting the indices from the beginning of the array, we start at the location that corresponds to the toroidal mass offset. The triangles from that point to the end of the strip are produced by the indices in the first part of the array of indices, and the rest of the triangles are produced by the indices in the second part of the array of indices.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">RENDERING</head><p>The system controls the LOD on every view frustum move and communicates to each of the PlotMaps the location of the draw area, the location of the hole area, if it should have a hole, and if it should be visible. As mentioned earlier, each PlotMap is responsible for the location of its memory area based on the requested draw area and determines if it needs a memory update to honor the new draw area request.</p><p>The lowest resolution PlotMap does not need memory updates because by definition its draw area covers the entire data. The second lowest resolution PlotMap does not need memory updates either because its memory area covers the entire data. Recall that the memory area is twice the size of the draw area in each direction. Consequently, the two lowest resolution PlotMaps are always ready for immediate drawing.</p><p>The LOD pyramid is centered at the point of the view frustum intersection with the mass-time plane that has the shortest distance to the camera eye position. The width of the frustum intersection at that point is used to determine which is the highest resolution PlotMap that should be visible.</p><p>If a PlotMap determines that an update is necessary, it declares itself as unloaded and blocks drawing. The system uses a background task to perform the updates. In the meantime, new drawing request may be arriving. In this case, the system checks which PlotMaps are available for drawing (not declared as unloaded) among those declared as visible, and performs the drawing with them. At least we know that the two lowest resolution PlotMaps are always available for drawing. The background task performs the PlotMap updates and triggers a re-draw after each PlotMap is updated. Because the PlotMaps are processed from the lowest level upwards, this automatically results in progressive refinement of the mesh.</p><p>The system translates and scales the entire 3D plot from object space to world space such that it is enclosed in a unit-cube bounding box. This transformations helps to handle the camera without having to deal with the size of the data or the data aspect ratio in object space. This default transformation, however, may distort the aspect ratio of the data to a point where the user has difficulty recognizing the features of the data that he or she is expecting. To solve this issue, we allow the user to enter a custom scaling for each of the three axes.</p><p>Each PlotMap uses a fragment program and pixel buffers to compute the normals on every update and stores them in Pixel Buffer Objects (PBO). Phong lighting is done per fragment for smoother shading, and the lighting computations are done in world space rather than in object space due to the strong scaling of the time and mass axes. The color of each point in the 3D plot is a function of the intensity value at that point. This function is stored in a 1D texture that the fragment program uses in conjunction with the lighting computations.</p><p>We provide the user with the ability to interactively pick the object space coordinates of any point of the 3D plot on the screen. We use the depth buffer and inverse transformations to compute these coordinates.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">RESULTS</head><p>For our tests we used a PC with a 3.4GHz Pentium IV CPU, 2 GB of main memory, and an NVIDIA 6800 Ultra 256MB graphics card. We used different types of LCMS data at the extremes of the typical size range. The small datasets have about 15 million points with file sizes in the order of 1 MB, and the large datasets have about 1 billion points with file sizes between 750 MB and 1.1 GB.</p><p>Our data compression method to store the data in main memory reduces the data by 35% with respect to the file size. This reduction varies, of course, with the data contents. Due to the overhead of the mass and time arrays, the compression ratio becomes smaller for smaller files and finally becomes negative for the smallest files. We compared our compression method to the well known zip compression algorithm. <ref type="table" target="#tab_1">Table 1</ref>   show that zip compression is more effective but took much longer time to compress and decompress, which is not acceptable for our application. <ref type="figure" target="#fig_0">Figures 1 (LCMS 0</ref>) and 15 (LCMS 1 through LCMS 4) show sample views of different datasets. The window size was 640 × 480 in all cases. <ref type="table" target="#tab_3">Table 2</ref> lists the relevant parameters for each dataset. The number of vertices reported is the actual number of distinct vertices in the draw area of the currently visible PlotMaps that are sent to the GPU.</p><p>The performance of our system varies between 4 and 130 fps. On average we render about 55 million triangles per second. Because we are currently not doing frustum culling, the number of processed vertices increases as the number of visible PlotMaps increases. Therefore, the performance is in inverse proportion to the size of the data and to the proximity of the view. Large datasets need more PlotMap levels, and when the data is viewed close up all PlotMaps may be visible. The size of the display window has only a minor impact on the performance because we are doing lighting computations in the fragment program.</p><p>The time to update each PlotMap from main memory is inversely proportional to the PlotMap resolution. This is due to the fact that all PlotMaps fill their data from the same data structure in main memory, and lower resolution PlotMaps need to read proportionally large areas of the data. The time to load the entire highest resolution PlotMap for a pyramid with 8 levels with a mass tessellation of 414 and a time tessellation of 322 is 190 milliseconds.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="10">CONCLUSIONS AND FUTURE WORK</head><p>We have presented an approach to interactively visualize LCMS datasets in 3D using modern graphics hardware. The response from a small group of LCMS practitioners has been very positive and enthusiastic. A user mentioned that the system is useful because he was able to confirm the existence of small peaks that were predicted by some numerical tool. Another user said that the system will be very useful to detect sequences of peaks that are related by mass and time simultaneously, which is difficult to see using 2D plots. The detection of peak clusters near the noise level was mentioned by another user as one of the advantages, especially since quantitative peak information can be easily obtained using a click with the mouse. Another user mentioned that he was surprised by the density of the data and how he could appreciate the signal-to-noise ratio of the data using the system.</p><p>There are two immediate enhancements that will increase the rendering speed and overall responsiveness of the system. One is view-frustum culling. With view-frustum culling, as implemented by Losasso and Hoppe <ref type="bibr" target="#b14">[15]</ref>, the number of vertices sent to the GPU is greatly reduced with a corresponding increase in performance. The other improvement involves the data layout in main memory. Instead of having just one data structure from which all LOD levels fill their data, we could use one data structure per LOD level. This will substantially improve memory updates, especially for the lower resolution LOD levels.</p><p>T-junction removal is another opportunity for future work. Despite the fact that the irregular nature of the LCMS data is masking this effect, it would be beneficial in certain cases. Another feature desired by some users is the ability to instruct the system to go to a particular point with given coordinates. This would be useful to judge the relations between peaks that are quite distant to each other. A minor enhancement is a peak information feature that provides quantitative peak apex data rather than information about the clicked point location.   </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Three-dimensional visualization of LCMS data.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Terrain and LCMS data sampling comparison.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Block diagram of a liquid chromatograph.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 4 :</head><label>4</label><figDesc>Example of a LC chromatogram.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 5 :</head><label>5</label><figDesc>Example of an MS scan.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 6 :</head><label>6</label><figDesc>Data structure in main memory.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 7 :</head><label>7</label><figDesc>PlotMap LOD levels (method A).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 8 :</head><label>8</label><figDesc>PlotMaps LOD with resolution mismatch (method A).were set to render PlotMap level zero (small green rectangle) approximately square.Figure 8shows that this method creates an exaggerated sampling mismatch between PlotMaps along the mass axis. PlotMap levels zero though five have PlotMap level six (in yellow) as neighbors along the horizontal (mass) axis. The differences in resolution are extremely noticeable during rendering.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure 9 :</head><label>9</label><figDesc>PlotMap LOD levels (method B).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Figure 10 :</head><label>10</label><figDesc>PlotMaps LOD without mismatch (method B).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Figure 11 :</head><label>11</label><figDesc>PlotMap regions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Figure 12 :</head><label>12</label><figDesc>PlotMap memory area move.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Figure 13 :</head><label>13</label><figDesc>Updated state of a PlotMap data array.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head>Figure 14 :</head><label>14</label><figDesc>Repeated triangle strip indices.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_14"><head>Figure 15 :</head><label>15</label><figDesc>3D LCMS visualizations for datasets LCMS 1 through LCMS 4 (clockwise from upper left). Dataset LCMS 0 is shown inFigure 1.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>summarizes the results. The results</figDesc><table><row><cell cols="2">Method Data Size</cell><cell>Compress</cell><cell>Decompress</cell></row><row><cell>Our</cell><cell>682.5 MB</cell><cell>3 min 35 sec</cell><cell>23 sec</cell></row><row><cell>Zip</cell><cell cols="3">497.7 MB 13 min 40 sec 1 min 14 sec</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 1 :</head><label>1</label><figDesc>Compression comparison. Original file size: 1,073.7 MB</figDesc><table /><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 2 :</head><label>2</label><figDesc>Performance comparison for various datasets. Numbers under mass and time are number of data points and tessellation, respectively.</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="11">ACKNOWLEDGEMENTS</head><p>We would like to thank Marc Gorenstein and Chris Stumpf from Waters Corporation for providing us with the LCMS data samples and for their enthusiastic comments and Jennifer Roderick Pfister for proofreading the paper.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Liquid Chromatography Mass Spectrometry: An Introduction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">E</forename><surname>Ardrey</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+			<publisher>John Wiley &amp; Sons</publisher>
+			<pubPlace>West Sussex, England</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">GPU Gems 2, chapter Terrain rendering using GPU-based geometry clipmaps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Asirvatham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005-03" />
+			<publisher>Addison-Wesley</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Gpu-assisted z-field simplification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bogomjakov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gotsman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Symposium on 3D Data Processing, Visualization and Transmission</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="673" to="679" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Representation and visualization of terrain surfaces at variable resolution. The Visual Computer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cignoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Puppo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopigno</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page" from="199" to="217" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Temporal continuity of levels of detail in delaunay triangulated terrain</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Or</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Levanoni</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="37" to="42" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Fast terrain rendering using geometrical mipmapping</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">H</forename><surname>De Boer</surname></persName>
+		</author>
+		<ptr target="http://www.flipcode.com/articles/articlegeomipmaps.pdf" />
+		<imprint>
+			<date type="published" when="2000-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Roaming terrain: Real-time, optimally adapting meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Duchaineau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wolinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">E</forename><surname>Sigeti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">C</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Aldrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">B</forename><surname>Mineev-Weinstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;97</title>
+		<imprint>
+			<date type="published" when="1997-10" />
+			<biblScope unit="page" from="81" to="88" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Generalized view-dependent simplification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>El-Sana</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Varshney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="83" to="94" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Using vertex buffer objects (VBOs)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Fernando</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Cambridge university mass spectrometry WWW server</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Gates</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Skelton</surname></persName>
+		</author>
+		<ptr target="http://www-methods.ch.cam.ac.uk/meth/ms/" />
+		<imprint>
+			<date type="published" when="2005-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Smooth view-dependent level-of-detail control and its application to terrain rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="35" to="42" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Masslynx mass spectrometry software</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Waters</forename><surname>Informatics</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Real-time, continuous level of detail rendering of height fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Koller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Ribarsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Hodges</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Faust</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Turner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH</title>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="109" to="118" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Terrain simplification simplified: A general framework for view-dependent out-of-core visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="239" to="254" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Geometry clipmaps: Terrain rendering using nested regular grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Losasso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="769" to="776" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">A heightfield on an isometric grid. Poster presentation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mcguire</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">G</forename><surname>Sibley</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2004-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">M A</forename><surname>Niessen</surname></persName>
+		</author>
+		<title level="m">Liquid Chromatography Mass Spectrometry. Marcel Dekker</title>
+		<meeting><address><addrLine>New York</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Liquid Chromatography for the Analyst</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">P W</forename><surname>Scott</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+			<publisher>Marcel Dekker</publisher>
+			<pubPlace>New York</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

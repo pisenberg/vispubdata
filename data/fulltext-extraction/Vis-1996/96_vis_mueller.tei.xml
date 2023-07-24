@@ -1,0 +1,558 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Fast Perspective Volume Rendering with Splatting by Utilizing a Ray-Driven Approach</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Mueller</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roni</forename><surname>Yagel</surname></persName>
+						</author>
+						<title level="a" type="main">Fast Perspective Volume Rendering with Splatting by Utilizing a Ray-Driven Approach</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:34+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<abstract>
+				<p>Volume ray casting is based on sampling the data along sight rays. In this technique, reconstruction is achieved by a convolution, which collects the contribution of multiple voxels to one sample point. Splatting, on the other hand, is based on projecting data points onto the screen. Here, reconstruction is implemented by an &quot;inverted convolution&quot; where the contribution of one data element is distributed to many sample points (i.e., pixels). Splatting produces images of a quality comparable to raycasting but at greater speeds. This is achieved by precomputing the projection footprint that the interpolation kernel leaves on the image plane. However, while fast incremental schemes can be utilized for orthographic projection, perspective projection complicates the mapping of the footprints and is therefore rather slow. In this paper, we merge the technique of splatting with principles of raycasting to yield a raydriven splatting approach. We imagine splats as being suspended in object space, a splat at every voxel. Rays are then spawned to traverse the space and intersect the splats. An efficient and accurate way of intersecting and addressing the splats is described. Not only is ray-driven splatting inherently insensitive to the complexity of the perspective viewing transform, it also offers acceleration methods such as early ray termination and bounding volumes, which are methods that traditional voxel driven splatting cannot benefit from. This results in competitive or superior performance for parallel projection, and superior performance for perspective projection.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>In the past few years, direct volume rendering has emerged as a major technology in many visualization scenarios. A natural choice for its use is the viewing of data sets that are inherently volumetric, such as medical data produced by MRI, CT, or PET scanners, or scientific studies, such as the visualization of flow or terrain. Newer applications, such as volume-based interactive design and sculpting <ref type="bibr" target="#b7">[8]</ref> <ref type="bibr" target="#b15">[16]</ref>, require direct volume rendering to display the results of the design process. Yet another application for direct volume rendering is the interactive exploration of volume data in form of fly-throughs, that has recently shown great promise for medical diagnosis and surgical training <ref type="bibr" target="#b6">[7]</ref>.</p><p>The rendering speed requirements for interactive volume viewing and manipulation stand in great contrast to the complexity of the rendering task. In contrast to surface rendering where hardware accelerators are readily available at relatively low cost, true volumetric rendering hardware is still rather expensive and restrictive. Thus the development of software solutions running on standard computer hardware still forms an important area of research. In addition to rapid generation, we also desire the image to look realistic. The perspective viewing distortion is an important component in this strive for realism, as it can be utilized to convey some depth information.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.1">Modes of Volume Rendering</head><p>In this paper, we distinguish between three types of volume rendering modes: 1) Direct volume rendering in the low-albedo approximation; 2) Summation or X-ray rendering; and 3) Maximum Intensity Projection (MIP) rendering.</p><p>In direct volume rendering, we compute I λ (x,r), the amount of light of wavelength λ coming from ray direction r that is received at point x on the image plane: <ref type="bibr" target="#b0">(1)</ref> Here L is the length of ray r. We can think of the volume as being composed of particles that receive light from all surrounding lightsources and reflect this light towards the observer according to the specular and diffuse material properties of the particles. Thus, in Equation <ref type="formula">1</ref>, φ λ is the light of wavelength λ reflected at location s in the direction of r. Since volume particles have certain densities µ (e.g., opacities), the light scattered at s is attenuated by the volume particles between s and the eye according to the exponential attenuation function. The process of merging colors and opacities along the ray is called compositing.</p><p>In summation rendering, we are only interested in the attenuation line integral accumulated along r: <ref type="bibr" target="#b1">(2)</ref> Summation rendering comes to bear in a class of iterative 3D reconstruction algorithms, the Algebraic Reconstruction Technique (ART) <ref type="bibr" target="#b4">[5]</ref>, that is often used to reconstruct a volumetric object from projectional image data acquired by CT, PET, or SPECT scanners. One ART iteration step consists of projecting the volume onto one of the image planes, computing the error between the rendered image and the acquired image, and backprojecting the error image in a "smearing" fashion onto the voxel grid. This procedure is repeated possibly many times at all projection angles for which data is available and continues until some convergence criterion is reached. Both projection and backprojection is performed using a variation of summed perspective volume rendering. Since a large number of projection operations is usually required for faithful 3D reconstruction, the volume renderer employed must be both fast and accurate. If the projection data were generated by a cone-beam projection source, as is usually the case in 3D CT, then the volume renderer must support the perspective viewing transform.</p><p>Finally, in MIP we seek the maximum density along r:</p><p>.</p><p>MIP displays are often utilized in medical applications, e.g., in the display of volumes obtained by Magnetic Resonance Angiography (MRA). In MRA, a vascular structure is perfused with an opaque contrast agent while the MRI image acquisition is in progress. If a MIP rendered image is appropriately thresholded, then the object appears transparent with only the brightest (e.g. densest) features,</p><formula xml:id="formula_1">I λ x r , ( ) φ λ s ( ) µ t ( ) t d 0 s ∫ -     exp 0 L ∫ ds = I Sum x r , ( ) µ t ( ) t d 0 L ∫ = I MIP x r , ( ) max µ s ( ) ( ) 0 s L ≤ ≤ ( ) , =</formula><p>here the opacified arteries, shining through. Perspective viewing may be used to provide the viewer with the necessary depth cues for distinguishing the individual arterial structures, and, at the same time, mimics best the cone-beam viewing scenario found in traditional X-ray angiography.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.2">Ray-Driven vs. Voxel-Driven Approaches</head><p>Direct volume rendering algorithms can be grouped into two categories: Forward projection methods in which rays are cast from the image pixels into the volume <ref type="bibr" target="#b9">[10]</ref>[15] <ref type="bibr" target="#b17">[18]</ref>, and backward projection methods, such as the splatting algorithm introduced by Westover <ref type="bibr" target="#b19">[20]</ref>, in which volume elements are mapped onto the screen <ref type="bibr" target="#b18">[19]</ref> <ref type="bibr" target="#b20">[21]</ref>.</p><p>In raycasting, a discretized form of Equation <ref type="formula">1</ref>is computed by sampling the volume at certain intervals and compositing the sample's opacity and color with the present ray values. A sample value is obtained by reconstructing, e.g. interpolating, the continuous volume function at the sample location from the voxel grid values. This is a rather time consuming process given the large number of sampling steps and makes the use of sophisticated interpolation filters with an extent larger than the commonly applied trilinear kernel impractical. However, raycasting can be accelerated by restricting the interpolation operations to relevant volume regions. Common acceleration techniques include bounding polyhedra <ref type="bibr" target="#b16">[17]</ref>, space leaping <ref type="bibr" target="#b21">[22]</ref> <ref type="bibr" target="#b2">[3]</ref>, and hierarchical volume decomposition, such as octrees or pyramids <ref type="bibr" target="#b3">[4]</ref> <ref type="bibr" target="#b10">[11]</ref>. In addition, since raycasting usually operates from front to back, compositing can terminate as soon as the accumulated opacity reaches unity. This is not valid for X-ray and MIP renderings which may use bounding polyhedra, but must then traverse the entire enclosed volume.</p><p>For our purposes it is important to realize that raycasting is relatively insensitive to the complexity of the perspective viewing transform: Perspective sight-rays emanating from neighboring pixels are just tilted relative to each other but remain linear and, therefore, do not differ conceptually from rays stemming from parallel projection. However, we must also realize that the diverging nature of the perspective rays leads to a non-uniform sampling of the volume: Volume regions more distant from the eye point are sampled less densely then regions closer to the eye. Thus small features further back in the volume may be missed and not displayed.</p><p>In splatting, a voxel's contribution is mapped directly onto the pixels, eliminating the need for interpolation operations. A voxel is modeled as a fuzzy ball of energy shaped by the interpolation function. Projection is performed by mapping the view-transformed, pre-projected 2D "footprint" of the kernel function to the screen. This footprint is usually implemented as a discrete lookup table, storing an array of equally spaced parallel line integrals that are computed across the kernel function either analytically or by quadrature. For non-compositing X-ray type projections, summing the individual voxel contributions by their footprint line integrals on the image plane is equivalent to accumulating this sum by interpolating samples from the grid voxels along individual rays. However, the line integrals across a voxel are now continuous or approximated with good quadrature, whereby in raycasting the computed line integrals are only discrete ray sums. Splatting also allows the efficient use of sophisticated interpolation functions of larger extent. For these two reasons, summed, non-compositing volume integrals as used for X-ray projection are considerably more accurate with splatting than with raycasting. However, compositing of color and opacity is only approximate. This stems from the circumstance that kernels must overlap in object space to ensure a smooth image, and thus reconstruction and compositing can no longer be separated. Fortunately, for volumes with reasonably dense sampling rates, the effects of this deficiency are usually hardly noticeable.</p><p>Traditional splatting allows orthographic projections to be rendered very fast by utilizing efficient incremental schemes. Unfortunately, these schemes are not applicable for perspective projection due to the non-linearity of the perspective viewing transform. Another drawback of splatting is that being a voxeldriven algorithm, it must visit every voxel in the grid. However, only voxels with density values within the range of interest need to be transformed and composited. Furthermore, since splatting is most commonly used in a back-to-front fashion, it is likely that many voxels will be transformed and shaded only to be occluded later by opaque structures located closer to the image plane, giving rise to many unnecessary computations. A possible front-to-back approach, eliminating this problem, would divide the volume into octrees and the image into quadtrees, transforming only the octree nodes that fall within a non-opaque region in the screen quadtree. However, the induced overhead for tree traversal may offset the savings gained. Another way of speeding up the splatting process is the use of larger splats in volume areas of little variation, as suggested by <ref type="bibr" target="#b8">[9]</ref>. Approaches that utilize special graphics hardware have also been proposed. These solutions are relatively insensitive to the complexity of the perspective viewing transform, but require sophisticated graphics workstations. While <ref type="bibr" target="#b0">[1]</ref> maps the voxel footprint as a texture onto a polygon and uses texture mapping hardware for its projection, <ref type="bibr" target="#b3">[4]</ref> approximates the screen footprint as the projection of a Gouraud shaded polygon mesh. The quality of the rendered image or 3D reconstruction, respectively, is then bounded by the resolution of the texture memory (commonly not more than 12 bits per texel component) or the quality of the polygonal approximation, respectively.</p><p>We now describe an algorithm that merges voxel-driven splatting with the advantages of ray-driven approaches to enable fast and accurate perspective rendering. Although researchers in the field of medical imaging have proposed table-based pre-integrated raycasting long before the splatting algorithm became popular <ref type="bibr" target="#b5">[6]</ref> (and later <ref type="bibr" target="#b11">[12]</ref>), these efforts were limited to summed X-Ray type rendering, and the issue of comparing ray-driven and voxel-driven approaches in terms of speed and accuracy was never addressed. We also introduce the concept of pyramidal beams to compensate for the effect of diverging perspective rays.</p><p>In the following, Section 2 describes voxel-driven splatting, Section 3 describes ray-driven splatting, and Section 4 provides timings and images for both approaches and traditional raycasting.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">VOXEL-DRIVEN SPLATTING</head><p>We now give a brief review of incremental schemes used for traditional voxel-driven splatting. In the following discussion we restrict ourselves to volumes that are sampled in a regular cubic grid. This may seem restrictive at first, but it is not unrealistic to assume that volumes sampled on general rectilinear grids (and some irregular grids) can always be resampled into such a grid configuration. The ellipsoidal kernel functions used by Westover then become simple spherical kernel functions which project identically for all viewing directions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Orthographic Projection</head><p>For spherically symmetric kernel functions the same footprint table and mapping function can be used for all viewing angles. We chose a Gaussian kernel function with relevant radial extent of r=2 voxel lengths, sampled into a 2D footprint table of 1000×1000 entries. Nearest neighbor interpolation is used when mapping the footprint onto the image.</p><p>Consider <ref type="figure" target="#fig_0">Figure 1</ref> where the orthographic projection of a voxel's footprint is depicted for the 2D case. As suggested by <ref type="bibr" target="#b0">[1]</ref>, we can think of the footprint as a polygon with a superimposed texture map that is placed in object space. Hereby the texture map is given by the projected kernel function, e.g. the array of line integrals. For the remainder of our discussion we will refer to the footprint in object space as the footprint polygon, while the projection of the footprint polygon onto the image plane will be called the footprint image. Recall that splatting accumulates (with some limitations) the same value on the image plane as a ray would accumulate when traversing the volume. Thus, when projecting the footprint polygon to obtain the line integral for the pixel in the footprint image we must ensure that we position the footprint polygon orthogonal to the direction of the sight-ray in object space.</p><p>In orthographic viewing the projection and mapping operations are simple and can be done in an incremental fashion. <ref type="figure" target="#fig_0">Figure 1</ref> shows this graphically for the 2D case. The volume is decomposed into slices, where the slice planes are the voxel planes most parallel to the image plane. To set up the incremental scheme, we have to compute the transformation matrix of the volume. Then, we project the footprint polygon of a voxel located at one of the volume vertices, say voxel v 0,0,0 , onto the image plane. This yields a point Ext LeftBot (v 0,0,0 ), the bottom left vertex of v 0,0,0 's footprint image on the projection plane (Ext Left (v 0,0 ) in <ref type="figure" target="#fig_0">Figure 1</ref>). For all other voxels v x,y,z , the bottom left projection extrema Ext LeftBot (v x,y,z ) can be computed incrementally by adding appropriate elements of the transformation matrix and advancing in a voxel→row→slice fashion <ref type="bibr" target="#b12">[13]</ref>, whereby slices are processed from back to front. Once a point Ext LeftBot (v x,y,z ) is known, then all other footprint image vertex points are easily computed by adding the kernel extent along the two image dimensions. In the 2D case of <ref type="figure" target="#fig_0">Figure 1</ref> we get: . This yields a square on the image plane. Pixels that fall within the square are then determined by rounding operations. (In <ref type="figure" target="#fig_0">Figure 1</ref>, the interval of pixels [p i ,p i+3 ] that fall within the footprint image is</p><formula xml:id="formula_2">[Ceil(Ext Left (v x,y )), Floor(Ext Right (v x,y ))</formula><p>. Simple incremental additions are used to scan through the square, adding the voxel's opacity and color to the slice compositing sheet.</p><p>Thus, the splatting algorithm consists of two nested loops: the outer loop maps footprint polygons onto the image plane, while the inner loop maps the pixels within the footprint image into the footprint table. If we define N to be the number of voxels in the grid, and n the number of pixels that fall within a footprint image, then the computational complexity for the mapping operation footprint </p><formula xml:id="formula_3">p i p i+3 p i+2 p i+1 Ext Left (v x,y ) Ext Right (v x,y ) Image Plane Kernel function extent Voxel grid Proj(v x,y ) Projected kernel function v x , y</formula><p>Footprint table in object space</p><formula xml:id="formula_4">Ext Left (v x,y+1 ) v x , y + 1 x y (footprint polygon) (footprint image) Ext Left (v 0,0 ) v 0 , 0 Ext Right v x y , ( ) Ext Left x y , ( ) 2 extent kernel ⋅ + =</formula><p>polygon to image plane is O(N) and the mapping operation footprint image to footprint table is O(n) for each voxel. Altogether there are about 10 additions and multiplication in the outer loop and 7 such operations in the inner loop.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Perspective Projection</head><p>In perspective, incremental arithmetic can still be utilized to map the pixels onto the footprint table (the inner loop of the splatting procedure), although we now require two divisions per pixel and a few more additions than in the orthographic case. However, for mapping the footprint polygon onto the image plane we no longer can employ incremental operations which is due to the nonlinearity of the perspective transform.</p><p>Consider <ref type="figure" target="#fig_1">Figure 2</ref> which illustrates perspective splatting in 2D. Here we fixed the coordinate system at the eye point. The footprint polygon is placed orthogonal to the vector starting at the eye and going through the center of v x,y,z . Note that this yields an accurate line integral only for the center ray, all other rays traverse the voxel kernel function at a slightly different orientation than given by the placement of the 2D (1D in <ref type="figure" target="#fig_1">Figure 2</ref>) footprint polygon in object space. This is illustrated in <ref type="figure" target="#fig_2">Figure 3</ref> for the 2D case. Here we show the footprint polygon f p (thick solid line) positioned orthogonal to the line connecting the eye point and the voxel center. The dotted line r' coincides with the ray that intersects pixel p j on the image plane. Clearly, r' does not pierce the footprint polygon at a right angle. Since all entries in the footprint table are computed for rays intersecting the footprint polygon perpendicularly, the ray integral retrieved by the mapping operation is due to a ray along the solid line r. To obtain the correct value for r', we should rotate the footprint polygon to position f p ' (thick dotted line) before we perform the mapping operation for p j . This, however, is  prohibitive as it would make the mapping operations computationally rather costly. Fortunately, the error is small for most cases.</p><formula xml:id="formula_5">Ext Left (v x,y ) Ext Right (v x,y ) Proj(v x,y ) v x,y Eye x y V Left (v x,y ) V o lu m e V Right (v x,y ) p i+3 p i p i+1 p i+2</formula><p>Since the splatting kernel is rotationally symmetric, the error solely due to the orientation difference of r and r' is zero. However, there remains an error with regards to the position at which the lookup table is indexed. This error is given by: , which is nearly zero for most cases unless voxels close to the image plane are viewed at large view cone angles.</p><p>The coefficients of the footprint polygon's plane equation are given by the normalized center ray (the vector eye-v x,y,z ). From this equation we compute two orthogonal vectors u and w on the plane. Hereby u and w are chosen such that they project onto the two major axes of the image. Using u and w, we can compute the spatial x,y,z positions of the four footprint polygon vertices in object space (</p><formula xml:id="formula_6">V Right (v x,y ) and V Left (v x,y</formula><p>) in the 2D case depicted in <ref type="figure" target="#fig_1">Figure 2</ref>). These four vertices are perspectively projected onto the image plane. This yields the rectangular extent of the footprint image, aligned with the image axes (Ext Right (v x,y ) and Ext Left (v x,y ) in the 2D case). By expressing the intersections of the pixel rays with the footprint polygon in a parametric fashion we can set up an incremental scheme to relate the image pixels within the footprint image with the texture map entries of the footprint table. Hence the inner loop of the splatting procedure can still be executed efficiently.</p><p>The computational effort to map a footprint polygon onto the screen and to set up the incremental mapping of the pixels into the footprint table is quite large: Almost 100 multiplications, additions, and divisions, and two square root operations are necessary. This cost is amplified by the fact that this has to be done at O(N), unless voxels can be culled by thresholding. The inner loop requires 10 additions, multiplications, and divisions, and is therefore still reasonably fast. We found that with X-ray type summation rendering, perspective projection was about four times more expensive than orthographic projection.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">RAY-DRIVEN SPLATTING</head><p>As indicated before, ray-driven algorithms are generally not sensitive to the non-linearity of the perspective viewing transform. We now describe an approach that uses this paradigm for splatting.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Orthographic Projection</head><p>In ray-driven splatting, voxel contributions no longer accumulate on the image plane for all pixels simultaneously. In contrast, each pixel accumulates its color, opacity, and density sums separately. As in voxel-driven splatting, we ensure proper compositing by dividing the volume into 2D slices formed by the planes most parallel to the image plane. When a sight-ray is shot into the 3D field of interpolation kernels, it stops at each slice and determines the range of voxel kernels within the slice that are traversed by the ray. This is shown in <ref type="figure">Figure 4</ref> for the 2D case: The ray originating at pixel p i pierces the volume slice located at x s at y=y(i,x s ). The voxel kernels within the slice x s that are intersected by the ray are given by the interval</p><formula xml:id="formula_7">[Ceil(y Left (i,x s )), Floor(y Right (i,x s ))]. We compute y Right (i,x s ) as: .</formula><p>The computation for y Left (i,x s ) is analogous. After determining the active voxel interval we must compute the indexes into the voxel footprint table. This can be efficiently implemented by realizing that the index into the footprint table of a grid voxel v located at coordinates (y v ,x v ) is given by the distance dr of the two parallel lines (planes in 3D) that traverse v's centerpoint and the slice inter-</p><formula xml:id="formula_8">dr' dr - dr 1 α cos - ( ) = y Right i x s , ( ) y i x s , ( ) extent kernel α ( ) cos ----------------------------- + =</formula><p>section point of the ray at y(i,x s ), respectively (see <ref type="figure" target="#fig_3">Figure 5</ref>). We find: <ref type="formula">4</ref>where a and b are the coefficients of the implicit line equation and are also given by the components of the (normalized) ray vector. Maintaining the variables y Left (i,x), y Right (i,x), and dr along a ray can all be done using incremental additions.</p><p>For the 3D case, we need to replace the linear ray by two planes. A 3D ray is defined by the intersection of two orthogonal planes cutting through the voxel field. The normal for one plane is computed as the cross product of the ray and one of the minor axes of the volume. The normal of the second plane is computed as the cross product of the ray and the normal of the first plane. Thus, the two planes are orthogonal to each other and are also orthogonal to the voxel footprint polygons. Intersecting the horizontal plane with a footprint polygon and using plane equations in the spirit of Equation (4) results in the horizontal row index dr row into the footprint <ref type="figure">Figure 4</ref>: Ray-driven splatting: Determining the range of voxels within a given compositing plane that are traversed by a ray originating at pixel</p><formula xml:id="formula_9">p i . α α p i y Left (i,x s ) y Right (i,x s ) x y y(i,x s )</formula><p>x s  </p><formula xml:id="formula_10">p i p i-1 p i-2 v x v =x s y v y(i,x s ) a b α dr a x s ⋅ b y i x s , ( ) ⋅ a x s ⋅ - b y v ⋅ - + = b y i x s , ( ) y v - ( ) ⋅ ( ) = a x s b y i x s , ( ) 0 = ⋅ + ⋅</formula><p>table, while the intersection with the vertical plane yields the vertical column index dr col . Using these two indexes, the value of the ray integral can be retrieved from the footprint table.</p><p>Note that, in contrast to voxel-driven splatting, a voxel may now be accessed and composited more than once for different rays. Since we do not want to shade the voxel each time it is accessed, we either pre-shade the volume before rendering it for many views, or we shade on the fly and cache away the result. Since we are using phong shading in our renderings, we shade voxels on the fly and maintain an additional shaded volume where we store the color of a shaded voxel once it is available. In systems where memory is scarce, one could also use a hash table.</p><p>There are now three nested loops: The most outer loop sets up a new ray to pierce the volume, the next inner loop advances the ray across the volume slice by slice and determines the set of voxels traversed per slice, and finally, the most inner loop retrieves the voxel contributions from the footprint tables. For orthographic projection, the plane equations have to computed only once since all rays are parallel. This reduces setting up a new ray to a few simple incremental operations. The cost of advancing a ray across the volume and determining the footprint entries is comparable to the cost of rotating a kernel and splatting it onto the image plane in the voxel-driven approach. We found the time for parallel projected summed X-ray rendering to be only slightly higher for ray-driven splatting than for voxel-driven splatting, however, when compared to traditional raycasting the saving were at the order of 3 with the added benefit of better accuracy. For direct volume rendering, the benefits of early ray termination in the ray-driven approach dominate over the extra cost for setting up the ray when an adequate bounding volume is used.</p><p>The ray-driven approach changes the splatting algorithm from voxel order to pixel order. Thus, the most outer loop is of O(P), with P being the number of image pixels. This has the advantage that the complexity of any extra work that has to be done for perspective projection (e.g. recomputing the two planes that define the ray in 3D) is roughly one order of magnitude less than in voxeldriven splatting.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Perspective Projection</head><p>The only change required for perspective, as hinted before, is to move the computation of the two ray defining planes into the outer most loop since each ray has a different orientation in space. This amounts to about 50 extra additions, multiplications, and divisions, and three square roots per pixel. As was also mentioned before, however, the complexity of this step is only O(P), thus the extra work required for perspective has a much smaller scaling factor than in voxel-driven splatting. And indeed, we found that the extra computational cost for perspective in ray-driven splatting is rather small. Note also that ray-driven splatting does not introduce inaccuracies. As a matter of fact, it prevents the situation illustrated in <ref type="figure" target="#fig_2">Figure 3</ref> by design.</p><p>But there persists one problem with perspective viewing in general: Due to the diverging rays, small features further away from the eye could be missed. In <ref type="figure">Figure 6a</ref> we see that traditional raycasting is especially prone to exhibit this behavior as it must use interpolation kernels of small reach and, in addition, only pointsamples the voxel space. <ref type="figure">Figure 6b</ref> illustrates that ray-driven splatting has greater potential in detecting small objects since we may use wider interpolation kernels in an efficient manner and ray-sampling is, for all practical purposes, continuous. However, even with larger interpolation kernels, we cannot fully eliminate the wellknown aliasing effects of the progressively coarser sampling rate as rays diverge: Objects may still either be missed (such as the second object in <ref type="figure">Figure 6b</ref>) or show up very faintly. Both of these effects result in object flicker in animated viewing or incorrect Xray projection images, respectively.</p><p>Non-homogeneous perspective sampling may also have degenerate effects in the 3D reconstruction from cone-beam projection images, especially for reconstructions at low object contrast. Since the value of a pixel in an acquired X-ray projection image is equivalent to the attenuation of a pyramid shaped X-ray beam traversing the volume, this beam needs to be approximated as close as possible when computing the summed projection images in the reconstruction process.</p><p>The problem's remedy is to maintain a constant sampling rate everywhere in voxel space. Solutions proposed for raycasting include the spawning off of additional rays as one penetrates further into the volume <ref type="bibr" target="#b13">[14]</ref>. Splatting, however, offers a much more attractive solution. Similar to anti-aliasing methods proposed in texture mapping, one can create summed area footprint tables <ref type="bibr" target="#b1">[2]</ref> and use these in the splatting procedure. This requires tracing the pyramidal volume extruded from the rectangular pixel into the volume and intersecting it with the spherical voxel basis functions. <ref type="figure">Figure 6c</ref> illustrates for the 2D case that in this way all objects can be captured and contribute in proper amounts to the image. Note, that summed area tables imply a 0th degree lowpass filtering of the image.</p><p>Let us now explain this approach in more detail: A pixel viewing pyramid is bounded by four planes. Each plane is bounded by one of the pixel edges on the image plane, and the two viewing rays emanating from the pixel vertices on either side of the pixel edge. To obtain the plane equation we simply take the cross product of one of the pixel vertex rays and the pixel edge vector. <ref type="figure" target="#fig_6">Figure 7a</ref> illustrates this process.</p><p>Just like in the line integral case, intersecting a plane pair with the footprint polygon in space yields an index point into the footprint table. By intersecting each of the four plane pairs with the footprint table we obtain four table indexes. The indexed table val- <ref type="figure">Figure 6</ref>: The effect of diverging rays in perspective: <ref type="bibr">(a)</ref> In raycasting, both objects are missed due to the small extent of the interpolation kernel. (b) In ray-driven splatting, due to the wider interpolation kernel, the object closer to the eye now contributes, although to a small extent, to the image. (c) By using summed area footprint tables and fan ray beams (pyramidal beams in 3D), both objects fully contribute to the image. It must be added, however, that the method bears slight inaccuracies. This is due to the fact that for most pyramid orientations one or more of the plane pairs have non-orthogonal normals, and hence these plane pairs fail to intersect the footprint table polygon as two perpendicular lines. This violates the summed area table index condition. However, the deviation from 90˚ is usually relatively small since we always flip the viewing direction as soon as the angle between the direction of the ray pyramid center ray and the major viewing axis exceeds 45˚.</p><p>Note however, that errors also occur with voxel-driven splatting when summed area footprint tables are used. These errors are additional to the inaccuracies reported in Section 3.2. In voxeldriven splatting, a pixel maps onto the (summed) footprint table as a non-rectangular four sided polygon which must be approximated by a rectangle. Thus, similar errors to those found in the ray-driven case occur.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">RESULTS</head><p>The colorplates show a collection of images obtained with ray-driven splatting and raycasting. Since ray-driven splatting is equivalent to voxel-driven splatting, we only present images obtained with the new method. The Brain dataset is the UNC Image plane</p><formula xml:id="formula_11">r 2 A r 1 r 2 r 3 r 4 S 4 S 3 S 2 S 1 A B C D (a) weight SAT S 1 [ ] SAT S 2 [ ] - SAT S 3 [ ] - SAT S 4 [ ] + Area S 1 ( ) Area S 2 ( ) Area S 3 ( ) - - Area S 4 ( ) + ---------------------------------------------------------------------------------------------------------------------- = "</formula><p>MRbrain", interpolated into a cubic grid. The resulting volume has a size of 256×256×145 voxels. The Scalp data set was obtained from an MRA study and has a size 256×256×247 voxels. As was mentioned before, MRA studies oftentimes use MIP rendering to display the contrast enhanced arterial structures.</p><p>Color plate a) through c) show 260×260 pixel images of the Brain data set rendered as an isosurface with parallel projection, a 30˚ perspective viewing angle, and a 60˚ perspective viewing angle, respectively. We find that the 30˚ perspective rendering gives the head a more realistic look. For example, the curvature of the skull's edge above the right eye looks much more natural in 30p erspective than under parallel projection. The 60˚ peephole perspective may be too exaggerated for clinical use.</p><p>While a raycaster using trilinear interpolation and a stepsize of ∆s=1.0 voxel lengths produces images of slightly inferior quality (at similar computational expense), it produces images of higher quality when sampling at ∆s=0.3 (however, at much higher computational expense, as shown below). The qualitative difference between raycasting and ray-driven splatting is best illustrated at lower image resolution, a possible scenario when pre-viewing volumes or when working in an interactive environment. Color plate d) through f) show three 30˚ perspective renderings of the Brain dataset. Here the image resolution was reduced to 130×130 pixels. The image sequence illustrates that ray-driven splatting performs well, even at half the volume resolution, and that a raycaster must sample at around ∆s=0.3 for similar results. This, however, comes at higher computational expense (see below).</p><p>Color plate g) and j) show the Scalp dataset rendered as an isosurface at orthographic projection and 30˚ perspective projection, respectively. (The Scalp images are of size 280×280). In color plate h), we see the same dataset rendered as a parallel X-ray projection, while color plate k) shows a cone-beam X-ray projection of the dataset. As was mentioned before, these kind of images are typically produced as intermediate results in the ART reconstruction algorithm for parallel-beam (0˚ orthographic projection) and cone-beam (30˚ to 60˚ perspective projections).</p><p>Color plate i) displays an image obtained by parallel MIP projection, appropriately thresholded to reveal only the brightest (i.e. densest) structures. Note that from this display it is quite hard to make a statement about the proper depth order of the three contrast-enhanced arteries in the foreground. Now consider color plate l) where the same dataset is MIP projected with a 60˚ perspective viewing angle. Clearly, the perspective projection makes it easier to distinguish the arteries in general and provides the viewer with certain depth cues that facilitate the labeling of the displayed arteries with respect to their 3D location in the human head. Moreover, a 60˚ perspective viewing angle is often encountered in traditional X-ray angiography, and therefore the 60˚ perspective MIP display mimics best the type of environment that the clinician may be used to from previous work experience in the catherization unit. <ref type="table">Table 1</ref> summarizes the performance of both voxel-driven and ray-driven splatting for the various rendering modes and data sets. In light of the previously mentioned analogies of ray-driven splatting with respect to raycasting, we also provide the run times required for rendering the data sets with this method. However, since pyramid integrals cannot be efficiently implemented with raycasting, we will omit comparisons of ray-based splatting with raycasting in this category. For the orthographic views, e.g. Brain 0˚, timings are given for both parallel and perspective projection. In these cases, the perspective renderer was run at a very small perspective angle (say 0.5˚) to enable the comparison of the overhead required for perspective mapping without confounding it with the effects of a wider viewing angle.</p><p>In <ref type="table">Table 1</ref>, the stepsize for raycasting was set to ∆s=0.3 grid units and the sample values were obtained from the grid voxels by trilinear interpolation. A lookup table was utilized to save compu-tations. Note that the timings for raycasting would have been significantly higher had the (wider) Gaussian interpolation kernel given in Equation <ref type="formula">4</ref>been used in place of trilinear interpolation. To accelerate the Brain and Scalp isosurface renderings, both raycasting and ray-driven splatting used simple bounding boxes and opacity-based early ray-termination, while voxel-driven splatting only mapped and composited voxels above the isovalue threshold. The X-ray and MIP renderings did not use any acceleration methods.</p><p>The timings reveal that ray-driven splatting is superior in both perspective summation and MIP rendering where it generally outperforms voxel-driven splatting by a factor of around 2.3 for both line-and pyramid integral renderings. For orthographic X-ray and MIP-type projection, ray-driven splatting is less efficient than voxel-driven splatting, but the gap is by far not as large than it is in its favor in the perspective case. Since for MIP and X-ray rendering no acceleration methods are used, these rendering modes are suited best to compare the two splatting approaches in term of pure mapping overhead.</p><p>For isosurface rendering, ray-driven splatting is highly dependent on the quality of the bounding volume of the object, which is typical for all ray-driven methods. In the Brain data set a fairly tight bounding box could be found, which results in superior rendering speeds even for orthographic projections. The Scalp dataset had a somewhat less tight bounding box, resulting in inferior performance when compared to voxel-driven splatting. The timings for perspective projection of the Scalp dataset show that voxeldriven splatting overcomes the expense of its more expensive mapping algorithm by being able to restrict that mapping overhead to those voxels whose values fall above the iso-threshold. In contrast, ray-driven splatting's advantage of early ray termination is offset by the fact that it must traverse many empty voxels within the loose bounding box until the isosurface is found.</p><p>The speedup gains of ray-driven splatting with respect to raycasting (using trilinear interpolation) are in the range of 3 to 4 for all cases. This comes at no surprise since, at a ray stepsize of 0.3, every voxel is considered about 3 to 4 times per ray, as opposed to only once in the ray-driven splatting approach. The additional overhead for convolution is masked by the fact that we only used a 2×2×2 trilinear interpolation kernel for raycasting and not the 4×4×4 Gaussian that was used for ray-driven splatting. <ref type="table">Table 2</ref> compares the run times for ray-driven splatting (using the Gaussian kernel) vs. raycasting (using trilinear and Gaussian interpolation filters at stepsizes ∆s=1.0 and ∆s=0.3) for two different image sizes of the Brain 30˚ rendering. With trilinear interpolation and a stepsize of ∆s=1.0 the run time for raycasting is about equal to ray-driven splatting (but renders images of lower quality, as shown above), and for a stepsize of ∆s=0.3 the run times are about 3 times larger than with ∆s=1.0 for both filters. This is consistent with our observation in <ref type="table">Table 1</ref>. The larger Gaussian filter increases the run time substantially.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">CONCLUSIONS</head><p>We have described the transformation of the traditional voxeldriven splatting algorithm into a ray-driven approach. This enables us to take advantage of the inherent advantages of ray-based methods: ease of perspective viewing, front-to-back projection with the opportunity of early ray termination when the accumulated opacity reaches unity, and the use of bounding volumes to cull unimportant structures. Other optimizations commonly used for raycasting, such as space-leaping <ref type="bibr" target="#b2">[3]</ref> <ref type="bibr" target="#b21">[22]</ref>, adaptive screen sampling, and octree decomposition <ref type="bibr" target="#b10">[11]</ref>, can be utilized to further speed up our algorithm. The minimal additional overhead required for perspective viewing in ray-driven splatting (as opposed to a large computational expense in voxel-driven splatting) enables speedups of around 2.3 for summed X-ray-type rendering, MIP, and direct volume rendering of predominantly translucent objects. For isosurface rendering, the speedup depends on the dataset and its bounding volume. Given a tight bounding box, ray-driven splatting is competitive for orthographic projection, and superior for perspective projection. If the dataset has many voxels above the isovalue, raydriven splatting is advantageous to use since it only processes visible voxels proximal to the eyepoint, while back-to-front compositing voxel-driven splatting must process all. With a more loose fitting bounding box, the performance of ray-driven splatting is less superior but still competitive. In terms of image quality, raydriven splatting is equivalent to voxel-driven splatting in orthographic projection. In contrast to voxel-driven splatting which is slightly inaccurate in perspective projection, ray-driven splatting avoids these errors by design. When compared to raycasting, ray-driven splatting gains significant performance advantages by using splatting's scheme of precomputing the ray integrals and storing them in tables. This eliminates the need for interpolating sample values along the ray as is required for raycasting. In addition to being able to compute these ray integrals at high resolution (i.e. stepsize), we can also efficiently use interpolation kernels superior to trilinear interpolation. Consistent speedups of 3 to 4 were observed with ray-driven splatting when compared to a raycasting algorithm that used trilinear interpolation and a step size of 0.3. Perspective raycasting undersamples volume regions farther away from the eyepoint due to the diverging nature of the rays. This problem can be eliminated in ray-driven splatting (and voxel-driven splatting) by utilizing summed area footprint tables and tracing the volume by pyramidal raybeams.</p><p>In this paper we assumed an underlying cubic grid. In the future, we would like to expand our algorithm for use in general rectilinear grids. Westover used ellipsoidal splats to solve this problem. However, since our incremental algorithm for mapping the footprint polygons onto the image pixels depends on the basis kernel functions being spherical, a generalized implementation of the ray-driven splatting algorithm should maintain this concept. A convenient way to achieve this would be to warp the non-cubic rectilinear grid into a cubic grid. This new grid would then be composed of spherical kernel functions, and if the rays spawned at the image pixels are warped accordingly, then the traversal of the new grid could be performed using the same incremental algorithms as described in this paper, without significant speed penalties.</p><p>We also plan to enhance ray-driven splatting by using tighter, more intricate bounding volumes, possibly generated by a PARClike scheme <ref type="bibr" target="#b16">[17]</ref>. We would also like to experiment with hierarchical volume decomposition methods, such as the one described in <ref type="bibr" target="#b3">[4]</ref>, to accelerate the volume traversal of the ray.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Orthographic splatting: Incremental mapping of the footprint polygons onto the image plane and incremental mapping of the image pixels within the footprint image into the footprint table.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Perspective splatting: Mapping the footprint polygon onto the image plane and mapping the affected image pixels back onto the footprint table.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Perspective splatting: Accumulated line integrals vs. actual line integrals.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 5 :</head><label>5</label><figDesc>Ray-driven splatting: Computing the index dr into the footprint table.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head></head><label></label><figDesc>combined according to the well-known summed area table (SAT) formula such that (seeFigure 7b):</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 7 :</head><label>7</label><figDesc>Ray-driven splatting with a summed area footprint table. (a) Pixel viewing pyramid: rays r 1 ,...,r 4 are emanating from the pixel vertices, together with the pixel edges they form four planes, A,..,D (b) Planes A,..,D intersect the summed area footprint table segmenting it into four areas S 1 ,..,S 4 , S 4 ⊂ S 2 ,S 3 ⊂ S 1 .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head>Table 2 :Table 1 :</head><label>21</label><figDesc>Comparison of run times for raycasting for two different image sizes of the Brain 30˚ rendering. Timings are given in seconds. Comparison of ray-driven splatting with voxel-driven splatting and raycasting. The run time is measured in seconds, the speedup S p =Time competing method /Time ray-driven splatting . (Timings are for a 200MHz SGI Indigo 2 workstation.)</figDesc><table><row><cell>Image size</cell><cell cols="2">Raycasting with trilinear interpol. ∆s=1.0 ∆s=0.3</cell><cell cols="2">Raycasting with Gaussian interpol. ∆s=1.0 ∆s=0.3</cell><cell>Ray-driven splatting</cell></row><row><cell>260x260</cell><cell>32.3</cell><cell>80.2</cell><cell>113.4</cell><cell>320.4</cell><cell>30.3</cell></row><row><cell>130x130</cell><cell>9.3</cell><cell>21.6</cell><cell>28.4</cell><cell>94.9</cell><cell>9.1</cell></row></table><note></note></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="1">Biomedical Engineering Center, 2 Department of Computer and Information Science The Ohio State University, Columbus, Ohio 1 270 Bevis Hall, Columbus, OH 43210, klaus@chaos.bme.ohiostate.edu, http://chopin.bme.ohio-state.edu/~klaus/klaus.html. 2 789 Dreese Lab, Columbus, Ohio 43210, yagel@cis.ohio-state.edu, http://www.cis.ohio-state.edu/hypertext/volviz/main.html</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>The authors would like to thank GE for supporting this project under CCH grant #950925 and OSU grant #732025. Many thanks also to the University of North Carolina at Chapel Hill for maintaining the extensive database of test volumes from which the MRbrain dataset was obtained. We also thank Don Stredney from the Ohio Supercomputer Center for providing us with the MRA Scalp dataset.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Texture splats for 3D scalar and vector field visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization&apos;93</title>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="261" to="266" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Summed-area tables for texture mapping</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">C</forename><surname>Crow</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics SIGGRAPH&apos;84</title>
+		<imprint>
+			<date type="published" when="1984" />
+			<biblScope unit="page" from="207" to="212" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Proximity Clouds, an Acceleration Technique for 3D Grid Traversal</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Sheffer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The Visual Computer</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="page" from="27" to="38" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Fast algorithms for volume raytracing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Danskin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Workshop on Volume Visualization</title>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="91" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Algebraic reconstruction techniques (ART) for three-dimensional electron microscopy and X-ray photography</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Gordon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bender</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">T</forename><surname>Herman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Theoretical Biology</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="471" to="482" />
+			<date type="published" when="1970" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Local basis-function approach to computed tomography</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">M</forename><surname>Hanson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">W</forename><surname>Wecksung</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Applied Optics</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">23</biblScope>
+			<date type="published" when="1985" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">3D virtual colonoscopy</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Hong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Viswambharan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wax</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Biomedical Visualization Symposium</title>
+		<imprint>
+			<biblScope unit="page" from="26" to="32" />
+			<date type="published" when="1995-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Space Deformation using Ray Deflectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kurzion</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 6th EurographicsWorkshop on Rendering</title>
+		<meeting>the 6th EurographicsWorkshop on Rendering</meeting>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="21" to="32" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Hierarchical splatting: a progressive refinement algorithm for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Laur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="285" to="288" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Display of surfaces from volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="29" to="37" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Efficient raytracing of volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="245" to="261" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Alternatives to voxels for image representation in iterative reconstruction algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Lewitt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Physics in Medicine and Biology</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="705" to="715" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Efficient Feed-Forward Volume Rendering Techniques for Vector and Parallel Processors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Machiraju</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SUPERCOMPUTING&apos;93</title>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="699" to="708" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">An efficient method for volume rendering using perspective projection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">L</forename><surname>Novins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">X</forename><surname>Sillion</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Greenberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Special issue on San Diego Workshop on</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="95" to="102" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+	<note>Computer Graphics</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">A rendering algorithm for 3D scalar fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Sabella</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="59" to="64" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Rapid previewing via volume-based solid modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The Third Symposium on Solid Modeling and Applications, SOLID MODELING `95</title>
+		<imprint>
+			<biblScope unit="page" from="281" to="292" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">A hardware acceleration method for volumetric ray tracing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">M</forename><surname>Sobierajski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Avila</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization&apos;95</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="27" to="34" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Direct 2-D display of 3-D objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">K</forename><surname>Tuy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">T</forename><surname>Tuy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page" from="29" to="33" />
+			<date type="published" when="1984-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Footprint evaluation for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Westover</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics SIGGRAPH&apos;90</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="367" to="376" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Chapel Hill Volume Visualization Workshop</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Westover</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1989" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+	<note>Interactive volume rendering</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">A coherent projection approach for direct volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="275" to="284" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Accelerating volume animation by space-leaping</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Shi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization&apos;93</title>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="63" to="69" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Brain 0˚ (ray-splat, line integral) b. Brain 30˚ (ray-splat, line integral) c. Brain 60˚ (ray-splat</title>
+		<imprint/>
+	</monogr>
+	<note>line integral</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m">Brain 30˚ (ray-splat, low resolution) e. Brain 30˚ (raycast, ∆s=1.0, low res.) f. Brain 30˚</title>
+		<imprint/>
+	</monogr>
+	<note>raycast, ∆s=0.3, low res.</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m">Scalp 0˚ (ray-splat</title>
+		<imprint/>
+	</monogr>
+	<note>line integral</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Scalp 30˚ (ray-splat, line integral) h. X-ray 0˚ (ray-splat, line integral) i. MIP 0˚ (ray-splat</title>
+		<imprint/>
+	</monogr>
+	<note>line integral</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">MIP 60˚ (ray-splat</title>
+		<imprint/>
+	</monogr>
+	<note>line integral</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

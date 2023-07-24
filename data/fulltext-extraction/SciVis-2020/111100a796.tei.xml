@@ -1,0 +1,948 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Interactive Black-Hole Visualization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Annemieke</forename><surname>Verbraeck</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Elmar</forename><surname>Eisemann</surname></persName>
+						</author>
+						<title level="a" type="main">Interactive Black-Hole Visualization</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T19:47+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Physical &amp; Environmental Sciences, Engineering, Mathematics</term>
+					<term>Computer Graphics Techniques</term>
+					<term>Algorithms</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1. We compute an adaptive grid (1 sec. per grid) for a given observer position (here in geodesic equatorial orbit with r cam = 5M) and spin of the black hole (here a/M = 0.999). Grid values are interpolated to accommodate a given output resolution. The resulting frames (rendered at ∼ 20 ms) capture the distortion of a celestial-sky map and star catalogue.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Astronomers have tried to visualize accurate representations of black holes for a long time, and recently an image was extracted from real observational data <ref type="bibr" target="#b27">[28]</ref>. As we discover more about the universe, it is important to educate not only the professionals about these findings. Physically-plausible simulations of black holes make abstract principles tangible and enhance any educational experience, as in museums or planetariums, and could be included in games and movies.</p><p>Visualizing a black hole is challenging as light rays, traveling in its vicinity, diverge from straight paths. Consequently, a general-relativity ray tracer is needed to calculate the paths of light originating from stars and galaxies around a black hole towards the observer. Some of these rays loop around the black hole multiple times, resulting in very distorted visuals. To produce images of sufficient quality, billions of rays need to be traced, as for the 2014 movie Interstellar <ref type="bibr" target="#b12">[13]</ref>. To visualize the view from a spaceship passing a black hole, the special effects studio DNEG worked together with astronomer Kip Thorne to create images that are visually appealing, high quality, and as scientifically accurate as possible.</p><p>Our method builds on the techniques developed for the Interstellar movie but targets higher performance. In this light, we present an efficient GPU mapping to accelerate the visualization. It produces physically-plausible simulations that can run on a commodity computer. We propose a two-step approach; we efficiently produce an adaptive grid that captures the black-hole distortion for varying observer positions using an order of magnitude fewer rays compared to tracing a ray for every pixel. Using an advanced interpolation method, we can transition between grids, which removes the need to update the grid in every frame. Images of higher resolution (e.g., FullHD) can then be generated at real-time rates using the computed grids. Our solution supports environment maps, representing nebula or dust, and star maps, the latter being a description of the location in spherical coordinates, emitted energy, and color of all visible stars from a given location. A separate map containing star locations delivers more accurate results than embedding them in the environment map, as a star projection is typically smaller than a pixel. While a wealth of astronomy and physics work covers the underlying theory of black hole simulations, as well as related scientific insights, little attention has been given to the actual rendering procedures and most papers focus on the physics background <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b4">5,</ref><ref type="bibr" target="#b13">14,</ref><ref type="bibr" target="#b22">23,</ref><ref type="bibr" target="#b29">30,</ref><ref type="bibr" target="#b30">31,</ref><ref type="bibr" target="#b32">33]</ref>. We explain our rendering process in detail and discuss all optimizations and additional effects used to increase the realism and aesthetic of the imagery. Our method renders the black hole visuals at frame rates varying from real time to half a second per frame, depending on the star catalogue size. An overview of our method is shown in <ref type="figure">Fig. 1</ref>.</p><p>Specifically, our main contributions include a grid-based scheme that only involves a sparse ray tracing, an interpolation method to support camera movement, and an efficient integration process to avoid aliasing. Further, we present efficient implementations of effects to increase the realism of the visualization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">BLACK-HOLE PHYSICS</head><p>Here, we give an overview of black holes and their visual distortion effects. The text is based mainly on Chapter 16 of An Introduction to Modern Astrophysics <ref type="bibr" target="#b3">[4]</ref> and The Science of Interstellar <ref type="bibr" target="#b28">[29]</ref> to enable the interested reader to consult these for more information.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">General Relativity</head><p>General relativity (GR) is a complex theory that cannot be fully detailed in this paper, the interested reader is referred to Einstein Gravity in a Nutshell <ref type="bibr" target="#b33">[34]</ref> for an introduction to GR and to Gravitation as the authorative reference text on the field. To understand black holes, curved spacetime is the most important concept explained by GR, together with the principle that light always travels along the shortest path. Mass, as in a black hole, causes spacetime to curve, which influences the way particles traverse spacetime. Even massless particles like photons are influenced because in curved spacetime the shortest route is no longer straight <ref type="figure" target="#fig_0">(Fig. 2, left)</ref>. Shortest paths are called geodesics and can be found by solving a complex system of equations (detailed in supplementary materials) describing the local spacetime.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Black Holes</head><p>A black hole is the result of a very massive star that collapsed at the end of its lifetime. Any black hole can be completely described by three numbers: its mass, angular momentum, and electric charge. A Schwarzschild black hole is a type that does not have angular momentum nor electric charge, so the distortion of spacetime can be derived from mass M alone. A black hole is a spherical body, which implies that in this case, deformations are symmetric in all directions. Kerr black holes have additional angular momentum (spin). Their rapid rotation induces a phenomenon that warps the surrounding spacetime, reducing the spherical symmetry to axis symmetry about the rotation axis. This produces a region called the ergosphere in which the pull of the rotation is so high that all particles within have to co-rotate. The spin is expressed indirectly by its ratio to the mass with a constant that cannot exceed one (for the paper, all illustrations use a/M = 0.999, the video shows different parameters).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Distortion Effects</head><p>A black hole significantly distorts the surrounding: light rays arrive at the observer from different angles than from where they originated <ref type="figure" target="#fig_0">(Fig. 2, right)</ref>. Further, the velocities necessary for a space ship to stay in stable orbit (avoiding descent into the black hole) are a significant fraction of the speed of light. This causes the observer in the ship to experience additional view distortions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Gravitational Lensing</head><p>Even multiple images of the same star can be observed, as light rays in different directions from the same star can travel along different geodesics arriving at the observer. Inversely, two photons close to each other on the camera might actually originate from two stars with a large angular distance (relative to the observer) between them. An originally small distance or area can appear stretched and its brightness changes proportionally <ref type="bibr" target="#b17">[18]</ref>, which is referred to as gravitational lensing.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Redshift</head><p>Traveling at high speeds changes the perceived frequency of a wave (Doppler effect); opposing the camera movement, lightwaves become compact, shifting the color towards blue (blueshift), in the other direction they elongate and appear reddish (redshift). Both phenomena are typically grouped under the term redshi f t. When photons pass by a black hole, the effect of time slowing down also causes a gravitational redshift in their frequency. Close to the black hole's center, one observes the shadow. It is the purely black portion, where the gravitation effects are so severe that time slows to a stop and no light can escape.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">Curved-Spacetime Ray tracing</head><p>To visualize the distorted space around a black hole, typically a ray tracing method follows the geodesics <ref type="figure" target="#fig_0">(Fig. 2</ref>, right) back in time. A system of differential equations describes these geodesics <ref type="bibr" target="#b12">[13]</ref>. The equations define photon travel directions at any point in space. Integrating them from the observer back to −∞, gives the direction that the photon originated from. We chose Runge-Kutta-Cash-Karp <ref type="bibr" target="#b23">[24]</ref> for the numerical integration of the differential equations, because of its stability and adaptive step size. As all rays are independent, the ray tracing can be parallelized. Further, even before tracing one can also detect if a ray is caught in the shadow of the black hole. The differential equations we use do not provide solutions inside the ergosphere (Sect. 2.2), so in our simulation the camera cannot descend into the black hole. Details of the ray-tracing method can be found in the supplementary material. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">RELATED WORK</head><p>Black hole simulations started from an astronomical perspective to confirm theoretical work and telescope observations, which implied that a camera was typically far away from the black hole. In 1978 Luminet <ref type="bibr" target="#b16">[17]</ref> computed an image of a rotating black hole illuminated by an accretion disk around it. Adding a disk is also used in more recent works <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b19">20,</ref><ref type="bibr" target="#b22">23]</ref>, as it makes the image distortion caused by the black hole become very visible. While our method can be used to simulate an accretion disk located at finite distance ( <ref type="figure" target="#fig_1">Fig. 3</ref>) by testing its intersection during ray tracing, our focus is on the background distortion. Additionally, such a disc would act as a light source that is much closer to the observer and its brightness would render stars and interstellar dust invisible.</p><p>GRay <ref type="bibr" target="#b4">[5]</ref> and Odyssey <ref type="bibr" target="#b24">[25]</ref> are parallelized GPU raytracers visualizing step-by-step photon travel near a black hole in real time but unlike us, they did not produce an actual observer image. They did compute the distortion of a grid image for benchmarking. It took them approximately 2 seconds for 256 × 256 rays on the GPU, while our solution on the CPU requires less than a second to trace this amount of rays, including adaptive grid construction. Our Runge-Kutta implementation uses an order of magnitude fewer total steps than Odyssey's, which can be contributed to our aggresive step size increase following small integration errors, and the difference in application, as their photon path visualization might require smaller steps and intermediate storage.</p><p>Schwarzschild black holes and their induced distortions are fully symmetric, which makes the involved equations simpler than for Kerr black holes. Weiskopf et al. <ref type="bibr" target="#b31">[32]</ref> described the first interactive visualization of a Schwarzschild black hole distorting a background with objects assumed to be infinitely far away. They exploited the spherical symmetry that reduces the two-dimensional situation to a one-dimensional case by rotation. In a later paper, Müller <ref type="bibr" target="#b18">[19]</ref> described an OpenGL implementation that used the same strategy, allowing an observer to freely move around a non-spinning black hole, using a lookup table based on an analytic solution. Müller and Weiskopf <ref type="bibr" target="#b20">[21]</ref> also presented a real-time visualization for a local observer viewing the stellar sky behind a Schwarzschild black hole. They did not compute the distortion of the whole image plane. Instead, they used the Schwarzschild metric to find the light paths connecting each star with the observer and computed the star's appearance change in terms of luminosity, size and light frequency. Riazuelo <ref type="bibr" target="#b25">[26]</ref> used a similar (though not real-time) method that can simulate an observer falling into the Schwarzschild black hole. He provided an extensive explanation of how gravitational effects change the visuals and what methods were chosen to make the visualization look realistic and aesthetically pleasing.</p><p>Making realistic visualizations of distorted spacetime becomes even more interesting with the recent advancements in stereoscopy and virtual reality. Hamilton et al. <ref type="bibr" target="#b8">[9]</ref> showed that visualizing a black hole in 3D is nontrivial. An accurate physical rendering in curved spacetime results in two images that are too different from each other to be correctly processed by our brain. They solved this problem by using an approximation where the two views are rendered as if the viewpoints are in flat spacetime. This is also the approach that Davelaar et al. <ref type="bibr" target="#b6">[7]</ref> took for their research on visualizing an accretion flow into a black hole in VR. All solutions rely on offline rendering to produce the visuals. Our solutions could provide such imagery in real time, which is particularly interesting in VR to support interactivity and to be able to adapt the stereo baseline to accommodate varying eye distances.</p><p>Kobras et al. <ref type="bibr" target="#b14">[15]</ref> present an inspiring method for general relativistic image-based rendering. The setup matches ours with a camera in the distorted spacetime and a 360-environment map at infinity. They also map pixels to regions but perform only axis-aligned filtering. Additionally, we handle adaptive computations, view interpolation, gravitational blueshift and lensing simulations, and actual star maps.</p><p>A very precise visualization was made for the movie Interstellar <ref type="bibr" target="#b12">[13]</ref>. Their research on simulating a black hole with an accretion disk and the distorted stellar sky has an emphasis on quality of the produced frames rather than runtime. The work used the Kerr metric to describe spacetime and takes location and movement of the local observer into account. They derived a set of differential equations that describe light geodesics for single rays, and an improved version with ray bundles. Ray tracing a batch of rays per pixel resulted in a completely black image, as the chance of hitting a star (similar to a point light) is small and even for nebulae aliasing occurs. To this extent, their ray bundle tracing uses a volume instead; a circle centered on each pixel, which deforms during tracing and ends up as an elliptical region on the celestial sphere. All stars in this region were then integrated to compute the output pixel value. Unfortunately, the extra equations and variables needed to keep track of the deformations of the ray bundles is large, which makes the algorithm costly and difficult to reproduce. Our solution examines an alternative, using only the equations for single rays, which sacrifices some quality but reaches much higher performance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">OUR APPROACH</head><p>Our solution consists of two main parts. The first is the grid computation on the CPU, which derives an adaptive grid that captures the distortion for a given viewpoint. The second is the processing of the celestial sky in real time on the GPU to simulate the distortion effects of a black hole. We first describe the variables and setting (Sect. 4.1) to provide the necessary background information. We continue with  <ref type="bibr" target="#b12">[13]</ref>. In red and yellow: Our method traces single rays from pixel corners to form ray polygons.</p><p>an overview of a basic approach (Sect. 4.2), before describing our complete method with optimizations (Sect. 4.3). Finally, we propose several extensions (Sect. 4.4). We show how to support a star map with precise sub-pixel star locations, as well as optical effects to increase the realism of the produced images. A schematic representation of the star map rendering with the advanced algorithm and all extensions is shown in <ref type="figure" target="#fig_0">Fig. 12</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Setting</head><p>Our approach supports arbitrary camera projections but, by default, we use an equirectangular projection of the whole 360 panorama with a pixel grid of equally-spaced spherical coordinates (0 &lt; φ &lt; 2π, 0 &lt; θ &lt; π), with θ increasing downward and φ increasing counterclockwise. If wanted, this 360 view could be remapped onto different camera models, e.g., a pinhole camera with user defined parameters for resolution and field of view. As additional parameters, the user can define the spin of the black hole and the location, direction and speed of the camera. In our standard setup, the camera is always in orbit around the black hole.</p><p>While the observer might be close to the black hole, stars and other celestial objects are assumed far away so that their distance can be considered infinite. This celestial-sky background is then defined as a virtual sphere around the observer with an infinite radius ( <ref type="figure" target="#fig_2">Fig. 4</ref> shows a celestial-sky environment map). Consequently, we make use of spherical coordinates throughout the algorithm:</p><p>1. The camera is located at a position (r cam , θ cam , φ cam ) relative to the black hole, where r cam is expressed in black hole mass M.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">The camera moves with speed</head><formula xml:id="formula_0">β in direction (r dir , θ dir , φ dir ).</formula><p>3. Light rays arrive at the camera position from a direction (θ c , φ c ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>4.</head><p>Light rays originate from positions on the celestial sky (θ s , φ s ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Basic Algorithm</head><p>The simplest version of a rendering algorithm shoots one ray from the center of each pixel and traces it back to a position (θ s , φ s ) on the celestial sky. If we determine the pixel to be part of the black hole shadow, it is colored black, otherwise the pixel color is determined by a lookup in the environment map.</p><p>There are two problems with this simple approach. First, to simulate a change in the position or direction of the camera in real time, ray tracing needs to be performed for every frame. As the workload of tracing rays for pixels is very high, it becomes very costly. Second, tracing a single ray per pixel and performing a lookup in the celestialsky map leads to visible aliasing due to stretch and compression by the black hole. In the next two sections, we introduce the concepts that form the a basic algorithm that overcomes these two hurdles.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">Grid</head><p>As a first step towards an interactive simulation, we reduce the number of rays that need to be produced. To this end, we construct a grid on a sphere around the camera, where every vertex on the grid is a direction (θ c , φ c ) of incoming light rays for 0 &lt; θ c &lt; π and 0 &lt; φ c &lt; 2π. For each grid vertex, we shoot the corresponding ray and store the celestial-sky coordinates (θ s , φ s ). As the distortion of space around a black hole is smooth, it lends itself well for an interpolation approach. By interpolating the grid vertices, we can approximate corresponding (θ s , φ s )-coordinates for any ray direction (θ c , φ c ). This means that for a given camera position, we only trace rays once to construct the grid. Then, for each pixel in every image frame, we can locate the grid cell containing the pixel center and perform a linear interpolation of the stored celestial-sky positions from the cell's corner vertices with respect to the camera-pixel center. This is independent of the camera model (e.g., pinhole), as the grid is omnidirectional and supports any camera orientation from the given position. Additionally, when the camera circles around the black hole spin axis at a fixed distance, the grid also does not require any updates due to the axisymmetric black-hole distortion. We only need to apply a uniform shift of the φ scoordinates. Other positional changes require an update of the sparse grid. Furthermore, when the camera is positioned in the equatorial plane, the distortion is symmetric with respect to this plane, and only the top half of the grid needs to be traced, halving the computation time.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">Ray Polygons</head><p>To counter the aliasing caused by a single ray per pixel, Interstellar traced ray bundles around a pixel to determine an ellipsoid area on the celestial sky, which was integrated to find the pixel color <ref type="bibr" target="#b12">[13]</ref>. Unfortunately, ray bundle tracing is much more complicated and costly than tracing single rays.</p><p>We can avoid the bundle-tracing costs, by realizing that a pixel is a square area defined by its four corners. Tracing single rays through those corners and connecting their celestial-sky coordinates, results in a four-sided polygon, which can be integrated just like the ellipsoid <ref type="figure" target="#fig_3">(Fig. 5)</ref>. In this way, neighboring pixels map to adjoining polygonal regions on the celestial-sky and the number of traced rays remains identical. To determine the camera-pixel color, we average the contribution of each environment-map pixel that is contained in the polygonal region ( <ref type="figure" target="#fig_4">Fig. 6</ref>) weighted by solid angle to counteract the sphericalparametrization stretching near the poles. If one pixel corner lies in the black hole shadow, we set the output to black. Care has to be taken when pixel corners project close to both sides of the φ = 0 = 2π border in the celestial-sky parametrization. We adjust for this problem by cutting the polgyon along the seam into two parts.</p><p>Combining this solution with the previously introduced grid is straightforward. Instead of pixel centers, we now compute the interpolated results for pixel corners. Changing from one data point per pixel (the center) to four (the corners) adds no workload to the interpolation, as every corner is shared by four pixels. <ref type="figure" target="#fig_5">Fig. 7</ref> shows an overview of the basic implementation of the algorithm.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Advanced Algorithm</head><p>The previously-described algorithm eliminates the most expensive computations but still can be improved significantly. First, the use of a regular grid is not efficient; the spacetime deformation induced by the black hole is continuous outside the black-hole shadow and only some areas require much detail. Consequently, we propose the use of an adaptive grid (Sect. 4.3.1). Second, a linear interpolation of grid vertices does not follow the continuous distortion well and leads to artifacts. Hermite splines, defined based on the celestial-sky coordinates of four grid vertices, provide a much better approximation (Sect. 4.3.2). Further, we address the challenge of moving freely around the black hole by interpolating a set of grids (Sect. 4.3.3). Finally, due to the distortion, a pixel can lead to a large polygonal region on the celestial sky and integrating all contained pixels can be expensive. We provide an optimization that avoids looping over each individual pixel (Sect. 4.3.4).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.1">Adaptive Grid</head><p>We start with a coarse grid, two cells each representing half of the sphere, that are initially subdivided like a quad tree to level L min , unless the cell is entirely contained in the black hole shadow. Next, we will progressively refine these cells further. To this extent, we trace the ray for each current grid vertex and compute its location on the celestial sky. For each grid cell, we then approximate the size of its region on the celestial sphere by determining the length of the diagonals based on the locations of the opposing vertex pairs of the cell. If this length exceeds a threshold, we subdivide the cell by adding a grid vertex in the cell's center and at the midpoints of its edges. The subdivision process is then continued with the newly formed cells up to a level L max . In practice, all examples in this paper and video use L min = 6 and L max = 10. We chose the polygon diagonals as subdivision criterion, as these are quickly calculated using only the grid cell itself and even a rough approximation of the level of deformation results in a highly functional adaptive grid. We experimentally determined the threshold of 0.015 radians, which results in the best balance between traced number of rays and interpolation error (see Sect. 5).</p><p>To use the adaptive grid for interpolation, we need to find the cell containing a given ray direction (θ c , φ c ). The construction of the grid is hierarchical, as every cell that is adaptively refined is divided into four child cells. We can use the resulting tree structure to quickly descend to the required leaf cell. We start the process at the largest cell (either 0 &lt; φ &lt; π or π &lt; φ &lt; 2π) containing (θ c , φ c ). We check the cell for children. If there are none, we found the leaf cell, and otherwise we know the cell has four child cells and we continue with the cell containing (θ c , φ c ). This process is repeated until a leaf cell is found.</p><p>We wish to store the grid in a data structure that allows us to quickly find the cell to interpolate. At the same time, it should be suitable for use on the GPU and not take up large amounts of memory, to avoid making the transfer of the grid from CPU to GPU a bottleneck. To this end, we do not use an explicit tree structure, where the same grid vertex would need be stored for cells of different levels. Instead we store the representation in a perfect hash table <ref type="bibr" target="#b15">[16]</ref>, which enables fast lookups and stays compact, by only storing each grid vertex once. Hash tables use keys to retrieve values. In our case, the values are (θ s , φ s )-coordinates on the celestial-sky and the keys represent grid vertex positions with (θ c , φ c )-coordinates. For this specific structure, keys need to be pairs of integers, so we map grid-vertex positions to an (i, j)-index:</p><formula xml:id="formula_1">i = θ c π N, j = φ c 2π M,<label>(1)</label></formula><p>where M and N are the horizontal resp. vertical number of grid vertices in a maximally refined grid. We use a stored value of (-1, -1) to indicate that a corresponding grid vertex is part of the black hole shadow. To descend in the implicit tree encoded by the hash map, we test for a given cell if the vertex at the center of this cell exists. If it does, the cell must have been subdivided and we can virtually proceed with the corresponding next cell. A perfect hash structure consists of two tables and a lookup is a two-step process. First the key (i, j) is used for a lookup in an offset table, returning an offset (x, y) which is added to the key. This new key (i + x, j + y) is used for the lookup in the table holding the (θ s , φ s )values. The construction of these tables is such that a lookup using any index key will succeed and return a value in the table. This means that indices of grid vertices that have not been traced (like the ones in the middle of a leaf cell), will return a value that belongs to another grid vertex. To solve this problem, we also store the (i, j)-index of the grid vertex in the value table together with the (θ s , φ s )-value. Whenever we perform a lookup, we first check whether the key matches the stored index. Due to the extreme sparseness of the grid, this method is even more memory efficient than the use of a bitmask.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.2">Spline Interpolation</head><p>Interpolating the celestial-sky coordinates of the grid vertices bilinearly does not follow the curves of the distortion accurately. Unlike spline interpolation, this method only considers the distortion of the current grid cell, when computing pixel to polygon mapping. This results in a discontinuity between the mapping of consecutive pixel corners in neighboring cells. Comparing the squared (θ s , φ s ) distances of a fully traced level 10 grid (2048 × 1024) to a bilinearly-interpolated adaptive grid reveals a cumulative squared error of 0.369 rad <ref type="bibr" target="#b1">2</ref> . This error gets transferred to the projected pixel polygons overlapping with the cell borders and might lead to interpolation artifacts <ref type="figure" target="#fig_8">(Fig. 10)</ref>.</p><p>Using a spline interpolation yields a much better result, as the smooth splines better capture the smooth distortions <ref type="figure" target="#fig_7">(Fig. 9)</ref>. The error for the above example reduces to 0.008 rad 2 , which gives an average squared error of less than 1E-8 rad 2 per grid vertex (not counting the vertices that exactly line up with the grid).</p><p>In practice, we employ cubic Hermite splines as these are smooth and efficient to calculate with four points (q 0 , q 1 , q 2 , q 3 ):</p><formula xml:id="formula_2">p(t) = h 00 (t)q 1 + h 10 (t)m 1 + h 01 (t)q 2 + h 11 (t)m 2 m 1 = (q 2 − q 0 )/2; m 2 = (q 3 − q 1 )/2<label>(2)</label></formula><p>Here, h 00 , h 10 , h 01 , h 11 are the Hermite basis functions and the resulting spline is defined from t = 0 to t = 1 between inner points p(0) = q 1 and p(1) = q 2 , with m 1 , m 2 their respective tangents, calculated using the end points q 0 and q 3 .</p><p>To explain spline interpolation for our grid cells, we first recap the simpler bilinear interpolation. We define the position of the ray direction in the grid cell c with two interpolation values, indicating the percentage of horizontal (α) and vertical (β ) displacement within the cell. The four corners of the grid cell, in clockwise order starting from the top-left corner, map to four coordinates {p 1 ,..., p 4 } forming a polygon on the celestial sky. With bilinear interpolation, first the two edges of the polygon (p 1 , p 2 ) and (p 3 , p 4 ) are interpolated using α, the resulting coordinates are then connected, and finally this line is interpolated using β :</p><formula xml:id="formula_3">β (α p 1 + (1 − α)p 2 ) + (1 − β )(α p 3 + (1 − α)p 4 )<label>(3)</label></formula><p>The process for spline interpolation is similar. We also focus on the edges (p 1 , p 2 ) and (p 3 , p 4 ) first, and construct their splines, s 1 and s 2 . We evaluate them at α, and use the resulting coordinates to construct the vertical spline s 3 , which we evaluate at β for our final result. However, the coordinates {p 1 ,..., p 4 } are not enough to construct s 1 and s 2 , as they are only the inner spline points. The spline end points are retrieved from neighboring grid cells. As grid vertices have no knowledge of their nearest neighbours, we select the two end points such that all four spline points are equidistant in the grid. For s 1 and s 2 , we select positions that lie at one cell width distance to the right and left of their inner points. Similarly, for the spline s 3 , we linearly interpolate (at α) the horizontal grid edges that lie one cell width above and below the cell.</p><p>The chosen positions (even when shifted by one cell width) do not necessarily correspond to grid vertices. In this case, we obtain the result by interpolation as well. We use the same spline interpolation technique for this step, but if this process again encounters missing points, we adopt linear interpolation to avoid a long chain of recursive calls. When part of a spline is inside the shadow, linear interpolation is used as well.</p><p>To further improve the quality of interpolation, we post process the grid after construction. At locations where t-vertices appear (a larger  grid cell next to smaller cells), we interpolate the edge of the larger cell, and adjust the vertices of the smaller cells that lie on this edge accordingly. It does not give an analytic match for every point along the line between different sized grid cells, but, in practice, for larger grid-cell sizes, where we would expect larger deviations, we have by definition less distortion, which leads to a good balance. The result is a very close match and this adjustment only needs to be done once and takes little compute time.</p><p>While spline interpolation requires additional lookups in our adaptive grid compared to linear interpolation, it results in a much better approximation for the pixel corners, causing the filtering quality for the environment map to be significantly improved.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.3">Grid Interpolation</head><p>So far, we have considered a single adaptive grid, but for camera movement other than rotation around the symmetry axis of the black hole, a new grid is needed. We allow the user to indicate a movement direction and determine an adaptive grid for a target location in this direction. Alternatively, the grids for a set of positions can be precomputed beforehand. To transition between different grids, we propose a special interpolation scheme, which we describe here.</p><p>To interpolate the lookups in two grids G A and G B at a percentage α, one might consider a linear interpolation G I = αG A + (1 − α)G B . However, when the two grids have black-hole shadows of varying size or shape, artifacts become clearly visible. For example, when the position of grid A is further from the black hole (larger r cam ) than grid B, grid A will have a smaller shadow than grid B. This means some lookups in G A will return celestial-sky locations, while the same lookup location in G B returns a (-1,-1) indicating the shadow. A weighted average would not be meaningful. We will solve this problem by virtually warping the images such that the black-hole shadows coincide.</p><p>Let G X be a grid and c X the center of the shadow in G X . We parameterize the shadow boundary by an angle 0 &lt; γ &lt; 2π around c X by e X (γ). We define r X (γ) := |e X (γ) − c X |, the distance from the center to the shadow boundary.</p><p>For brevity, we will drop the parameter γ in the following. When interpolating between grids G A and G B with a value α to obtain a grid G I , we would expect r I = αr A + (1 − α)r B and c I = αc A + (1 − α)c B . Without loss of generality, we assume r A &lt; r B . To limit the influence of the warp, we will only warp the textures in a region that is 1.5r I from c I . For this, we impose that 1.5r A &gt; r B , which is typically not a strong restriction for a reasonable camera movement. Hence, any lookup beyond 1.5r I can be done by linearly interpolating both grids. For a lookup position p ∈ [r I , 1.5r I ], we introduce w = (p − r I )/(0.5 * r I ). w varies from zero to one for p from r I to 1.5r I . Now we define the warped lookup p w A = w * 1.5 * r I + (1 − w)r A , which virtually moves the shadow boundary of G A to r I and falls back to the non-warped version beyond 1.5r I . A similar definition can be provided for p w B . With this, we can define</p><formula xml:id="formula_4">G I (p) = αG A (p w A ) + (1 − α)G B (p w B )</formula><p>. These steps are illustrated in <ref type="figure">Fig. 11</ref>. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.4">Celestial-Sky Integration</head><p>To determine the camera-pixel color, we trace the edges of the projected polygon on the celestial-sky environment map and average all pixels that fall within the region. In practice, we can first determine the columns that the polygon overlaps and for each column we check the vertical minimum and maximum position inside the polygon and sum everything in between. By using a technique similar to summed-area tables <ref type="bibr" target="#b9">[10]</ref>, we only need two lookups per pixel column. The idea is to preprocess the environment map image and store in each pixel the sum of its own color plus the color values of all pixels located above it in the same column. With this map, if we subtract an upper from a lower pixel in the same column, the difference yields the exact sum between both <ref type="figure" target="#fig_4">(Fig. 6)</ref>.</p><p>The distortion becomes stronger the closer pixels are to the black hole shadow. Some pixels in this region map to a polygon containing almost the whole celestial sky. The summation process above would still take a disproportionate amount of time in this case, while, with an average of so many pixels, the selection does not need to be very precise. Therefore, when a polygon covers more than half the environment map width, we use an axis-aligned bounding quad of the polygon instead, which eliminates the need to find minimum and maxium positions for every column.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Extensions</head><p>In this section, we discuss additional measures to increase the realism of the produced imagery.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A. Star Catalogue</head><p>In the previous sections, we have seen how to retrieve coordinates on the celestial sky for each camera-pixel corner and how to use these to retrieve the pixel color via lookups in the celestial-sky environment map. While an environment map is a good representation for nebulae, interstellar dust, and galaxies, it is not for stars. A star in the environment map would always be at least one pixel large, which can lead to an unrealistic stretch, as distant stars rather act like point lights and appear under a much smaller solid angle. We thus propose a seperate rendering solution for stars, which we detail in the following.</p><p>We use a star map that contains the stars' position in radians (θ , φ ) in the celestial sky, the apparent magnitude m * , and the B-V color index. Instead of summing the environment map pixels, a simple adaptation is to test all stars for containment in the corresponding polygon <ref type="figure" target="#fig_4">(Fig. 6</ref>). For each contained star, we calculate the temperature from the B-V color index and magnitude (assuming black body radiation <ref type="bibr" target="#b1">[2]</ref>), convert this to an RGB color (with the help of a lookup table <ref type="bibr" target="#b5">[6]</ref>) and multiply it by the stars brightness b (calculated from the magnitude as b = 10 −0.4m * ). The pixel color is then defined as the sum of all contained stars' brightness-adapted RGB colors.</p><p>Testing all stars against a polygon becomes quickly costly. To accelerate the computations, we build a hierarchy on the star positions in form of a uniform kD-tree, where the first division is at φ = π, the second at θ = π/2, and so forth. During rendering, we traverse this tree and collect all leaf nodes that overlap with the axis-aligned bounding quad of the polygon. We then test all leaf-node stars against the boundaries of the polygon <ref type="figure" target="#fig_4">(Fig. 6)</ref>. In practice, we noticed that we <ref type="figure" target="#fig_1">Fig. 13</ref>. Star effects: default stars, gaussian star spread, star trails, diffraction and the image used as convolution kernel <ref type="bibr" target="#b26">[27]</ref>. can stop on a higher level in the tree; when the node overlaps more than eighty percent, we assume that all its leaf nodes overlap. This prevents spending too much time on descending into the tree and checking all leaf nodes, when a high percentage will be included.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>B. Tone Mapping</head><p>Our input maps typically contain high-dynamic-range data. All values are gamma corrected before computations and gamma encoded again before storing. Additionally, we perform a simple gamma tone mapping to simulate an observer state. Hereby, we can indirectly control the number of visible stars by boosting their perceived brightness.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>C. Gaussian Star Spread</head><p>While stars are point-light sources, having them contribute to a single pixel appears unnatural and makes different brightness levels hard to discern. For this reason, we evaluate the overlap of a Gaussian kernel centered on the star with the pixel centers of the surrounding pixels. With a standard deviation of 0.5 and cutoff of 1.5 pixels the Gaussian affects maximally eight surrounding pixels. The resulting weights are used to determine the contribution of the star to the corresponding pixels. We noticed that a normalization of these weights is not necessary and there was no visible change in brightness over consecutive frames in an animation. To integrate this operation efficiently into our pipeline, we do not actually render stars as a Gaussian kernel. Instead, we store the contribution to the eight neighbors inside of the single pixel containing the star. Once all stars have been processed, we collect in each pixel the contributions from the neighbors. This gathering strategy proved more efficient than a splatting solution.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>D. Star Trails</head><p>When the camera orbits the black hole at high speed, some stars move so far between frames that they seem to jump from one screen position to another. To counter this problem, we add trails for these stars. For every frame, we store the pixel location of the stars, and draw a trail whenever a star in the next frame is more than one pixel further than its previous location. Nevertheless, every star appears multiple times in the rendered image and close to the black hole it is hard to discern which new image of a star corresponds to a previous location. To match the correct stars, we compute a vector field that approximates their movement, while the camera orbits the black hole. During orbit, the φ s values per pixel corner change, but the θ s values stay constant, meaning the stars will travel along these θ s -isolines <ref type="figure" target="#fig_2">(Fig. 14)</ref>. To find the correct previous pixel location of the star, we choose the one that follows the movement of the vector field the closest, which is the location that has the smallest angle between its associated vector in the vector field and its potential star trail. To avoid false matches, no trail is drawn when <ref type="figure" target="#fig_3">Fig. 15</ref>. Redshift and Lensing effect on environment map and stars. From top to bottom: reference image without effects, redshift effect, lensing effect. The redshift on the map is the extreme case to clearly show the effect. The star images are a close-up next to the shadow. The bleeding of light into the shadow in the first two images is caused by the diffraction of many stars. The lensing effect dims this area of the image. (Camera is in a geodesic equatorial orbit with r cam = 5M) this angle is larger than π/4, or if the pixel distance of the trail is larger than 1/25 of the image width.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>E. Diffraction Spikes</head><p>Starbursts are artifacts that appear as a result of diffraction around the support vanes in the telescope <ref type="bibr" target="#b7">[8]</ref>. As we are very used to seeing images with this effect, it is a natural addition. To simulate diffraction we created another kernel, that works on the image output after the star light gathering step. A texture with a diffraction pattern is used as a convolution filter on the matrix of pixel values, where only pixels that have a high enough brightness are affected. For our experiment we chose the 100 × 100 texture from Scandolo et al. <ref type="bibr" target="#b26">[27]</ref>  <ref type="figure" target="#fig_1">(Fig. 13</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>F. Redshift and Lensing</head><p>As stated in Sect. 2.3, gravitational lensing causes light sources that are projected to a larger area to become proportionally brighter and vice versa. To calculate this brightness change, the ratio between the solid angle of the pixel and the solid angle of its projected polygon on the celestial sky is computed. Further, the redshift phenomenom changes the wavelength of incoming light. It is computed from the speed and direction of the observer and the location of the pixel on the camera sky <ref type="bibr" target="#b12">[13]</ref>. We apply the following equations <ref type="bibr" target="#b25">[26]</ref> to determine the observed temperature and magnitude of the stars:</p><formula xml:id="formula_5">m obs * = m * + 4 log(1 + z) − log f , T obs * = T * 1 + z ,<label>(4)</label></formula><p>where f is the fraction between the solid angles and m * the magnitude (brightness), z the redshift and T * the temperature of the star. The calculation of the redshift is based on previous work <ref type="bibr" target="#b12">[13]</ref> but explained in the supplementary material for completeness. It is impossible to adjust the colors of the pixels in the environment map for the redshift and lensing in a physically correct way, because unlike for stars, the spectral info of the objects in the map is not known. We follow Riazuelo's example <ref type="bibr" target="#b25">[26]</ref> and only change the luminance of the output pixels, mapping the shift to a brightness function that goes asymptotically to 0 for red and 1 for blue. Using a similar function as for stars results in a large part of the image either very dark or very bright, while this function keeps the distortion visible. <ref type="figure" target="#fig_3">Fig. 15</ref> shows the lensing and redshift effects on the map and stars.</p><p>Adding the lensing effect to a linearly interpolated grid causes severe artifacts. Using spline interpolation removes most, but some small artifacts remain, caused by discontinuities between the solid angle of the projected polygons of neighboring pixels. To smooth out these discontinuities, we compute a matrix of image size that holds the solid angle of its polygon, for every pixel. We filter this matrix with a simple averaging kernel and use it when lensing is applied.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RESULTS</head><p>All experiments were conducted on an Intel Core i7-8700 processor with 16GB RAM and an Nvidia RTX 2080 Ti graphics card. Our method for the tracing is implemented on the CPU, the interpolation and rendering steps are performed in CUDA <ref type="bibr" target="#b0">[1]</ref> where the result is mapped to an OpenGL buffer to display the frames on the screen. Parallel computations are employed per ray on the CPU, per pixel corner for interpolation and per pixel for rendering. When the camera is set to a pinhole view, the view direction can be changed interactively. Our standard setup is a Kerr black hole with a spin of 0.999 and an observer that is positioned at r cam = 5M in the equatorial plane. Putting the observer in this plane means that we are able to exactly calculate the speed for a geodesic orbit and make the simulation as accurate as possible. As discussed before, the distortion is symmetric with respect to the plane in this case, so only half of the grid needs to be computed, all other computations take the same time as for the non-symmetric case. Our standard output is a 360 view with an image size of 1920 × 960, because this matches full HD for most modern screens.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Grid Computation</head><p>Ray tracing a symmetric adaptive grid at level 10 takes less than 0.5s and produces a serialized 1MB file with the perfect hash table of 47848 rays at single precision. A non-adaptive grid of the same level takes around 5 seconds for 20 times more rays. On average rays take 40 Runge-Kutta integration steps in 3 − 5μs to reach the celestial sky with a maximum of 350 steps. <ref type="figure" target="#fig_4">Fig. 16</ref> shows the number of integration steps per grid vertex for a full level 10 grid.</p><p>The adaptive grid file size could be reduced by switching the number type but in its current state, the transfer time to the GPU is less than a millisecond. The amount of traced rays depends the maximum level of the grid, the grid threshold, and the distance of the camera. At first sight it would seem that a larger distance requires more rays, as the size of the shadow gets smaller. However, a camera closer to the black hole observes a higher level of distortion, causing the adaptive grid to refine more. The paths to be traced are more complex in this case as well, so computation times for larger observer radii are shorter, as shown in <ref type="figure" target="#fig_7">Fig. 19</ref>. It also contains the graph illustrating the trade-off between the amount of traced rays and interpolation errors for different threshold settings. For our level 10 grid, we decided on a value of 0.015 rad, as a higher threshold (e.g. 0.02 rad) results in visible errors in the image, while a much lower (e.g. 0.001 rad) refines the grid so much that it negates its benefits.</p><p>When visualizing the full 360 view on an image not larger than 2048 × 1024, computing a higher level than 10 is unnecessary, as it would contain details more precise than the pixel size. For the pinhole camera view higher levels can be beneficial, especially to show enough detail close to the shadow <ref type="figure" target="#fig_5">(Fig. 17)</ref>. We can easily decide the optimal  grid level by ensuring that the solid angle of the (smallest) grid cells is comparable in size to that of the output image pixels.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Interpolation</head><p>Interpolation is performed for every frame, to allow for changing the view direction when using a pinhole camera. For our standard setup it takes 0.68 ms to interpolate using splines and 0.55 ms for linear. The projected pixel area computation and filtering (used to avoid artifacts caused by lensing) adds only ∼ 0.1 ms. As there is a large difference in quality, but not in speed, spline interpolation is the default.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Interpolating between Grids</head><p>The interpolation between grids runs on the GPU as well, and is performed as an extra step before spline interpolation, to calculate the warping of the lookup locations. To work smoothly, multiple grids need to be uploaded to the GPU. When changing the distance of the camera to the black hole (r cam ), for example, we trace a new grid for every increment of 0.2M along the trajectory. For two grids we calculate the location of their shadow edges once, at the first frame that is positioned in between these grids, which adds 0.3 ms to the computation. The interpolation kernel now needs to find the warped positions of two grids instead of one and alpha blend them, which adds 2.5 ms.</p><p>Our grid interpolation technique is quite effective. Changing the distance to the black hole particularly benefits from our special warping solution and the distortion is well captured. Even for relatively large displacements, the interpolated result approaches the reference rendering ( <ref type="figure" target="#fig_6">Fig. 18</ref>), only some minor differences are visible to the naked eye. We tested with a black and white grid image as an the environment map to enable a better judgement of local distortions, and while these lines do not match up perfectly, the deviations remain within a few pixels. Comparing the (θ s , φ s ) values obtained from a grid computed at camera radius 5.1M with the ones obtained from the interpolated grid halfway between a radius of 5M and 5.2M, we find that the average squared error per pixel corner mapping is only 0.0045 rad 2 . When changing the inclination of the camera (θ cam ) with respect to the spin axis of the black hole, the interpolation causes subtle brightness artifacts due to the lensing at the poles of the celestial sky ( <ref type="figure" target="#fig_6">Fig. 18)</ref>.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Rendering</head><p>Rendering distorted environment maps runs in realtime, at around 3.5 ms for the GPU kernel to complete, with a map size of 4096 × 2048. Summing the map as a preprocessing step results in a crucial speedup, without it the kernel takes more than 200 ms. The bounding quad approximation for pixels that map to large polygons ensures that the GPU does not waste time-it reduced the computation by ∼ 2 ms with no visible difference. The influence of output image size as well as map size on performance can be seen in <ref type="figure" target="#fig_7">Fig. 19</ref>. The effect of the summed map is visible here as well, as the time per frame increases approximately linearly with the map width instead of the total amount of pixels. The size of the output image has more influence on runtime; for every million pixels added there is an 1.2 ms/frame increase. For the distortion of the stellar sky, we performed our tests with a file of approximately 100.000 stars from the HYG database <ref type="bibr" target="#b21">[22]</ref>. With use of the binary tree structure, a full HD image depicting a stellar sky with around 5000 stars computes in realtime at ∼ 9 ms per frame vs 90 ms per frame without (speedup of ∼ 10). Distorting the whole catalogue takes 95 ms per frame. <ref type="figure" target="#fig_7">Fig. 19</ref> shows that the runtime is linear in the amount of stars with and without binary star tree. Adding star trails to the image does not take a significant amount of extra time, and diffraction takes 4.5 ms with the current filter implementation. The amount of stars as well as the radius in which pixel light is distributed over neighbouring pixels govern performance. For full HD images spreading the star light to only the direct neighbours gives the best results, a larger spread makes the stars look blurred. When computing for 4k frames and up a larger spread of light can be preferable to make the stars properly visible on the screen.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">DISCUSSION</head><p>While previous work relied on either much higher computation times, or simpler configurations like the Schwarzschild metric, our approach works for Kerr black holes and can be executed on standard desktop devices. It shows that visually appealing and convincing simulations can be efficiently approximated. While we cannot claim the same accuracy as previous approaches, our evaluation of the adaptive grid shows that for similar quality, only a fraction of the rays need to be traced and large parts of the environment can be interpolated. Indeed, the computation of our precomputed grids is relatively fast (around the order of a second) and its loading time represents milliseconds. Consequently, it is possible to retrieve or compute new maps during navigation. If a trajectory is known, our solution can also compute intermediate grids based on a user defined budget to deliver a suitable rendering in a predefined amount of time. Nevertheless, an entirely free navigation with potential movement heuristics remains future work.</p><p>The ray-tracing equations in our implementation are not defined inside the ergosphere, making it impossible to descend into the black hole. There are visualizations that cope with this situation by changing the equations to the inner Kerr metric <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b25">26]</ref>. In a similar way, the view through a wormhole could be visualized using our code with the appropriate differential equations <ref type="bibr" target="#b11">[12]</ref>. Descending into the black hole and looking through a wormhole are future extensions that will make our solution more widely applicable for educational use.</p><p>Implementation-wise, CUDA proved more efficient for most operations but the final render is done in GLSL. The transfer between both is a bottleneck. With advances in GLSL, the standard pipeline could become more useful for some components (e.g., star trails rendered via line primitives). Diffraction also uses a disproportionate amount of time when a lot of bright pixels are present. Instead of a filtering process, we intend to experiment with sprite rendering. Furthermore, coarser grids during motion and general spatio-temporal upsampling strategies could be considered <ref type="bibr" target="#b10">[11]</ref>. In the latter context, subpixel evaluations might prove useful, as we currently employ lensing on a per-pixel basis of the accumulated value.</p><p>Similarly, our solution involves CPU and GPU components but we tested a full GPU implementation. A full level 10 grid takes ∼ 2 seconds (1μs per ray) to trace on the GPU. Parallized CPU code takes 3-5μs per ray, a factor of three. Adaptive grids are much faster to compute and tracing takes only 0.2s on the CPU. Interestingly, the adaptive solution does not lead to a good GPU utilization, due to divergence (0.7s). Hence, we see our current compute distribution as a good tradeoff -the CPU executes the task faster and leaves the GPU idle for the actual rendering task. Different compute strategies remain future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION</head><p>We presented a GPU-based solution to visualize black holes. While black holes are a singularity, the distortions that they generate are largely smooth and can be well captured with an adaptive sampling strategy that evaluates the distortion only where needed. The underlying function can be well reconstructed using specialized interpolation techniques that make use of the black-hole characteristics. Special interpolation techniques are also very important when interpolating different camera positions. Other phenomena, such as redshift and starburst can be successfully applied in an image-based postprocess. Our solution thus combines various techniques to accelerate black-hole distortion images significantly, making a high-quality interactive visualization possible, even on standard hardware.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>Left: A planar 2D cut through spacetime deformed by a massive body. The shortest path (geodesic) from point A to point B is the blue curved line and not the 'straight' red line. Right: Bending of light by a massive body, with the actual postition and two of the observed positions of a star. Based on Figures 174 and 175 in [4].</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 .</head><label>3</label><figDesc>Our rendering of a colored accretion disk between r = 9M and r = 18M around a Kerr black hole, seen through a pinhole camera (r cam = 30M, inclination of θ cam = π/2 − π/32, view angle π/2).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 4 .</head><label>4</label><figDesc>Left: Celestial sky defined on a sphere and as an environment map (equirectangular projection). Right: The equirectangular projection of the distorted celestial sky caused by a Kerr black hole.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 5 .</head><label>5</label><figDesc>In blue: Ray bundle tracing in Interstellar</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 6 .</head><label>6</label><figDesc>Env. Map, Left: Polygon of a pixel projected onto the environment map. Basic: Average pixels within the polygon. Advanced: Precompute the sum from the top and store it. The difference of a blue pixel at the minimum row intersected by the polygon and the green pixel at the maximum yield the sum in the column. Star Map, Right: Projected pixel polygon in the stellar sky. Basic: Test all stars and if they are inside the polygon, sum their energy. Advanced: Compare the polygon's AABB (red) against a binary tree to select the stars in the shaded tree leaves. Only these are tested against the polygon, yielding the orange star set.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 7 .</head><label>7</label><figDesc>Overview of the basic algorithm.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 8 .</head><label>8</label><figDesc>Grid levels as computed by adaptive method up to level 10, y-axis has range [0, π] and x-axis [0, 2π] (The camera is in a geodesic equatorial orbit with r cam = 5M.)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 9 .</head><label>9</label><figDesc>Linear and spline interpolation methods. Left: Adaptive grid with pixel positions in grey overlay. The yellow dot is the pixel corner to be interpolated. The green and blue lines show the percentual horizontal (α) and vertical (β ) displacement in the grid cell, respectively. The orange vertices are traced, the red ones are not. Middle, Linear: Interpolate the polygon edges {1, 2} and {3, 4} with α. Connect the resulting points and interpolate with β . Right, Spline: Create two splines, with inner points {1, 2} and {3, 4} and end points taken from equidistant vertices in the adaptive grid (values for red vertices are interpolated), and evaluate them at α. Use these as inner points to create a third spline, together with the linearly-α-interpolated, equidistant grid edges as end points and evaluate this spline at β .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 10 .</head><label>10</label><figDesc>Part of distorted image with lensing effect. Left: Linear interpolation causes artifacts that show the size of the adaptive grid. Right: Spline interpolation gives a smooth result.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig</head><label></label><figDesc>Fig. 11. First: Two grids G A , G B to interpolate. Grid G A has a smaller black hole shadow s A than G B with shadow s B . Second: We interpolate the new shadow size s I to be at percentage α between s A and s B . Third: From the change in shadow size we calculate the offsets for lookup in the grids. These offsets have the effect of squeezing (G AI ) or stretching (G BI ) the grid around the new shadow s I . Last: For every required lookup G AI and G BI are blended via α.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 12 .</head><label>12</label><figDesc>Overview of the functions and kernels used to create the Star Image, with all optimizations and extensions added.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Fig. 14 .</head><label>14</label><figDesc>Upper half of the symmetric image showing streamlines of the stars when rotating around the black hole. The color indicates velocity (blue is low, red is high), which is highest around the shadow. (Camera is in a geodesic equatorial orbit with r cam = 5M)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Fig. 16 .</head><label>16</label><figDesc>Heat map of the upper-half full level 10 grid, showing the number of Runge-Kutta integration steps performed per grid vertex. (camera is in a geodesic equatorial orbit with r cam = 5M)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head>Fig. 17 .</head><label>17</label><figDesc>Difference in quality between level 10 and level 12 adaptive grid. Closeup of the shadow edge (rotated 90 degrees).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_14"><head>Fig. 18 .</head><label>18</label><figDesc>Left: Image using a grid for r cam = 5.1M and the same image with an interpolated grid using r cam = 5.0M and r cam = 5.2M. Right, top: Difference image multiplied by 4 and inverted to improve readability. Right, bottom: Lensing artifacts at poles and nearby the shadow when interpolating θ cam = 1 2 π and θ cam = 17 32 π.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_15"><head>Fig. 19 . 2 : 3 : 4 :</head><label>19234</label><figDesc>All graphs use: black-hole spin a/M = 0.999, camera in geodesic equatorial orbit at r cam = 5M, map size 4096 × 2048, image size 1920 × 960, level 10 grid, unless specified otherwise. From left to right 1: Effect of camera distance on the number of traced rays. Effect of the star tree on the Star Distortion kernel's runtime for different catalogue sizes. Effect of the environment map resolution (with constant output size), as well as output resolution (with constant map size) on render time per frame (without stars). Effect of threshold parameter for the adaptive grid on the error (cumulative squared error compared to full grid) and amount of traced rays.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>. 11. First: Two grids G A , G B to interpolate. Grid G A has a smaller black hole shadow s A than G B with shadow s B . Second: We interpolate the new shadow size s I to be at percentage α between s A and s B . Third: From the change in shadow size we calculate the offsets for lookup in the grids. These offsets have the effect of squeezing (G AI ) or stretching (G BI ) the grid around the new shadow s I . Last: For every required lookup G AI and G BI are blended via α.</figDesc><table /><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 1 .</head><label>1</label><figDesc></figDesc><table><row><cell cols="4">Runtimes: Interpolation and Rendering Kernels (ms)</cell><cell></cell></row><row><cell cols="5">a) 4096 × 2048 pixels; b) brightest 5047 stars from HYG catalogue</cell></row><row><cell>Standard Interpolation</cell><cell>Grid-Grid Interpolation</cell><cell>Distort Env.Map a)</cell><cell cols="2">Distort Stars b) Diffraction</cell></row><row><cell>&lt; 1</cell><cell>2.5</cell><cell>3.5</cell><cell>9</cell><cell>4 .5</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The authors wish to thank Markus Billeter and Alexander Verbraeck for their insights on interpolation and implementation, Baran Usta for feedback and support, and the reviewers for their detailed comments. This work was funded by the VIDI grant NextView of the NWO Vernieuwingsimpuls.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">CUDA C programming guide. docs.nvidia.com/cuda/cuda-cprogramming-guide</title>
+		<imprint>
+			<date type="published" when="2019" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">New insights into black bodies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">J</forename><surname>Ballesteros</surname></persName>
+		</author>
+		<idno type="DOI">10.1209/0295-5075/97/34008</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Europhysics Letters</title>
+		<imprint>
+			<biblScope unit="volume">97</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1" to="6" />
+			<date type="published" when="2012-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Extreme gravitational lensing near rotating black holes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Beckwith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Done</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/j.1365-2966.2005.08980.x</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Monthly Notice of the Royal Astronomical Society</title>
+		<imprint>
+			<biblScope unit="volume">359</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="1217" to="1228" />
+			<date type="published" when="2005-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">An Introduction to Modern Astrophysics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">W</forename><surname>Carroll</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">A</forename><surname>Ostlie</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996" />
+			<pubPlace>Benjamin Cummings</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">GRay: A massively parallel GPU-based code for ray tracing in relativistic spacetimes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Chan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Psaltis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Özel</surname></persName>
+		</author>
+		<idno type="DOI">10.1088/0004-637X/777/1/13</idno>
+	</analytic>
+	<monogr>
+		<title level="j">The Astrophysical Journal</title>
+		<imprint>
+			<biblScope unit="volume">777</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="9" />
+			<date type="published" when="2013-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Blackbody color datafile</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Charity</surname></persName>
+		</author>
+		<ptr target="www.vendian.org/mncharity/dir3/blackbody/" />
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Observing supermassive black holes in virtual reality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Davelaar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Bronzwaer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kok</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Younsi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mościbrodzka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Falcke</surname></persName>
+		</author>
+		<idno>doi: 10. 1186/s40668-018-0023-7</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Astrophysics and Cosmology</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="17" />
+			<date type="published" when="2018-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Diffraction patterns produced by obstructions in reflecting telescopes of modest size</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Everhart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">W</forename><surname>Kantorski</surname></persName>
+		</author>
+		<idno type="DOI">10.1086/107973</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Astronomical Journal</title>
+		<imprint>
+			<biblScope unit="volume">64</biblScope>
+			<biblScope unit="page" from="455" to="462" />
+			<date type="published" when="1275-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Stereoscopic visualization in curved spacetime: Seeing deep inside a black hole</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Hamilton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Polhemus</surname></persName>
+		</author>
+		<idno type="DOI">10.1088/1367-2630/12/12/123027</idno>
+	</analytic>
+	<monogr>
+		<title level="j">New Journal of Physics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="1" to="25" />
+			<date type="published" when="2010-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Fast summed-area table generation and its applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hensley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Scheuermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Coombe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Singh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lastra</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/j.1467-8659.2005.00880.x</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="547" to="555" />
+			<date type="published" when="2005-09" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Spatiotemporal upsampling on the GPU</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Herzog</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Eisemann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Myszkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Seidel</surname></persName>
+		</author>
+		<idno>doi: 10. 1145/1730804</idno>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH Symposium on Interactive 3D Graphics and Games (I3D)</title>
+		<imprint>
+			<date type="published" when="2010-02" />
+			<biblScope unit="page" from="91" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Visualizing Interstellar&apos;s wormhole</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>James</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Von Tunzelmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Franklin</surname></persName>
+		</author>
+		<idno type="DOI">10.1119/1.4916949</idno>
+	</analytic>
+	<monogr>
+		<title level="j">American Journal of Physics</title>
+		<imprint>
+			<biblScope unit="volume">83</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="486" to="499" />
+			<date type="published" when="2015-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Gravitational lensing by spinning black holes in astrophysics, and in the movie Interstellar</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>James</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Tunzelmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Franklin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">S</forename><surname>Thorne</surname></persName>
+		</author>
+		<idno type="DOI">10.1088/0264-9381/32/6/065001</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Classical and Quantum Gravity</title>
+		<imprint>
+			<biblScope unit="volume">32</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1" to="41" />
+			<date type="published" when="2015-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Universal interferometric signatures of a black hole&apos;s photon ring</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">D</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lupsasca</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Strominger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">N</forename><surname>Wong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hadar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kapec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Narayan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Chael</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">F</forename><surname>Gammie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Galison</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">C M</forename><surname>Palumbo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">S</forename><surname>Doeleman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Blackburn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wielgus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">W</forename><surname>Pesce</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">R</forename><surname>Farah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">M</forename><surname>Moran</surname></persName>
+		</author>
+		<idno>doi: 10. 1126/sciadv.aaz1310</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Science Advances</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="1" to="8" />
+			<date type="published" when="2020-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Image based rendering and general relativity. The Visual Computer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kobras</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Ruder</surname></persName>
+		</author>
+		<idno>doi: 10. 1007/s003710100145</idno>
+		<imprint>
+			<date type="published" when="2002-03" />
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="page" from="250" to="258" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Perfect spatial hashing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lefebvre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+		<idno type="DOI">10.1145/1141911.1141926</idno>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="579" to="588" />
+			<date type="published" when="2006-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Image of a spherical black hole with thin accretion disk</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">P</forename><surname>Luminet</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Astronomical Astrophysics</title>
+		<imprint>
+			<biblScope unit="volume">75</biblScope>
+			<biblScope unit="issue">1-2</biblScope>
+			<biblScope unit="page" from="228" to="235" />
+			<date type="published" when="1979-05" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">W</forename><surname>Misner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">S</forename><surname>Thorne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Wheeler</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1973" />
+			<publisher>Gravitation. W. H. Freeman</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Image-based general-relativistic visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Müller</surname></persName>
+		</author>
+		<idno type="DOI">10.1088/0143-0807/36/6/065019</idno>
+	</analytic>
+	<monogr>
+		<title level="j">European Journal of Physics</title>
+		<imprint>
+			<biblScope unit="volume">36</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1" to="11" />
+			<date type="published" when="2015-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Interactive visualization of a thin disc around a Schwarzschild black hole</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Frauendiener</surname></persName>
+		</author>
+		<idno type="DOI">10.1088/0143-0807/33/4/955</idno>
+	</analytic>
+	<monogr>
+		<title level="j">European Journal of Physics</title>
+		<imprint>
+			<biblScope unit="volume">33</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="955" to="963" />
+			<date type="published" when="2012-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Distortion of the stellar sky by a Schwarzschild black hole</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<idno type="DOI">10.1119/1.3258282</idno>
+	</analytic>
+	<monogr>
+		<title level="j">American Journal of Physics</title>
+		<imprint>
+			<biblScope unit="volume">78</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="204" to="214" />
+			<date type="published" when="2010-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">The HYG database</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Nash</surname></persName>
+		</author>
+		<ptr target="www.astronexus.com/hyg" />
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">The black hole accretion code</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Porth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Olivares</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Mizuno</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Younsi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Rezzolla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Moscibrodzka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Falcke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kramer</surname></persName>
+		</author>
+		<idno type="DOI">10.1186/s40668-017-0020-2</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Astrophysics and Cosmology</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="42" />
+			<date type="published" when="2017-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Numerical Recipes in C: The Art of Scientific Computing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">H</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">A</forename><surname>Teukolsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">T</forename><surname>Vetterling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">P</forename><surname>Flannery</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1988" />
+			<publisher>Cambridge University Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Odyssey: A public GPU-based code for general-relativistic radiative transfer in Kerr spacetime</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Yun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Younsi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Yoon</surname></persName>
+		</author>
+		<idno type="DOI">10.3847/0004-637X/820/2/105</idno>
+	</analytic>
+	<monogr>
+		<title level="j">The Astrophysical Journal</title>
+		<imprint>
+			<biblScope unit="volume">820</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="105" to="116" />
+			<date type="published" when="2016-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Seeing relativity-I: Ray tracing in a Schwarzschild metric to explore the maximal analytic extension of the metric and making a proper rendering of the stars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Riazuelo</surname></persName>
+		</author>
+		<idno type="DOI">10.1142/S0218271819500421</idno>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal of Modern Physics D</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page">60</biblScope>
+			<date type="published" when="2019-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Quad-based Fourier transform for efficient diffraction synthesis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Scandolo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Eisemann</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/cgf.13484</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="167" to="176" />
+			<date type="published" when="2018-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">The Event Horizon Telescope Collaboration et al. First M87 event horizon telescope results. I. The shadow of the supermassive black hole</title>
+		<idno>doi: 10.3847/ 2041-8213/ab0ec7</idno>
+	</analytic>
+	<monogr>
+		<title level="j">The Astrophysical Journal Letters</title>
+		<imprint>
+			<biblScope unit="volume">875</biblScope>
+			<biblScope unit="issue">L1</biblScope>
+			<biblScope unit="page" from="1" to="31" />
+			<date type="published" when="2019-04" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">The Science of Interstellar</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Thorne</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>W. W. Norton &amp; Company</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Image generation in Kerr geometry, I. Analytical investigations on the stationary emitter-observer problem</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">U</forename><surname>Viergutz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Astronomy and Astrophysics</title>
+		<imprint>
+			<biblScope unit="volume">272</biblScope>
+			<biblScope unit="issue">22</biblScope>
+			<biblScope unit="page" from="355" to="377" />
+			<date type="published" when="1993-05" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">GYOTO: A new general relativistic ray-tracing code</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">H</forename><surname>Vincent</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Paumard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Gourgoulhon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Perrin</surname></persName>
+		</author>
+		<idno type="DOI">10.1088/0264-9381/28/22/225011</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Classical and Quantum Gravity</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">22</biblScope>
+			<biblScope unit="page" from="1" to="18" />
+			<date type="published" when="2011-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Explanatory and illustrative visualization of special and general relativity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Borchers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Falk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Fechtig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Frank</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>King</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Nollert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">R</forename><surname>Mendez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Ruder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schafhitzel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Schär</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Zahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zatloukal</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2006.69</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="522" to="534" />
+			<date type="published" when="2006-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">YNOGK: A new public code for calculating null geodesics in the Kerr spacetime</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wang</surname></persName>
+		</author>
+		<idno type="DOI">10.1088/0067-0049/207/1/6</idno>
+	</analytic>
+	<monogr>
+		<title level="j">The Astrophysical Journal Supplement Series</title>
+		<imprint>
+			<biblScope unit="volume">207</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="32" />
+			<date type="published" when="2013-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Einstein Gravity in a Nutshell</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Zee</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2013" />
+			<publisher>Princeton University Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

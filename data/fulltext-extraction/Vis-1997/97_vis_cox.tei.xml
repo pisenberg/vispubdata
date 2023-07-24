@@ -1,0 +1,655 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Application-Controlled Demand Paging for Out-of-Core Visualization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Cox</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution" key="instit1">MRJ/NASA Ames Research Center MRJ/NASA Ames Research Center Microcomputer Research Labs</orgName>
+								<orgName type="institution" key="instit2">Intel Corporation</orgName>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Ellsworth</surname></persName>
+							<email>&lt;ellswort@nas.nasa.gov&gt;</email>
+							<affiliation key="aff0">
+								<orgName type="institution" key="instit1">MRJ/NASA Ames Research Center MRJ/NASA Ames Research Center Microcomputer Research Labs</orgName>
+								<orgName type="institution" key="instit2">Intel Corporation</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Application-Controlled Demand Paging for Out-of-Core Visualization</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:35+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>D.4.2 [Operating Systems] Storage Management -storage hierarchies, segmentation, virtual memory</term>
+					<term>E.2 [Data] Data Storage Representations</term>
+					<term>J.2 [Computer Applications] Physical Sciences and Engineering -aerospace</term>
+					<term>I.3.2 [Computer Graphics] Graphic Systems -distributed/network graphics, remote systems, stand-alone systems, I.3.8 [Computer Graphics] Applications computational fluid dynamics, visualization, out-of-core visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>In the area of scientific visualization, input data sets are often very large. In visualization of Computational Fluid Dynamics (CFD) in particular, input data sets today can surpass 100 Gbytes, and are expected to scale with the ability of supercomputers to generate them. Some visualization tools already partition large data sets into segments, and load appropriate segments as they are needed. However, this does not remove the problem for two reasons: 1) there are data sets for which even the individual segments are too large for the largest graphics workstations, 2) many practitioners do not have access to workstations with the memory capacity required to load even a segment, especially since the state-of-the-art visualization tools tend to be developed by researchers with much more powerful machines. When the size of the data that must be accessed is larger than the size of memory, some form of virtual memory is simply required. This may be by segmentation, paging, or by paged segments. In this paper we demonstrate that complete reliance on operating system virtual memory for out-of-core visualization leads to egregious performance. We then describe a paged segment system that we have implemented, and explore the principles of memory management that can be employed by the application for out-ofcore visualization. We show that application control over some of these can significantly improve performance. We show that sparse traversal can be exploited by loading only those data actually required. We show also that application control over data loading can be exploited by 1) loading data from alternative storage format (in particular 3-dimensional data stored in subcubes), 2) controlling the page size. Both of these techniques effectively reduce the total memory required by visualization at run-time. We also describe experiments we have done on remote out-of-core visualization (when pages are read by demand from remote disk) whose results are promising.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Visualization provides an interesting challenge for computer systems: data sets are generally quite large, taxing the capacities of main memory, local disk, and even remote disk. We call this the problem of big data. When data sets do not fit in main memory (in core), or when they do not fit even on local disk, the most common solution is to acquire more resources. This write-a-check algorithm has two drawbacks. First, if visualization algorithms and tools are worth developing, then they are worth deploying to more production-oriented scientists and engineers who may have on their desks machines with significantly less memory and disk. Some researchers have noted that their software tools were not used in practice for several years after development because the tools required more power and memory than were available on the average engineer's desk <ref type="bibr" target="#b14">[15]</ref>. Second, there may not even be a machine that supports sufficiently large main memory or local disk for the data set one wishes to visualize. We find this in particular in the area of visualization of Computational Fluid Dynamics <ref type="bibr">(CFD)</ref>.</p><p>When a single data set is larger than the capacity of main memory, we must solve the problem of out-of-core visualization. When a single data set is larger than the capacity of local memory and disk, we must solve the problem of remote out-of-core visualization. We address primarily the first of these in this paper, although we also report what we believe are promising results from experiments in remote out-of-core visualization.</p><p>Out-of-core visualization requires virtual memory of some sort. We should be careful to distinguish between the idea of virtual memory, and the implementation(s) supported today by most operating systems (OSs). Virtual memory is simply the concept of mapping a larger virtual address space into a smaller physical space. Generally the larger virtual memory is partitioned into "pieces" each of which is moved into real memory when it is needed, at which time some "piece" that is (hopefully) no longer needed may be moved out. When the pieces are of fixed-length, the virtual memory is said to be in pages (or is said to be paged). When the pieces are of variable-length, virtual memory is said to be in segments (or is said to be segmented). When variable-length pieces are themselves partitioned into fixed-length pieces, virtual memory is said to be in paged segments. When pages or segments are loaded as they are needed, the system is said to be demand driven (e.g. demand paged). These are all well-studied schemes for virtual memory (cf. <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b23">24]</ref>), and previous results and concepts from this area can be used productively for out-of-core visualization.</p><p>Perhaps the most well-known (often inadvertent) approach to out-of-core visualization is strict reliance on operating system virtual memory. To rely on the operating system for virtual memory support, the application allocates a buffer that is sufficiently large to hold the data set, and loads the data set into the buffer. If the data set is larger than physical memory, the operating system manages the discrepancy. The problem with this approach is that it generally results in poor performance due to thrashing. When a system thrashes, it spends more of its time replacing pages in physical memory with new pages from disk than it does accomplishing real work. We document this behavior in the current paper, thrashing in CFD visualization has also been documented by Ueng <ref type="bibr" target="#b25">[26]</ref>. Thrashing is more generally addressed in <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b9">10,</ref><ref type="bibr" target="#b13">14,</ref><ref type="bibr" target="#b15">16,</ref><ref type="bibr" target="#b17">18]</ref>..</p><p>One approach to out-of-core visualization that has been more successfully employed than reliance on OS virtual memory is that of application-controlled segmentation. With this approach the application chooses some natural unit (segment) of data and specifically loads a segment when it is needed, possibly replacing some segment that is no longer needed. This is similar to the pre-virtual memory programming practice of overlaying code (data) segments with new code (data) segments as the former are no longer needed. Ueng et al. have successfully employed this approach with unstructured CFD data <ref type="bibr" target="#b25">[26]</ref>. They spatially and hierarchically partition their data set in an octree, implicitly defining a segment to be a node of this tree. They load on demand each segment required by user-driven visualization, replacing the segments previously (but no longer) required. Kao 1 has successfully employed segmentation with primarily structured CFD data <ref type="bibr" target="#b18">[19]</ref>. He temporally partitions the data set, implicitly defining a segment to be the data from one time-step of unsteady flow simulation. He sequentially loads each segment in order by time, calculating the visualization time-step by time-step, and replacing older segments as they are no longer needed.</p><p>While these purely segmented schemes have been successful, they are limited in several respects. First, the choice or computation of segment boundaries may be difficult, and in general may involve run-time parameters not available. In Ueng's approach octree decomposition is done off-line and the tree cannot be easily recomputed for machines with differing capacities. Second, if any segment (or group of segments) is significantly larger than the main memory of a given machine, the application reverts to strict reliance on operating system virtual memory. In Kao's approach a single temporal time-step may still exceed the capacity of main memory. For example, we are working with a structured grid data set at Ames for which a single time step comprises 550 Mbytes. <ref type="bibr" target="#b1">2</ref> However, we demonstrate in this paper that applicationcontrolled segmentation can be productively augmented with application-controlled demand paging.</p><p>We first discuss the aspects of application-controlled memory management that may affect application performance. We then place our implementations and experiments in this context.</p><p>Following this are out-of-core visualization experimental results, and some early remote out-of-core visualization experimental results. We then address related work, followed by conclusions and future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Application-controlled memory management</head><p>There are several principles of memory management that an application can exploit to improve performance. We discuss these briefly before describing the implementations and experiments we have performed to explore the issues in the context of CFD visualization. Following this we discuss results and the memory management issues in Section 4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Sparse traversal</head><p>We should expect many visualization algorithms to traverse only a subset of the entire data set. If we assume for example that traversal of each cell of 3-dimensional data results in the generation of geometry, traversal of the entire data set would generate geometry to fill 3-space, making the image visually difficult to comprehend! There are of course algorithms that today must traverse the full data set, but we argue in <ref type="bibr" target="#b8">[9]</ref> that finding the algorithm with the most parsimonious traversal is an important step in out-of-core visualization.</p><p>The most common approach today is to pre-load the entire data set before traversing it for visualization. If traversal really is sparse, more data are touched than need be. In particular if the data do not fit in physical memory, some of the data must be unnecessarily paged by the operating system. As an alternative, we may load only those data that are required as required. If not all of the data are loaded, we say that the application takes advantage of sparse traversal. This demand-driven strategy may be based on segments (as in <ref type="bibr" target="#b25">[26]</ref>) or on pages. In this paper, we report our extension of Kao's temporal segmentation with demand paging in order to support sparse traversal.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Replacement policy</head><p>When more data are required than fit in physical memory, new data must supplant old data. In general, as each virtual page of new data must be brought into physical memory, some virtual page that is already resident must be chosen as a victim for replacement. The policy by which a victim is chosen is called the replacement policy. The ubiquitous replacement policy in operating systems today is Least Recently Used (LRU). That is, the page of the application that has been accessed the least recently is selected as a victim. <ref type="bibr" target="#b2">3</ref> We have explored application-controlled replacement, but have not found strategies competitive with OS-controlled replacement. In this paper we describe implementations that leave page replacement to the operating system.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Load/store management</head><p>With reliance on the virtual memory of today's operating systems, the movement of data between memory and disk is under OS control. This leads to lost opportunities.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3.1">Page size</head><p>Commercial operating systems today support only fixed page sizes (typically 4 or 16 Kbytes). Application-controlled variable page sizes have been explored by researchers in operating systems but the results have not propagated to widely used systems. The problem with fixed page size is that the choice made by the operating system may not be the right one for all applications. In particular, the granularity of the page may be too coarse. As example, consider a hypothetical visualization that requires a small cluster of data from the center of a large cube of data. Suppose further that the cube is partitioned into 8 large pages so that each page holds some of the clustered data, forcing the application to require the entire data set. Repartitioning the cube into 64 smaller pages in general will force the cluster onto fewer pages, allowing the visualization to require less memory. In this paper we report experimental results concerning page size for CFD visualization of structured grids.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3.2">Translation</head><p>Multi-dimensional scientific data are often represented in program code as multi-dimensional arrays. These arrays have traditionally been stored in memory in row-or column-order. That is, they are stored first linearly along one dimension, and then along a second, and then along a third. The program typically accesses the multi-dimensional array by indexing, e.g.</p><formula xml:id="formula_0">array[i][j][k].</formula><p>The compiler translates this reference by multiplying by the appropriate strides in the array, and generating a virtual address that is an offset from the beginning of the array. The operating system then translates the virtual address to a physical address. However, multi-dimensional scientific data tend to be accessed coherently in three dimensions, in particular as the result of 3-dimensional traversal. In volume rendering for example, it is well known that storage in "cubes" results in more efficient access than storage in planes (cf. <ref type="bibr" target="#b22">[23]</ref>). We distinguish the traditional flat storage (row-or column-order) from this alternative cubed storage. To introduce support for cubed storage into applications written for flat storage would require modification of all array-based call sites. Instead, we would like to provide translation from the application's flat array references to alternative data organizations in physical memory (e.g. cubed).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3.3">Loading</head><p>Support for alternative data storage organizations may require additional processing when data are loaded from disk. For example, when a larger cube of data is partitioned into smaller sub-cubes, there is generally internal fragmentation within the sub-cubes. Internal fragmentation is the loss of memory within a page because of inefficiency in packing. In this case, internal fragmentation arises whenever the dimensions of the sub-cubes do not evenly divide the dimensions of the larger cube. When this occurs, sub-cube pages must be padded to align with the larger cube boundaries so the addresses of subcubes can be calculated in closed form. We call the result of such padding file bloat. In CFD data sets in particular, we have found that bloat can result in files 200% larger than their flat counterparts. <ref type="bibr" target="#b3">4</ref> When data sets can be several hundred Gbytes, such expansion of file size is simply unacceptable and it is clear that cubed files must be packed or compressed on disk. In general, such packing requires resort to variable-length pages. While it is fairly easy to support storage and look-up of variablelength pages on disk, it is much more challenging to support reference by reference access to variable-length pages in memory. <ref type="bibr" target="#b4">5</ref> The obvious solution is to pack cubed files for more efficient storage on disk, and unpack them when pages are loaded into memory. The virtual memory primitives of today's operating systems do not support such translation. In this paper we report performance improvements that can be achieved when application control over data loading is used to support access to packed cubed files. We support such access by translating the original array references in the application to variable-length pages on disk that we then unpack into fixed-length pages in memory.</p><p>In many visualization applications there are derived data (or derived fields) that are not stored with the data set -rather they are derived at run-time. In general the entire derived field may be eagerly calculated so that data are available when needed, or the derived field may be lazily calculated only as pages are required during traversal. If the data set is enormous, eager evaluation is more difficult than out-of-core visualization of the underlying data! Alternatively, if the application has sufficient control over data loading, derived data may be lazily calculated only when each page is loaded. As with the underlying data, if the traversal is sparse fewer pages need be calculated and managed. Although we note demand paging of derived data as a promising direction, we do not in the current paper report implementation or experimental results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3.4">Storing</head><p>When the application loads a page of data from disk into memory, the OS marks the page so that it will be later saved (i.e. the OS marks the page as dirty). When the underlying physical memory is subsequently required for another virtual page (i.e. the virtual page must be replaced), the OS saves the data from the dirty page to disk for subsequent re-use. This results in inefficiency for two reasons: 1) if the data were originally read from disk, they need not be stored since they can be re-read from the original file, 2) the data may not be required again anyway, since a visualization application's traversal may not revisit the same cell or cells. Ideally, the application would control which data were stored when virtual pages were replaced, and which data were simply discarded. Current operating systems do not support this.</p><p>In the current paper, we describe an implementation that unfortunately cannot take advantage of these opportunities (because storage and page replacement are inextricably linked). However, we believe performance improvements are available with more application control over both policies. This is further discussed in section 8.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Experimental methodology</head><p>Before discussing experimental methodology, we first review CFD visualization and the original implementation of the software package that we have used as test-bed -the Unsteady Flow Analysis Toolkit (UFAT) <ref type="bibr" target="#b18">[19]</ref>. Following this we discuss an implementation of UFAT modified to use the Unix system call mmap() in order to demonstrate the performance benefits of sparse traversal.</p><p>Then we describe a user-level demand-paging implementation of UFAT we use to explore application control that is not supported by mmap(). We finish this section with sundry details of experimental methodology.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Visualization of Computational Fluid Dynamics</head><p>Computational Fluid Dynamics (CFD) visualization systems must process input data of several types, with some complexities. The data may or may not be on a regular lattice (structured if they are, unstructured if they are not). Furthermore, the coordinates of the nodes of the lattice generally do not correspond to actual coordinates in space. Coordinates in the lattice are generally referred to as computational space, and the real locations to which they correspond are generally referred to as physical space (cf. <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b5">6]</ref>). To implement these two spaces, the values at nodes in the lattice are generally provided in one input file (solutions), and the node-by-node mappings to physical space are generally provided in another input file (grid). Each grid itself may comprise multiple sub-grids, and each of these is generally referred to as a zone.</p><p>Furthermore, while there may be only one solution if the flow is at equilibrium (steady), multiple solutions may be input if the flow is time-varying (unsteady), and multiple grids may be input if the mapping to physical space is itself time-varying (that is, if the grid itself changes over time).</p><p>The algorithms used to visualize CFD data include streamlines, streaklines, particle traces, vortex-core finding, as well as the cutting planes, isosurfaces, and local isosurfaces employed in other application domains. Most of these are local algorithms that only need to traverse a subset of the data in order to calculate the synthetic geometry for a given visualization. Most CFD visualization systems have supported visualization of steady flows (single grid, single solution input) (e.g. <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b4">5,</ref><ref type="bibr" target="#b27">28]</ref>). These have typically tackled the problem of big data by requiring that both the grid and solution fit entirely in main memory before the visualization begins. At least one system supports unsteady flow visualization (multiple grids, multiple solutions) -the Unsteady Flow Analysis Toolkit (UFAT) <ref type="bibr" target="#b18">[19]</ref>. Aside from the algorithmic challenges that must be tackled to visualize flow through multiple time steps, unsteady flows challenge the computer system with significantly big data. Typically the "solver" outputs only 1 in 10, or 1 in 100 of the time steps due to limited system, disk, and visualization system capacity. But even then, the output may have hundreds of time steps, each of which may today surpass 500 Mbytes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Unsteady Flow Analysis Toolkit (UFAT)</head><p>UFAT has implicitly employed segmentation to handle such potentially large time-varying data sets. In UFAT, each grid for each time step is (implicitly) defined as a segment, as is each solution for each time step. UFAT explicitly interpolates between a fixed number of time steps at once, and so when the time step is advanced, the oldest solution segment is overlaid with a new solution segment, similarly for grid segments. However, UFAT loads an entire segment (or pair of segments) when it advances time steps, and so before it is through loads the entire data set. In addition, if the grid plus solution data required for any new time step are larger than physical memory, UFAT relies on operating system virtual memory, and its performance drops precipitously. Finally, UFAT reads primarily PLOT3D data files <ref type="bibr" target="#b27">[28]</ref>, which employ flat storage of data. In the remainder of this paper, we call this implementation of UFAT the original UFAT.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Mapped UFAT</head><p>As discussed, the original UFAT employs applicationcontrolled segmentation. When UFAT traces, say, particles through an unsteady flow, it calculates the hypothetical paths of massless particles through the flow over time. At any point in the calculation, it loads into memory the data for times t and t+1. When UFAT advances the time step to t+2, it reuses the buffer it used for time t. Now, if UFAT actually required all of the data during each time step and there were insufficient physical memory, it would be difficult to prevent thrashing. On the other hand, if the traversal through the data were sparse, it would be advantageous to load only those pages actually touched. In order to demonstrate specifically the advantage of sparse traversal, we have modified the original UFAT to memory map input files (with the Unix system call mmap()) rather than read them explicitly into memory. The result is that a page from disk is only read into physical memory when accessed. If only a fraction f of the data is required during traversal, then only the fraction f is read from disk into memory. At the end of processing of each segment, mapped UFAT unmap()'s the segment, effectively freeing the underlying mapped pages for subsequent reuse. However, mmap() does not offer the application control over page size, nor does mmap() provide the semantics that would be required to support translation of array references to packed cubed data files. We call the mmap()'d implementation mapped UFAT.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Paged UFAT</head><p>In order to explore the advantages of additional application control over memory management (in particular translation and page loading), we have implemented in user-space a demand paging system that takes control over some of the paging functions of grid and solution input to UFAT. The details of this implementation are discussed below. We call this implementation paged UFAT.</p><p>Paged UFAT implements demand paging of segments in a way similar to mapped UFAT. When a new segment is "loaded", we simply "map" the data contents (without loading data). Then, as data in the underlying segment are demanded, we allocate physical pages and read the underlying data from disk. Paged UFAT differs from mapped UFAT in several respects. First, page size is a configurable parameter, allowing us to explore its effect on performance. For any given size however, physical page size must be the same in memory as on disk. Second, paged UFAT explicitly allocates a pool of free pages for grid and solution data, in contrast to mapped UFAT which treats all of physical memory as its pool. This pool is partitioned into pages of the desired size. If the pool is empty, we allocate additional memory and partition this into new free pages. Third, as UFAT references data that are not resident, we request a free page from the data pool, and explicitly load and unpack the data from disk into that page.</p><p>On the other hand, paged UFAT is similar to mapped UFAT in that page replacement (when data requirements exceed physical memory) is handled by the operating system, and in that all allocated pages are returned to the "pool" after a segment is processed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4.1">Translation</head><p>For any general demand paging system, it is really a requirement that the application be allowed to reference underlying data via its native virtual addresses. In our case, the underlying UFAT code references data in computational coordinates (i.e. as array[i,j,k,field]). While this works when the data are laid out in memory in row-or column-order, it does not work when the underlying storage of the data are not flat (e.g. when the data are stored in cubed format).</p><p>In order to support alternative underlying data storage (and also to support compression on disk of the underlying data), we translate the virtual computational coordinates into physical coordinates in the underlying data file. There are several steps in this translation. First, when UFAT references the underlying data (as array[i,j,k,field]), we trap the call (by trapping the array reference at the FORTRAN call site to a function call of the same name). If the underlying page is resident, we simply return the data. Otherwise, we translate the array reference into a virtual block address in the underlying file. This translation differs depending on whether the underlying storage is flat or cubed. We translate to virtual block address because (as previously discussed) there may not be a one-to-one mapping between storage in memory and storage on disk. From virtual block address, we translate to physical offset within the file, then allocate a page from the free pool and read the data into memory. Once the page is resident, execution proceeds as it would otherwise have, and we return the data originally requested by the multi-dimensional array reference.</p><p>It is probably clear from this discussion that in the userspace implementation of paged UFAT translation is very expensive. We have corroborated this expectation with profiling and have found that our address translation consumes more CPU cycles than any other UFAT routine. For example, for the shuttle data set (described below) address translation initially accounted for 80% of CPU utilization. We have made a first pass at alleviating this high cost by taking advantage of the fact that for most array references, neighbors are also soon referenced. We have added new translation routines that return several values instead of one value, which amortizes the translation cost over several cells. This approach has reduced the percentage of execution time taken by address translation, and was enabled during the experiments reported below. But still, even with this technique, address translation on the shuttle accounted for 50% of CPU utilization in the runs discussed below. We consider the positive results we report even stronger in light of this cost.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4.2">Loading</head><p>Application control over loading is important in a number of contexts: 1) when storage in memory does not correspond to storage on disk, 2) when pages may be loaded from non-file sources, 3) when the application chooses lazy rather than eager evaluation of derived data (e.g. when a derived field is defined over an entire data set, but visualization is only desired of some limited traversal through the data set).</p><p>In the current paged UFAT, we take advantage only of the first of these opportunities. In particular, when the underlying file storage is cubed, regular addressing results in "holes" in the underlying stored file. These holes can result in 200% bloat if the underlying data are not "packed". We support packed files by storing with each cubed file a block translation table which provides the physical offset of the block within the file and the number of bytes that the block actually comprises. The virtual block address, then, is used to index this table to find the actual block. When the block is read into memory, a full memory page is allocated regardless of the actual underlying block length, and any unused memory in the page is left uninitialized and undefined.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Experimental methodology</head><p>We have employed the data sets shown in <ref type="table">Table 1</ref>. The experiments we performed on these data sets were chosen to emulate (or replicate) studies for which the data were originally used, as described below.</p><p>Tapered cylinder. It is well known that the behavior of vortices on the downstream side of flow past a cylinder is a function of cylinder diameter. The tapered cylinder was designed to explore the vortex behavior on the downstream side of a cylinder of continuously varying diameter <ref type="bibr" target="#b16">[17]</ref>. We have introduced per-timestep streamlines on the back side of the cylinder to replicate (and exaggerate) the original experiments. All frames (concatenated into one) from the particle trace are shown in Color Plate 1.</p><p>Shuttle. One study conducted on the shuttle was done to determine the behavior of debris that might collide with the it <ref type="bibr" target="#b5">[6]</ref> We have emulated this study by introducing a rake of particles at the front of the shuttle's fuel tank, and traced streamlines. The results are shown in Color Plate 2.</p><p>F18. Some of the studies conducted on the F18 focused on vortex behavior beginning above the wing and proceeding to the rear of the plane <ref type="bibr" target="#b12">[13]</ref>. We have emulated some of the traces of this study by introducing particles in and around the vortex core above the wing, and calculating streaklines. The concatenated results from the 220-frame animation are shown in Color Plate 3.</p><p>High-wing. The high-wing data set is under commercial nondisclosure, and we are not able to publish a picture at the time of this writing. However, one rake of streamlines was placed before the wing and two were placed at engine exhausts. Among the three rakes a trailing vortex was captured. This particular experiment was illuminating for the principle investigators on the project at NASA Ames Research Center.</p><p>All of our code has been based on Version 3.0 of UFAT. We compiled all code with the SGI C compiler with flags -n32 and -O2. We performed experiments using the machines shown in <ref type="table">Table  2</ref>. Original UFAT and mapped UFAT were provided input from PLOT3D files, paged UFAT was provided input from our own file format that supports both flat and cubed storage. PLOT3D files were automatically translated to our file format, and after visualization with paged UFAT, graphical results were compared for equivalence.</p><p>In order to study the effects of limited available memory, we used the system call mpin() effectively to remove memory from each of the machines above. In a separate process that began before and ran during each limited memory experiment, we allocated and pinned sufficient memory to reduce the total memory available on the workstation to the desired target. This target is the "memory capacity" reported in the results in section 4. To compensate for differences in kernel size between the actual machine and target machines, we scaled slightly the amount of memory pinned. However, it is important to note that all runs were subject to the same memory environment.</p><p>Between all runs, we cleared the file cache by allocating the bulk of memory available in user-space (which has the effect in  IRIX of reducing the pages available to the file cache) and by subsequently randomly reading a file the size of the target machine's memory.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Out-of-core visualization</head><p>Summaries of results are shown in <ref type="table">Tables 3 through 6</ref>. The data set is identified in the caption, the run in the leftmost column, and the memory capacity (in Mbytes) is identified in the topmost row by M=. We have explored the performance of original UFAT (Original), mapped UFAT (Mapped), and paged UFAT with sundry block sizes and for both cubed and flat storage. These are labeled as N-cubed and N-flat where N corresponds to the following block and page sizes: </p><formula xml:id="formula_1">N</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Notes on the experiments</head><p>The tapered cylinder was only run in an environment of unlimited memory because it is a small data set. The shuttle was run in environments between unlimited memory (M=128) and limited memory (M=32). The F18 was run between unlimited memory (M=1024) and very limited memory (M=32). The high-wing is a 554 Mbyte data set that researchers at NASA Ames currently wish to explore using their desktop machines; hence, we have explored its behavior only with progressively more limited memory (between M=128 and M=32). Results for original UFAT are not available for the high-wing, because that application died due to insufficient swap space (the machine's configuration was standard -twice the swap space of main memory).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Overall results</head><p>Overall, performance of paged UFAT with 8 x 8 x 8 cubes (2K pages) surpassed that of either original UFAT or mapped UFAT. Over all block sizes and over both storage formats (cubed and flat), 8 x 8 x 8 cubes generally provided the best performance amonged paged UFAT runs as well. The tapered cylinder is the most notable exception, where flow is anomalously axis-aligned, and where flat storage results in better performance.</p><p>In addition, paged UFAT degraded gracefully with decreasing available memory, as can be seen in <ref type="figure">Figures 1  through 3</ref>. At the same time, mapped UFAT degraded faster than paged UFAT, and original UFAT clearly did not degrade gracefully.</p><p>If there were any question that out-of-core visualization could be achieved simply by loading all data and relying on operating system virtual memory, these results should dispel such inquiry.   <ref type="table">Table 6</ref>. High-wing experimental results (seconds). </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Sparse traversal</head><p>In order to provide a common basis of comparison, we compare the original, mapped, and paged UFATs when all utilize the same page size and flat storage. The original and mapped versions naturally employ 16K physical pages, while paged UFAT does so when N=16. Note from <ref type="table">Tables 3 through  6</ref> that the demand paged systems that can take advantage of sparse traversal virtually always perform better (and when not, they are roughly on par). This is shown more graphically in <ref type="figure">Figures 1 and 2</ref> for the shuttle and F18. Note from these figures that it is even more important to take advantage of sparse traversal as memory becomes more limited.</p><p>Finally, note that when paged UFAT works with the same 16K pages (16-flat) that mapped UFAT must work with, paged UFAT is generally slower. This is because of the overhead that paged UFAT incurs in managing memory in user-space, without hardware and operating system support. The fact that cubed storage and smaller pages can make paged UFAT faster is all the more compelling evidence that these are important performance issues for out-of-core visualization.   Sparse traversal can also be seen in the working sets of <ref type="figure" target="#fig_4">Figures  6 and 7</ref>. The working set is defined as the set of blocks required during some period of time (in our case a single time step). In these are graphed the fractions of grid and solution pages required during traversal. The darker lines show cubed working sets, the ligher lines show flat working sets. These pictures confirm that generally only a fraction of the pages are required. However, several additional observations deserve note. First, grid working sets are "peaky", surpassing 50% of the total pages at times. This is because the current algorithms in UFAT search the grid when streaklines or streamlines cross zone boundaries. Second, there are clearly patterns of access that it should be possible to exploit for better page replacement than LRU. We do not do so in the current paper but mention it in passing. Third, these graphs make it clear that the working sets of cubed files are smaller than they are for flat files, and that at least for solution data smaller page size leads to reduced working set size. These are the topics of the next two sections.   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Load/store management</head><p>As discussed in section 3.4.2, paged UFAT takes control over two aspects of page load/store management, in particular translation and page loading. By doing so, it can support alternative page sizes, and alternative page storage formats (without wasting disk storage with bloated files). Using the standard system services available today, in particular mmap(), it is not possible to support these features. In this section we examine the performance improvements that they provide.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4.1">Cubed vs. flat storage</head><p>It is clear from <ref type="figure" target="#fig_4">Figures 6 and 7</ref> and from inspection of Tables 3 through 6 (especially for the F18 and high-wing) that for fixed page size, cubed storage is generally significantly better than flat storage. This is because for most 3-dimensional traversal cubes provide better locality of reference than do planes. As a result, fewer pages are required at run-time. This trend is most noticeable for all runs as memory pages become scarcer. Cubed storage allows the application to take better advantage of the pages that are available.</p><p>Finally, we make two observations. First, without support for translation to cubed format from linear array references, the application cannot take advantage of such storage without modification. Second, without support for application processing during page loading (which mmap() does not provide) packed cubed files cannot be supported.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4.2">Page size</head><p>There are two competing forces affecting the dependency of performance on page size. Paged UFAT requires its own internal page tables in order to manage its own demand paging. As blocks become smaller the page tables grow, themselves consuming memory. On the other hand, smaller blocks allow finer granularity and in general result in a smaller working set. In our experiments, we have found the cross-over of these two curves with 2 Kbyte pages (8 x 8 x 8). This trend is shown graphically for the F18 in <ref type="figure" target="#fig_6">Figure 8</ref>.</p><p>Finally, the standard page size is 16 Kbytes on the machines and operating systems we used as platform. We note that without application control over loading pages, our smaller pages would not have been employable. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Remote out-of-core visualization</head><p>The second problem we address in this paper is remote out-ofcore visualization -the local visualization of data sets that are stored remotely because they do not fit on local disk. In this model a file server provides pages to smaller local workstations on demand. To explore the viability of this architecture, we have run paged UFAT and mapped UFAT on the same mid-range workstation as in the <ref type="table">Table 2</ref>, with the high-wing stored on remote server accessible via the Network File System (NFS) over 10 Mbit Ethernet. Ideally, this architecture would be supported at least by 100 Mbit Ethernet. However, even over the slower network link the results are encouraging. The results for the high-wing are shown in <ref type="table" target="#tab_6">Table 7</ref>. As can be seen, the degradation for paged UFAT is at worst somewhat greater than a factor of 2, and for very limited memory (M=32) remote and local are essentially at parity.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Related work</head><p>Researchers in operating systems have recently explored extensions to standard systems to support more application control over virtual memory. The case for these extensions has been made repeatedly (cf. <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b9">10,</ref><ref type="bibr" target="#b13">14,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b20">21,</ref><ref type="bibr" target="#b26">27]</ref>). Some research prototypes have added more application control <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b13">14,</ref><ref type="bibr" target="#b19">20,</ref><ref type="bibr" target="#b20">21,</ref><ref type="bibr" target="#b26">27</ref>] but these features have unfortunately not found their way into commercial operating systems. Appel and Li have demonstrated by operating system modification that application control over write-back policies can improve performance by discarding dirty data that really are garbage or that can be rederived <ref type="bibr" target="#b2">[3]</ref>. Just such control would be desirable for visualization where data can be re-read from disk. Cao et al. have explored application control over file caching <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b7">8]</ref>. Their focus has primarily been on efficient implementation and on global performance.</p><p>In the visualization domain, Song has demonstrated that the problem of big data can be mitigated in a data flow system by reducing the granularity of data flow nodes <ref type="bibr" target="#b24">[25]</ref>. For visualization of earth sciences data, the Common Data Format (CDF) library <ref type="bibr" target="#b21">[22]</ref> implements a simple form of demand-paged segments. In our terminology, CDF maps a segment to each file, and independently demand pages each of these segments. Since a cache is associated with each file, the memory in use grows with the total number of open files. Application control over this growth is difficult unless the application keeps track of its own access patterns on the underlying data. We are unaware of studies on CDF that explore alternative page sizes, replacement policies, and data storage and organization, and so cannot address the trade-offs in demand-paged segments for earth sciences data.</p><p>In a different visualization domain, Funkhouser explicitly used segmentation to explore architectural databases at interactive rates <ref type="bibr" target="#b11">[12]</ref>. He partitioned objects hierarchically in an approach similar to the one taken by Ueng for unstructured CFD data <ref type="bibr" target="#b25">[26]</ref>. He was able to visualize at interactive rates a database roughly 10x the size of main memory. While these results and the techniques they suggest are of interest, the differences with respect to scientific visualization should be explicitly noted: • With synthetic imagery, data traversal is driven by direction of travel of a viewer; in scientific visualization data traversal is driven by the visualization algorithm (and is generally unrelated to the viewer) and geometry is not generated until after traversal.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>•</head><p>With synthetic imagery, data that will not be needed can be explicitly culled by fairly well-known algorithms; in scientific visualization, it is not yet clear which data can be culled and which data cannot be culled (and in any event is visualization algorithm-specific).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>•</head><p>The sizes of the biggest synthetic data are significantly smaller than those encountered in scientific visualization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusions</head><p>When a single data set that we wish to visualize is larger than the capacity of main memory, we must solve the problem of out-of-core visualization. When a single data set is larger than the capacity of local memory and disk, we must solve the problem of remote out-of-core visualization. We have addressed primarily the first of these in this paper, although we have reported what we believe are promising results from experiments in remote out-of-core visualization.</p><p>To tackle out-of-core visualization, we have built upon a previous technique to limit the size of data that must be in core at any time, in particular segmentation. Previous authors have used application-controlled segmentation. In particular, they have partitioned their data sets along natural boundaries, defining each subset as a segment, and loaded segments only when they were needed. We have added application-controlled demand paging to a previous segment-based system, and in doing so have demonstrated significantly better performance than previously achieved by simple reliance on operating system virtual memory. Furthermore, we have demonstrated better performance not only when data size exceeded physical memory (limited memory) but also when physical memory was sufficient to hold the data (unlimited memory).</p><p>The principles we have exploited can be summarized as follows:</p><p>Sparse traversal. When only a subset of the data are required for a given visualization, demand loading only those pages necessary leads in general to better performance. When memory is limited demand paging is even more important to sustain acceptable performance. We have found that even with unlimited memory, demand paging leads to better performance than loading the entire data set.</p><p>Page size. The finer the grain of page size, the fewer pages required for given traversal. We have found the best overall performance with page sizes smaller than those supported by the standard operating system(s).</p><p>Cubed storage. When data are stored in "cubes" rather than in flat planes, there is generally better locality of reference. Improvement in locality reduces the number of pages a visualization application requires at run-time. We have found that cubed storage results in significantly better performance than flat storage. However, cubed storage generally leads to larger files (by as much as a factor of 2). To solve this, we have translated at runtime from a packed file representation on disk to an unpacked representation in memory. This has allowed us to support cubed storage with minimal increase in disk storage requirements.</p><p>We note that exploitation of the second two of these requires memory management support not present in today's operating systems. This suggests that for the near term, out-of-core visualization will require support by user-level memory management.</p><p>We have also explored remote out-of-core visualization (where demand paging is from a remote data server). Our results are promising, showing only roughly a factor of 2 slow-down over our best local out-of-core visualization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Future Work</head><p>We intend to explore approaches that draw more support for application-controlled memory management from the operating system. We also believe there is opportunity to take advantage of additional techniques to improve out-of-core visualization performance, in particular prefetching and data set indexing. There may be other visualization applications that can exploit demandpaged segmentation, and we welcome collaboration in exploring other domains. Finally, we believe that remote out-of-core visualization is a very promising approach to provide visualization tools to a broader user community. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 .Figure 3 .</head><label>13</label><figDesc>Comparative performance, Shuttle. Comparative performance, High-wing.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 4 .Figure 5 .</head><label>45</label><figDesc>Sparse traversal in Shuttle. Sparse traversal in F18.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 6 .</head><label>6</label><figDesc>Working set for N=4, F18.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 7 .</head><label>7</label><figDesc>Working set for N=8, F18.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 8 .</head><label>8</label><figDesc>Page size sensitivity for cubed storage, F18. (32x32x32 at M=32 deliberately omitted because of its effect on graph scale).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 2 . Test environment. Indigo2 and Onyx2 are 195 MHz R10000's. All disks are standard SCSI.Table 1 . Data sets.</head><label>21</label><figDesc></figDesc><table><row><cell>Name</cell><cell>Tapered</cell><cell>Shuttle</cell><cell>F18</cell><cell>High-wing</cell></row><row><cell></cell><cell>cylinder</cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell>Unsteady</cell><cell>Steady</cell><cell>Unsteady</cell><cell>Steady</cell></row><row><cell>Type</cell><cell>Single-</cell><cell>Multi-zone</cell><cell>Multi-zone</cell><cell>Multi-zone</cell></row><row><cell></cell><cell>zone</cell><cell></cell><cell></cell><cell></cell></row><row><cell>Time</cell><cell>1 0 0</cell><cell>1</cell><cell>2 2 0</cell><cell>1</cell></row><row><cell>steps</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Grid</cell><cell>1.5</cell><cell>14.4</cell><cell>26.9</cell><cell>246.4</cell></row><row><cell>(Mbytes)</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Solution</cell><cell>2.5</cell><cell>18.0</cell><cell>33.7</cell><cell>308.0</cell></row><row><cell>(Mbytes)</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Total</cell><cell>21.5</cell><cell>32.3</cell><cell>7432.0</cell><cell>554.4</cell></row><row><cell>(Mbytes)</cell><cell></cell><cell></cell><cell></cell><cell></cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 3 . Tapered cylinder experimental results (seconds).Table 4 . Shuttle experimental results (seconds).Table 5 . F18 experimental results (seconds).</head><label>345</label><figDesc></figDesc><table><row><cell>Run</cell><cell>M=1024</cell><cell>M=128</cell><cell>M=64</cell><cell>M=32</cell></row><row><cell>Original</cell><cell>-</cell><cell>8.5</cell><cell>14.9</cell><cell>25.7</cell></row><row><cell>Mapped</cell><cell>-</cell><cell>9.8</cell><cell>9.1</cell><cell>13.8</cell></row><row><cell>4-cubed</cell><cell>-</cell><cell>11.0</cell><cell>11.6</cell><cell>15.2</cell></row><row><cell>4-flat</cell><cell>-</cell><cell>10.2</cell><cell>11.6</cell><cell>22.4</cell></row><row><cell>8-cubed</cell><cell>-</cell><cell>8.6</cell><cell>9.3</cell><cell>11.0</cell></row><row><cell>8-flat</cell><cell>-</cell><cell>11.4</cell><cell>11.8</cell><cell>24.9</cell></row><row><cell>16-cubed</cell><cell>-</cell><cell>8.8</cell><cell>8.2</cell><cell>15.3</cell></row><row><cell>16-flat</cell><cell>-</cell><cell>8.4</cell><cell>10.6</cell><cell>22.0</cell></row><row><cell>32-cubed</cell><cell>-</cell><cell>8.2</cell><cell>10.0</cell><cell>21.3</cell></row><row><cell>32-flat</cell><cell>-</cell><cell>8.2</cell><cell>8.7</cell><cell>21.6</cell></row><row><cell>Run</cell><cell>M=1024</cell><cell>M=128</cell><cell>M=64</cell><cell>M=32</cell></row><row><cell>Original</cell><cell>1051.6</cell><cell>1080.0</cell><cell>3369.7</cell><cell>5704.0</cell></row><row><cell>Mapped</cell><cell>588.8</cell><cell>592.3</cell><cell>620.8</cell><cell>843.5</cell></row><row><cell>4-cubed</cell><cell>392.3</cell><cell>414.2</cell><cell>478.5</cell><cell>598.8</cell></row><row><cell>4-flat</cell><cell>642.6</cell><cell>673.8</cell><cell>860.2</cell><cell>1167.4</cell></row><row><cell>8-cubed</cell><cell>326.5</cell><cell>331.5</cell><cell>372.8</cell><cell>462.2</cell></row><row><cell>8-flat</cell><cell>615.0</cell><cell>640.0</cell><cell>764.7</cell><cell>1094.3</cell></row><row><cell>16-cubed</cell><cell>387.6</cell><cell>391.8</cell><cell>434.3</cell><cell>611.8</cell></row><row><cell>16-flat</cell><cell>710.0</cell><cell>724.6</cell><cell>925.3</cell><cell>2138.6</cell></row><row><cell>32-cubed</cell><cell>501.1</cell><cell>502.6</cell><cell>826.0</cell><cell>1982.4</cell></row><row><cell>32-flat</cell><cell>611.9</cell><cell>602.2</cell><cell>872.4</cell><cell>2055.9</cell></row><row><cell>Run</cell><cell>M=1024</cell><cell>M=128</cell><cell>M=64</cell><cell>M=32</cell></row><row><cell>Original</cell><cell>-</cell><cell>N/A</cell><cell>N/A</cell><cell>N/A</cell></row><row><cell>Mapped</cell><cell>-</cell><cell>111.1</cell><cell>247.7</cell><cell>671.1</cell></row><row><cell>4-cubed</cell><cell>-</cell><cell>118.6</cell><cell>243.2</cell><cell>331.3</cell></row><row><cell>4-flat</cell><cell>-</cell><cell>168.3</cell><cell>273.3</cell><cell>527.5</cell></row><row><cell>8-cubed</cell><cell>-</cell><cell>81.7</cell><cell>129.3</cell><cell>248.6</cell></row><row><cell>8-flat</cell><cell>-</cell><cell>131.8</cell><cell>247.5</cell><cell>786.2</cell></row><row><cell>16-cubed</cell><cell>-</cell><cell>117.8</cell><cell>163.5</cell><cell>354.9</cell></row><row><cell>16-flat</cell><cell>-</cell><cell>145.3</cell><cell>270.0</cell><cell>543.5</cell></row><row><cell>32-cubed</cell><cell>-</cell><cell>148.8</cell><cell>339.9</cell><cell>899.8</cell></row><row><cell>32-flat</cell><cell>-</cell><cell>151.7</cell><cell>370.1</cell><cell>817.3</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6"><head>Table 7 . Remote demand paging for paged UFAT (cubed 8 x 8 x 8) and mapped UFAT. Local (Loc.) and Remote</head><label>7</label><figDesc></figDesc><table><row><cell></cell><cell cols="2">M=128</cell><cell cols="2">M=64</cell><cell cols="2">M=32</cell></row><row><cell></cell><cell>Loc.</cell><cell>Rem.</cell><cell>Loc.</cell><cell>Rem.</cell><cell>Loc.</cell><cell>Rem.</cell></row><row><cell>Paged</cell><cell>81.7</cell><cell>183.3</cell><cell>129.3</cell><cell>206.9</cell><cell>248.6</cell><cell>259.0</cell></row><row><cell>Mapped</cell><cell>111.1</cell><cell>261.8</cell><cell>247.7</cell><cell>347.0</cell><cell cols="2">671.1 1104.1</cell></row></table><note>(Rem.) times are shown (seconds).</note></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="1">Who previously went by the name Lane.<ref type="bibr" target="#b1">2</ref> The simulation is currently steady, with work ongoing to generate an unsteady data set of the same aircraft.</note>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="3">In practice, the replacement policy is typically more complicated, also involving physically mapped pages from other applications, disk cache, etc.</note>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="4">This is true in particular of regular grids in CFD because each data set generally comprises many smaller grids, called zones.<ref type="bibr" target="#b4">5</ref> In particular without hardware and operating system support.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">Acknowledgements</head><p>The authors are grateful to David Kenwright whose help with CFD visualization and its tools has been indispensable. The authors would like also to thank Scott Murman and Ken Gee for allowing us to use and helping us to acquire the F18 data, Karlin Roth for use of the high-wing data set, David Kenwright and David Kao for help with UFAT, Sandy Johan for help acquiring the data sets, and Bryan Green for help with the machines we required to process the F18 data set. We thank David Kao for his mmap() code that we dusted off and refurbished for the current paper.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Computational Fluid Dynamics: The Basics with Applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Anderson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995" />
+			<publisher>McGraw-Hill</publisher>
+			<pubPlace>New York NY</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">The Case for Application-Specific Operating Systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Anderson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Third Workshop on Workstation Operating Systems</title>
+		<meeting>the Third Workshop on Workstation Operating Systems</meeting>
+		<imprint>
+			<date type="published" when="1992-04" />
+			<biblScope unit="page" from="92" to="94" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Virtual Memory Primitives for User Programs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Appel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 4 th Symposium on Architectural Support for Programming Languages and Operating Systems</title>
+		<meeting>the 4 th Symposium on Architectural Support for Programming Languages and Operating Systems<address><addrLine>Santa Clara CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1991-04" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">FAST: A Multi-Processed Environment for Visualization of Computational Fluid Dynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Bancroft</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;90</title>
+		<meeting>Visualization &apos;90<address><addrLine>San Francisco CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1990-10" />
+			<biblScope unit="page" from="14" to="27" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">The Virtual Wind Tunnel</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Bryson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Levit</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="25" to="34" />
+			<date type="published" when="1992-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Flowfield Simulation of the Space Shuttle Vehicle in Ascent</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Buning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Fourth International Conference on Supercomputing</title>
+		<editor>Supercomputer Applications, Kartashev &amp; Kartashev</editor>
+		<imprint>
+			<date type="published" when="1989" />
+			<biblScope unit="volume">II</biblScope>
+			<biblScope unit="page" from="20" to="28" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Application-Controlled File Caching Policies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">W</forename><surname>Felten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 1994 Summer USENIX</title>
+		<meeting>the 1994 Summer USENIX</meeting>
+		<imprint>
+			<date type="published" when="1994-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Implementation and Performance of Application-Controlled File Caching</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">W</forename><surname>Felten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the First USENIX Symposium on Operating Systems Design and Implementation (OSDI)</title>
+		<meeting>the First USENIX Symposium on Operating Systems Design and Implementation (OSDI)</meeting>
+		<imprint>
+			<date type="published" when="1994-11" />
+			<biblScope unit="page" from="165" to="177" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Managing Big Data for Scientific Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Cox</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Ellsworth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH &apos;97 Course #4, Exploring Gigabyte Datasets in Real-Time: Algorithms, Data Management, and Time-Critical Design, ACM SIGGRAPH &apos;97</title>
+		<imprint>
+			<date type="published" when="1997-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">The Case for Run-Time Replaceable Kernel Modules</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Draves</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Fourth Workshop on Workstation Operating Systems</title>
+		<meeting>the Fourth Workshop on Workstation Operating Systems</meeting>
+		<imprint>
+			<date type="published" when="1993-10" />
+			<biblScope unit="page" from="160" to="164" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">AVM: Application-Level Virtual Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">R</forename><surname>Engler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Gupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">F</forename><surname>Kaashoek</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Fifth Workshop on Hot Topics in Operating Systems (HotOS-V)</title>
+		<meeting>the Fifth Workshop on Hot Topics in Operating Systems (HotOS-V)</meeting>
+		<imprint>
+			<date type="published" when="1994-05" />
+			<biblScope unit="page" from="72" to="77" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Database and Display Algorithms for Interactive Visualization of Architectural Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">A</forename><surname>Funkhouser</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+		<respStmt>
+			<orgName>University of California at Berkeley</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Ph.D. dissertation</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Computation of F/18-18 Tail Buffet</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Gee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Murman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Schiff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Aircraft</title>
+		<imprint>
+			<biblScope unit="volume">33</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1181" to="1189" />
+			<date type="published" when="1996-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Application-Controlled Physical Memory Using External Page-Cache Management</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Harty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">R</forename><surname>Cheriton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Fifth International Conference on Architectural Support for Programming Languages and Operating Systems</title>
+		<imprint>
+			<date type="published" when="1992-10" />
+			<biblScope unit="page" from="187" to="197" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hultquist</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996-12" />
+		</imprint>
+	</monogr>
+	<note>personal communication</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hwang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Briggs</surname></persName>
+		</author>
+		<title level="m">Computer Architecture and Parallel Processing</title>
+		<meeting><address><addrLine>New York NY</addrLine></address></meeting>
+		<imprint>
+			<publisher>McGraw Hill</publisher>
+			<date type="published" when="1984" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Numerical Simulation of Flow Past a Tapered Cylinder</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jespersen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Levit</surname></persName>
+		</author>
+		<idno>RNR-90- 021</idno>
+		<imprint>
+			<date type="published" when="1990-10" />
+		</imprint>
+		<respStmt>
+			<orgName>NASA Ames Research Center</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">RNR Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">The Need for Customizable Operating Systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Kiczales</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Lamping</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Maeda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Keppel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mcnamee</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Fourth Workshop on Workstation Operating Systems</title>
+		<meeting>the Fourth Workshop on Workstation Operating Systems</meeting>
+		<imprint>
+			<date type="published" when="1993-10" />
+			<biblScope unit="page" from="165" to="169" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">UFAT: A Particle Tracer for Time-Dependent Flow Fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lane</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;94</title>
+		<meeting>Visualization &apos;94<address><addrLine>Washington DC</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="257" to="264" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">HiPEC: High Performance External Virtual Memory Caching</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">H</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">C</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Chang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the First USENIX Symposium on Operating Systems Design and Implementation (OSDI)</title>
+		<meeting>the First USENIX Symposium on Operating Systems Design and Implementation (OSDI)</meeting>
+		<imprint>
+			<date type="published" when="1994-11" />
+			<biblScope unit="page" from="153" to="164" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Extending the Mach External Pager Interface to Accommodate User-Level Page Replacement Policies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mcnamee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Armstrong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the USENIX Association Mach Workshop</title>
+		<meeting>the USENIX Association Mach Workshop</meeting>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="page" from="17" to="29" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">CDF User&apos;s Guide, Version 2.4, NASA/Goddard Space Flight Center</title>
+		<imprint>
+			<date type="published" when="1994-02" />
+		</imprint>
+		<respStmt>
+			<orgName>National Space Science Data Center</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Parallel Volume-Rendering Algorithm Performance on Mesh-Connected Multicomputers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Neumann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 1993 Parallel Rendering Symposium</title>
+		<meeting>the 1993 Parallel Rendering Symposium<address><addrLine>San Jose CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1993-10" />
+			<biblScope unit="page" from="97" to="104" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Operating System Concepts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Silberschatz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Peterson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Galvin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1991" />
+			<publisher>Addison-Wesley</publisher>
+			<pubPlace>Reading MA</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Fine-Grain Visualization Algorithms in Dataflow Environments</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Golin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;93</title>
+		<meeting>Visualization &apos;93</meeting>
+		<imprint>
+			<date type="published" when="1993-10" />
+			<biblScope unit="page" from="126" to="133" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Out-of-Core Streamline Visualization on Large Unstructured Meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Ueng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Siborski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">L</forename><surname>Ma</surname></persName>
+		</author>
+		<idno>No. 97-22</idno>
+		<imprint>
+			<date type="published" when="1997-04" />
+		</imprint>
+		<respStmt>
+			<orgName>Institute for Computer Applications in Science and Engineering, NASA Langley Research Center</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">ICASE Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Exporting a User Interface to Memory Management from a Communication-Oriented Operating System</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Young</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1989-11" />
+		</imprint>
+		<respStmt>
+			<orgName>Carnegie Mellon University</orgName>
+		</respStmt>
+	</monogr>
+	<note>Ph.D. dissertation</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">PLOT3D User&apos;s Manual Version 3.6, NASA Technical Memorandum 101067</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Walatka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Buning</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1989" />
+		</imprint>
+		<respStmt>
+			<orgName>NASA Ames Research Center</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,1018 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Real-Time Motion Estimation and Visualization on Graphics Cards</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>Strzodka</surname></persName>
+							<email>strzodka@caesar.de</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christoph</forename><surname>Garbe</surname></persName>
+							<email>christoph.garbe@iwr.uni-heidelberg.de</email>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="institution">caesar research center</orgName>
+								<address>
+									<postCode>53044</postCode>
+									<settlement>Bonn</settlement>
+									<country key="DE">Germany</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff1">
+								<orgName type="department">Interdisciplinary Center for Scientific Computing</orgName>
+								<address>
+									<postCode>69120</postCode>
+									<settlement>Heidelberg</settlement>
+									<country key="DE">Germany</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Real-Time Motion Estimation and Visualization on Graphics Cards</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:34+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>I.4.8 [Image Processing and Computer Vision]: Scene Analysis-Motion, Time-varying imagery</term>
+					<term>G.1.3 [Numerical Analysis]: Numerical Linear Algebra-Eigenvalues and eigenvectors</term>
+					<term>I.3.8 [Computer Graphics]: Applications</term>
+					<term>motion estimation, motion visualization, structure tensor, eigenvector analysis, real-time processing, graphics hardware</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>We present a tool for real-time visualization of motion features in 2D image sequences. The motion is estimated through an eigenvector analysis of the spatio-temporal structure tensor at every pixel location. This approach is computationally demanding but allows reliable velocity estimates as well as quality indicators for the obtained results. We use a 2D color map and a region of interest selector for the visualization of the velocities. On the selected velocities we apply a hierarchical smoothing scheme which allows the choice of the desired scale of the motion field. We demonstrate several examples of test sequences in which some persons are moving with different velocities than others. These persons are visually marked in the real-time display of the image sequence. The tool is also applied to angiography sequences to emphasize the blood flow and its distribution. An efficient processing of the data streams is achieved by mapping the operations onto the stream architecture of standard graphics cards. The card receives the images and performs both the motion estimation and visualization, taking advantage of the parallelism in the graphics processor and the superior memory bandwidth. The integration of data processing and visualization also saves on unnecessary data transfers and thus allows the real-time analysis of 320x240 images. We expect that on the newest generation of graphics hardware our tool could run in real time for the standard VGA format.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>For the estimation of motion from digital image sequences a number of different techniques has been proposed <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b1">2,</ref><ref type="bibr" target="#b19">19]</ref>. For real time applications, feature tracking algorithms are widely in use <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b43">43]</ref>. While these approaches offer real time performance, estimated velocity fields are sparse. Also, inherent to these techniques is a reduced accuracy <ref type="bibr" target="#b31">[31]</ref>, not making them ideal candidates for applications in which the precise estimation of motion is required.</p><p>Estimating motion patterns from gradient based optical flow techniques offer a number of advantages. Generally, these techniques are highly accurate <ref type="bibr" target="#b0">[1]</ref> and provide dense estimates. Another important property is the computation of confidence measures and type measures, indicating the quality of the estimates and problematic regions. Both measures are given by gradient based techniques with almost no additional computational cost. Due to these advantages this type of estimator for optical flow was chosen in the context of this work.</p><p>The computation of dense motion fields for an image sequence requires high processing power. Parallel computers and different hardware architectures have been considered to accelerate these computations <ref type="bibr" target="#b28">[28,</ref><ref type="bibr" target="#b33">33,</ref><ref type="bibr" target="#b44">44]</ref>. We meet the real-time requirements by exploiting the stream architecture of graphics cards. Graphics cards are not a cure-all for performance critical applications. They have traditionally been optimized for high data throughput and subscribe to a different computing paradigm than micro-processors, resulting in an inherent advantage for operations on large data streams. The concept they follow is not new, but equivalent processing power has not been previously available in such relatively inexpensive standard hardware products. Consequently, our tool does not aim for the ultimate performance on the best suited architecture but wants to demonstrate that a simple camera and a PC with a powerful graphics card suffice for the real-time motion estimation and visualization of image sequences.</p><p>Because of its outstanding price-performance ratio, graphics hardware has already been considered for the implementation of various general computing problems. We refer to <ref type="bibr" target="#b15">[15]</ref> for a comprehensive overview. We are the first to address motion estimation on graphics cards, but individual parts of our algorithm are related to other work in this area, such as filtering <ref type="bibr" target="#b9">[9,</ref><ref type="bibr" target="#b16">16,</ref><ref type="bibr" target="#b21">21]</ref>, linear algebra operations <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b14">14,</ref><ref type="bibr" target="#b29">29]</ref>, visualization <ref type="bibr" target="#b9">[9,</ref><ref type="bibr" target="#b39">39,</ref><ref type="bibr" target="#b41">41]</ref>, adaptive hardware techniques <ref type="bibr" target="#b10">[10,</ref><ref type="bibr" target="#b30">30,</ref><ref type="bibr" target="#b37">37]</ref>.</p><p>Along with the increasing number of CCTV cameras literature on video surveillance has grown rapidly <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b23">23,</ref><ref type="bibr">26]</ref>. In contrast to most other contributions we concentrate on the real-time visual emphasis of the motion field with standard hardware components, assuming a complex motion pattern in the scenes, which defeats simple tracking or classification of individual activities. This is also orthogonal to <ref type="bibr" target="#b11">[11]</ref>, where an efficient 3D visualization most suitable for a compact summary of isolated motion events has been presented. Concerning the angiography sequences research focuses mainly on the segmentation of the vascular system <ref type="bibr" target="#b25">[25]</ref>. We operate in real-time directly on the images similar to <ref type="bibr" target="#b4">[5]</ref>, whereas in a postprocessing step a much more detailed analysis can be obtained <ref type="bibr" target="#b40">[40]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">MOTION ESTIMATION</head><p>We quickly review the gradient based optical flow method we use and describe on the algorithmic level the computations we perform.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Optical Flow</head><p>A very common assumption in computations of image velocity is the brightness change constraint equation (BCCE) <ref type="bibr" target="#b22">[22]</ref>. It states that the image brightness g( x,t) at the location x = (x 1 , x 2 ) should change only due to motion, i.e. the total derivative of its brightness has to vanish <ref type="bibr" target="#b13">[13]</ref>:</p><formula xml:id="formula_0">dg dt = ∂ g ∂t + ∂ g ∂ x dx dt + ∂ g ∂ y dy dt = g t + ( f ∇)g = d • p = 0,<label>(1)</label></formula><p>October 10-15, Austin, Texas, USA IEEE Visualization 2004 0-7803-8788-0/04/$20.00 ©2004 IEEE with the optical flow f := (dx/dt, dy/dt) = (u, v) , the spacial gradient ∇g = [g x , g y ] and the partial time derivative g t = ∂ g/∂t.</p><p>The data vector d is given by d := [g x , g y , g t ] and the parameter vector by p :</p><formula xml:id="formula_1">= [u, v, 1] .</formula><p>Equation <ref type="formula" target="#formula_0">1</ref>poses an under-determined system of equations, as there is only one constraint with the two unknowns of the optical flow vector f . Different approaches exist for solving this problem, such as introducing a global smoothness assumption. These techniques run into problems at motion discontinuities where measures have to be undertaken not to smooth over these boundaries. Therefore, in this work we chose a local approach that does not rely on any global constraints.</p><p>Assuming constant optical flow over a small spatio-temporal neighborhood surrounding the location of interest containing m pixels (for optical flow <ref type="bibr" target="#b32">[32]</ref> and <ref type="bibr" target="#b5">[6]</ref>), the problem consists of m equations of the form of Equation <ref type="bibr" target="#b0">(1)</ref>. With the data matrix</p><formula xml:id="formula_2">D := ( d 1 , . . . , d m )<label>(2)</label></formula><p>the total least squares problem can be reformulated as the structure tensor <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b19">19,</ref><ref type="bibr" target="#b27">27]</ref>, that is</p><formula xml:id="formula_3">|| D p|| 2 = ∞ −∞ w( x − x ,t − t ) p D D p d x dt = p J p −→ min (3) J := ∞ −∞ w( x − x ,t − t ) D D d x dt</formula><p>with the boundary condition p p = 1 to avoid the trivial solution p = 0. The parameter vector p was taken out of the integral as it is assumed to be locally constant. Here w( x − x ,t − t ) represents a weighting function that defines the spatio-temporal neighborhood for which the parameters are to be estimated. On a discrete grid the integral is changed to a summation and the weight function w( x − x ,t − t ) to the individual weights w i . A binomial filter has been proven to be a good choice for the weights w i as it is both symmetric and leads to a decreasing influence of data terms with distance from the considered pixel. After incorporating the boundary condition in a Lagrangian multiplier calculus the minimization problem of Equation (3) is reduced to an eigenvector problem of the symmetric matrix J:</p><formula xml:id="formula_4">J p = λ p.<label>(4)</label></formula><p>Consequently, the eigenvector e 3 to the smallest eigenvalue λ 3 of J is the solution of the minimization problem. The velocities are given after normalization</p><formula xml:id="formula_5">p = [u, v, 1] = e 3 / e 3,3 ,<label>(5)</label></formula><p>where e 3,3 is the last element of the eigenvector e 3 . The eigensystem of the symmetric matrix J can be computed with Jacobi rotations as described by <ref type="bibr" target="#b36">[36]</ref> or more elaborately by the algorithm proposed in <ref type="bibr" target="#b12">[12]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Computation</head><p>The structure tensor J can be assembled quite efficiently. First, the spatial-temporal gradients d = [g x , g y , g t ] have to be estimated. We apply a 3 or 5 tab isotropy optimized Sobel filter D in each direction q ∈ {x, y,t}: d q = D q g <ref type="bibr" target="#b24">[24]</ref>. Then, according to the continuous definition (Eq. 3), the elements of the structure tensor J can be computed from the data matrix D (Eq. 2):</p><formula xml:id="formula_6">J pq = m ∑ i=1 w i D ip D iq .<label>(6)</label></formula><p>Because the 3x3 tensor J is symmetric, we only need to compute 6 products ( d p d q ) pq , p ≤ q at each pixel location. The weights w i are usually chosen to be the binomial coefficients. Thus, we obtain J by applying a binomial filter B to each of the 6 products. The filter operates on a 3 2 or 5 2 stencil in the spatial domain, i.e. m = 9 or m = 25. The computational cost can be further reduced by exploiting the separability of the filters D and B.</p><p>For the diagonalization of J we use the standard Jacobi method since the improved accuracy of the modified method from <ref type="bibr" target="#b12">[12]</ref> is not directly transferable to graphics hardware, which implements division with reciprocals and uses only an approximate square root function. We perform the following iterations:</p><formula xml:id="formula_7">J 0 := J, V 0 := 1 1 , J k+1 := G k J k G k , V k+1 := V k G k , G k p k p k G k p k q k G k q k p k G k q k q k := c k s k −s k c k , for other pq : G k pq := 1 1 pq , c k := (1 + t k ) − 1 2 , s k := c k • t k , t k := sgn(τ k ) |τ k | √ 1+τ 2 k , τ k := J k q k q k − J k p k p k 2 J k p k q k .<label>(7)</label></formula><p>We use a cyclic pivot strategy, i.e. the matrix index (p k , q k ) runs cyclically over the off-diagonal matrix indices {(p, q)|p &lt; q}. With growing k the diagonal of J k converges to the eigenvalues and V k to the eigenvectors of J.</p><p>The estimation of the full optical flow field f is only possible if no aperture problem is present <ref type="bibr" target="#b20">[20]</ref>. This is equivalent to requiring that rank J = 2. By analyzing the eigenvalues of J a coherence measure c e can be computed, indicating regions where full motion can be derived. This coherence measure is given by</p><formula xml:id="formula_8">c e = λ 2 − λ 3 λ 2 + λ 3 ,<label>(8)</label></formula><p>where λ 3 and λ 2 are the smallest and second smallest eigenvalues, respectively. In natural image sequences large areas with negligible spatiotemporal gradients may be present. Since the trace of a matrix is invariant under rotation, trace J presents a good measure for these areas. By only computing the eigensystem of J at locations where the trace is above a certain threshold, unnecessary computational cost is avoided. We refine this approach by treating the diagonal elements of spatial and temporal gradients separately, i.e. we require</p><formula xml:id="formula_9">J xx + J yy &gt; τ s (9) J tt &gt; τ t .<label>(10)</label></formula><p>This condition is not fully rotationally invariant anymore, but allows a much better detection of motion irrelevant regions. In our application concerned with the real-time presentation of selected motion features rather than ultimate precision in the estimation we can further reduce the computational load without significant loss of accuracy. First, we reduce the spatial resolution of the images with a down-sampling step. This is legitimate since in a real-time display the user is not able to draw any information from a single pixel anyway, and we often even apply a smoothing step for the visualization of the motion (Section 3.4). After the computation the images are scaled up again for display. The down-sampling is not critical as long as the texture information, which is crucial for the diversification of the structure tensor elements, is not lost. Typically we scale down the VGA format (640x480) to 320x240.</p><p>For frame rates higher than 25Hz the temporal resolution of the image sequences is reduced. To avoid temporal aliasing the regularized gradients still use the full temporal resolution and only the time intensive eigenvalue analysis skips intermediate images. Thus, artefacts that would be introduced by a mere sub-sampling are eliminated. At the same time a significant speed up is achieved.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">VISUALIZATION</head><p>In this section we follow the visualization process from the raw velocities to the display of motion features in the image sequence. <ref type="figure">Figure 1</ref> accompanies the explanation of the individual steps of this process.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Coloring</head><p>From the motion estimation we obtain an image with the estimated x and y velocities (Eq. 5). In <ref type="figure">Figure 1a</ref> we see the modulus of the velocity as intensity. Visual representation of vector fields is an extensive topic of its own. However, in real-time image sequences there is little time for computation and the user has only a fraction of a second to perceive and understand the images. A reliable method for conveying a qualitative picture of the motion is to use color. Color is especially useful to catch the eye of the observer in an otherwise gray image <ref type="bibr" target="#b38">[38]</ref>.</p><p>We use a 2D color map to represent the motion field. Theoretically each location in the color map is assigned a different color, such that all directions can be unambiguously distinguished, but it is illusionary to think that this information can correctly be interpreted in real-time. It is more advisable to adapt the color map to the application in mind. For the test sequences of walking people we use a map which helps to distinguish the differences in x velocity, with the y axis being poorly represented <ref type="figure">(Figure 2a</ref>). <ref type="figure">Figure  2b</ref> shows a map which represents all directions equally well. However, this color richness can be often more confusing than helpful and so for the medical data sets we use either a rainbow encoding of the velocity modulus <ref type="figure">(Figure 2c</ref>) or even a single color and rely on the fading explained below to better convey the motion. From the implementational point of view any texture with a color map could be used. <ref type="figure">Figure 1b</ref> is an image of the test sequence after the first coloring step.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Blending</head><p>The motion estimator works adaptively only on these regions which yield a sufficiently pronounced structure tensor (Eqs. 9,10). This saves a lot of computation time in typical sequences as can be seen in <ref type="figure">Figure 1c</ref>, where the uncomputed area is displayed in black. Despite the air irritations visible in 1b, most of the background is omitted upon Equation <ref type="formula" target="#formula_9">10</ref>, while the homogeneous black in the trousers violates Equation <ref type="bibr" target="#b9">(9)</ref>. Areas with a strong aperture problem are also masked out (Eq. 8). For visualization purposes this empty area can be used to blend in the original image sequence <ref type="figure">(Figure 1d</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Region of Interest</head><p>In general the motion field contains velocities of various scales and in a given application we are usually only interested in a small subset of them. Also at spatial and temporal (very fast motion) discontinuities we can still obtain erroneous results despite the culling based on the quality measure (Eq. 8). Therefore, we allow to specify the region of interest on the velocity modulus or an axis through the center of the color map to select velocities upon the intensity in a certain direction, e.g. the x direction in the test sequence. In <ref type="figure">Figure 1e</ref> we have tried to pronounce the faster moving person in this way. But we see that the arms and legs of the others are moving at an even higher velocity. We need additional post-processing to distinguish among the velocity regions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Smoothing</head><p>The previous selector determines the visible value range of the velocities. This produces regions of similar velocity but different size.</p><p>We can use their size and form as a criteria to differentiate between them. For this purpose we smooth the characteristic function of the selected regions. By thresholding the obtained values we can select the spatial scale of the motion regions. The preference of this process for regions expanded in a certain direction can be influenced by changing the weights of the smoothing mask. For the elimination of small disjoint regions only the values of the smoothed characteristic function are relevant. But for a nicer visual representation the scheme applies the smoothing also to the velocities themselves. <ref type="figure">Figures 1f and g</ref> show the results after the application of 3 and 5 smoothing steps respectively. In the sequence from which <ref type="figure">Figure 1g</ref> has been extracted only the faster moving person is marked by the display of the motion region. All other motion regions, though similar or even higher in velocity, are masked out. This masking is very general and does not require any knowledge about the objects or type of motion. However, if this knowledge is present it could help to provide even finer feature distinctions. In future, we will therefore consider the integration of one of the many motion segmentation techniques which can incorporate such a-priori information.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Fading</head><p>In some cases we are not only interested in the display of the current motion field, but want also to visualize the regions already effected by previous motion. In angiography, for example, the flow of blood marked by a contrast agent is of great interest to the physician. But the motion estimator can only compute velocities at the front of the in-or outflowing agent. Without further processing the visualization of these velocities results in a confusingly fast rush of colors through the image sequence. Such sequences have also a lower temporal resolution, so that the motion estimates at any individual time point are not as reliable as their weighted integration.</p><p>During the streaming of the sequence we record for the each pixel location the point in time at which it represented a non zero velocity. This information is used to display a fading of the recorded motion. <ref type="figure">Figure 8</ref> shows the benefit of this visualization method.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">HARDWARE IMPLEMENTATION</head><p>Graphics processors achieve a high throughput for large data volumes by applying a data-stream-based computing paradigm <ref type="bibr" target="#b17">[17]</ref>. In particular, this paradigm deals well with the memory gap <ref type="bibr" target="#b42">[42]</ref>, the mismatch of memory and processor performance. Among FPGAs, reconfigurable computing arrays, Processor-in-Memory or stream architectures, graphics processors are neither the most flexible nor powerful devices exploiting data-stream-based processing, but they offer an unrivaled price-performance ratio and a comparably easy high level language access to their functionality. This means that they are the platform of choice for an inexpensive image sequence processing tool.</p><p>In the following we describe first the control of the data-flow and then the configuration of the processing elements in the graphics pipeline for our application.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Data-flow</head><p>First we assume that the individual images of the image sequence lie in main memory. The images are transported one by one to the graphics card with an asynchronous mechanism (pixel buffer objects), which allows the card to continue the current computation during the transfer. For this we use several circular buffers on the card, and the image loads to a buffer position which is not needed in the concurrent computation. Each image is read only once, so that the AGP bus provides sufficient bandwidth in comparison to the number of on-card operations as not to decrease the overall performance. Because all steps of the algorithm are performed on the card, no additional memory transfers are needed. The final result is displayed directly from the graphics memory onto the screen.</p><p>On the graphics card the images are represented as pbuffers. These buffers are 2D data arrays which can serve either as a source (texture) or a destination of data streams (see <ref type="figure">Figure 3)</ref>. The operations of the algorithm are performed by streaming the texture operands through the appropriately configured graphics pipeline (Section 4.2) to a target pbuffer. The target pbuffer can then be used as a texture operand in the succeeding operation. Because several such passes are required by the algorithm, we use mainly floating point pbuffers to retain sufficient precision in intermediate computations.</p><p>As long as the same operation is applied to all pixels of the image sequence, the implementation is very fast, as the efficiency of the pipeline grows with the size of the streams. The handling of adaptive exclusion of certain regions from computation requires the use of smaller streams. This process is described in Section 4.3.</p><p>Currently we assume that the image sequence is stored in the main memory. Since we need to read each image only once, the algorithm would work just the same if the images arrived from an external source at a certain memory address one by one. In fact, in a future version we plan to decode a video stream in real-time on the CPU, while the graphics processor works on the motion estimation and visualization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Pipeline Configuration</head><p>The DX9 graphics pipeline contains two freely programmable parts, the vertex and the fragment processor <ref type="figure">(Figure 3)</ref>. The vertex processor mainly manipulates the input vertex and texture coordinates and vertex color. The hard-wired rasterizer interpolates these values for each pixel in the primitive which is currently being drawn, e.g. a triangle. The interpolated values associated with one pixel location are called a fragment. They are manipulated by the fragment processor. The fragment processor combines the fragment data with additional values from up to 16 textures to determine the output value for the current pixel.</p><p>In image based problems like ours the fragment processor bears most of the computational burden. We use the vertex processor only for the generation of texture coordinates to the neighboring values in a texture, whereas each step in the algorithm <ref type="figure">(Figure 4</ref>) requires a different configuration of the fragment processor. For the design of the configurations we use Cg <ref type="bibr" target="#b35">[35]</ref>, a C-like high level graphics programming language.</p><p>The motion estimation consists of two major tasks: the assembly of the structure tensor and its diagonalization. The assembly of J  <ref type="figure">Figure 4</ref>: Overview of one iteration of the main algorithm. Basically each line corresponds to the configuration of the fragment processor with the corresponding fragment program and the streaming of the texture operands through the so configured graphics pipeline (see <ref type="figure">Figure 3</ref>). Some operations require several passes with slightly different configurations, e.g. smoothing in x and y direction, while others can be executed in a single configuration (eigenvector analysis of the structure tensor).</p><p>is implemented according to Equation (6) as several passes with configurations for the binomial B and the optimized Sobel D filter, and the products <ref type="figure">( d p d q )</ref> pq , p ≤ q. Because the filters are separable, separate passes for the x, y and t direction save a lot of computation, e.g. the 5 tab optimized Sobel filter requires only 15 multiplications and additions although 5 3 = 125 different values are involved. The savings are smaller for the binomial filter which operates on 2D stencils only in the spatial domain.</p><p>The eigenvector analysis executes in a single pass with a large configuration which performs a constant number (typically 9) of cyclic Jacobi rotations (Eq. 7) on J. The approximate eigenvectors and eigenvalues are used to estimate the motion (Eq. 5) and the coherence measure (Eq. 8). We store the symmetric 3x3 matrices J k as two and the transformation matrices V k as three 3-vectors, such that the rotations can be vectorized into the internal 4-vector operations of graphics hardware.</p><p>The visualization pipeline contains also an iterative part (hierarchical smoothing) and a long configuration for the main visualization program (coloring, blending, fading). The hierarchical smoother is a series of filter applications. The separable filters have the form (σ y , 1 − 2σ y , σ y ) (σ x , 1 − 2σ x , σ x ). By choosing σ x = σ y we can favor the smoothing in one direction. To quickly incorporate information from farther regions in the smoothing process we use a multi-grid approach, but without actually generating smaller grids. Working on the next higher level means multiplying the offsets to the stencil positions with 2 such that we retrieve the values which would have been restricted to the next higher level in a standard multi-grid, e.g. the x mask (σ 0</p><p>x , 1</p><formula xml:id="formula_10">− 2σ 0 x , σ 0 x ) on level 0 becomes (σ 1 x , 0, 1 − 2σ 1 x , 0, σ 1 x ) on level 1.</formula><p>Certainly, we lose the computational savings of smaller grids, but because we operate on all pixels in the same manner, we have the advantage that the results are more stable under translation. This is especially important since the realtime requirements allow only very few iterations. In the standard setting we smooth only once on each level. So after 3 or 5 smoothing steps already a 15x15 or 63x63 neighborhood contributes to the smoothing of each pixel, respectively.</p><p>The eigenvector analysis of the tensor is by far the longest and thus most demanding fragment program with almost 300 assembly operations for 9 Jacobi rotations and the motion estimation. The main visualization program (coloring, blending, fading) is the next larger with approx. 50 operations. Most configurations have less than 10. Therefore, it makes sense to design an adaptive scheme which skips the eigenvector analysis for irrelevant data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Adaptivity</head><p>By analyzing the structure tensor (Eq. 6) we can save on the computation of the eigenvectors in areas which do not contribute significantly to the motion field (Eqs. 9,10). However, the introduction of efficient dynamic adaptive processing in graphics hardware is not straight forward. There exist per-fragment tests in the graphics pipeline which skip further processing depending on predefined masks and values of the fragments, but these are not very efficient, because they cannot exclude larger areas from processing at once. The fragment processor can also discard fragments, but in such a case the whole fragment program is still executed and only the final result is discarded. Significant speedup can currently be only obtained by culling areas on the vertex level.</p><p>The image is divided into tiles, each of which generates a data stream much smaller than the whole image. Smaller streams reduce the efficiency of the pipeline, but this effect is compensated to some extent by the graphics driver, which can efficiently catenate the individual data streams if their defining geometry is given in advance, ideally in a server sided vertex buffer object. A classification step determines which tiles need to be processed further and which can be skipped in the following. The classification step can be performed by combining the data of each tile to a single value and retrieving the values of all tiles with a single read-back to the main memory as in <ref type="bibr" target="#b30">[30]</ref>, where this technique has been introduced.</p><p>We use a different classification step which avoids the read-back by exploiting the occlusion test functionality. The test counts the number of passed fragments at a late stage in the graphics pipeline. The counters can asynchronously be retrieved from the graphics driver, i.e. they do not stall the ongoing computation. By discarding fragments upon the conditions in Equations (9),(10), we thus easily obtain the number of motion relevant pixels in each tile, and can skip its subsequent processing if the number is below say 5%. The transition from <ref type="figure">Figure 1b</ref> to c demonstrates the savings. The tile structure becomes visible if one skips tiles with too many relevant pixels, e.g. 90% in <ref type="figure">Figure 5</ref>. For entire images the efficiency of the occlusion test has already been demonstrated in <ref type="bibr" target="#b14">[14]</ref>. See also <ref type="bibr" target="#b10">[10]</ref> for a similar tile based testing. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RESULTS</head><p>We use two types of image sequences as examples: test sequences of walking people to demonstrate the tool's ability to distinguish similar motion features, and angiography sequences for the enhancement of blood flow.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Motion Features</head><p>The sequences with walking people were recorded in VGA (640x480) format at 100Hz. The computation takes place on 320x240 images. The eigenvector analysis runs on every fourth image resulting in a real-time requirement of 25Hz output frequency. Section 5.3 discusses the performance results. <ref type="figure">Figure 1</ref>, discussed in Section 3, shows the individual steps which made it possible to visually extract the feature of the slightly faster moving person despite smaller regions (arms, legs) of higher velocity. <ref type="figure">Figure 6</ref> shows another sequence of the same kind. In the above examples the parameters must be set carefully to obtain the visual distinction with such clarity. But it is obvious that a higher velocity difference requires only a rough selection of the visualization parameters. For example, for the task of marking persons who move in the wrong direction only the sign of admissible x velocities must be set correctly <ref type="figure">(Figure 7)</ref>.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Flow Enhancement</head><p>The angiography sequences have a resolution of 1024x1024 at 20Hz. The computation takes place on 256x256 images, without a reduction of the temporal axis.</p><p>The first example shows the blood flow in a kidney <ref type="figure">(Figure 8</ref>). We see how the fading of the color helps to understand the distribution of the motion. In the second example we record the motion regions extending over a certain spatial scale to help in finding turbulent areas in the vascular system <ref type="figure" target="#fig_3">(Figure 9</ref>). <ref type="figure">Figure 10</ref> shows performance results computed with a GeForceFX 5800 Ultra (GF5800U) and different Pentium 4 (P4) processors. The software implementation was tuned to exploit cache coherency and the SSE operations. We achieve a 4.5 and 2.8 speedup factor against the older and newer P4 system respectively. We see that the newer P4 executes 1.6 times faster than the older one, which can be attributed both to the higher clock frequency and the faster FSB. Similarly the graphics processors would benefit from both a wider data bus and more or faster execution units. For our algorithm the latter is more important, because the performance of the very long assembly program for the eigenvector analysis is bound by the capability of the fragment processor. Therefore, we expect a quadrupled speedup on the newest generation of graphics hardware (Radeon X800XT, GeForce 6800 Ultra), which executes four to eight times more arithmetic operations in the fragment processor than the GF5800U. In practice this would mean operating in real-time on VGA image sequences.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Performance</head><p>The algorithm could also benefit from the new feature of dynamic branching in graphics hardware. For the performance comparison a constant number of cyclic Jacobi rotations has been executed in all cases. But in a software program the choice of the pivot elements and the overall number of rotations usually takes place dynamically depending on a user given tolerance. This allows to exploit the iterative nature of the Jacobi method (in contrast to QR decomposition) and iterate longer when the diagonalization of J is difficult or terminate faster for easy cases.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSIONS</head><p>We have presented a tool for the real-time motion estimation and visualization of image sequences. The precise, dense motion estimation allows to visually distinguish even very similar features through appropriate post-processing steps. The visualization pipeline contains several stages which can be easily controlled to serve the needs of different applications. Other hardware systems perform even more time consuming motion analysis in real-time but at a much higher price. For our tool a simple camera and a standard 4.6 2.8 1.6 <ref type="figure">Figure 7</ref> 4.7 2.8 1.7 <ref type="figure">Figure 10</ref>: Comparison of the motion estimation performance of a Pentium 4-2.0GHz FSB400, Pentium 4-2.8GHz FSB800 and the GeForceFX 5800 Ultra 500MHz / 500MHz (128bit DDR) graphics processor. The fourth bar shows the graphics timings for the entire process, i.e. motion estimation and visualization. All times are given in seconds.</p><p>PC with a DX9 graphics card suffice, because we make efficient use of its data-stream-processing capabilities. The current version implements the basic motion estimation based on the BCCE. This implies that gray values are modeled to remain constant on their trajectory. We want to incorporate further extensions which allow a gray value change as described by an appropriate partial differential equation <ref type="bibr" target="#b18">[18]</ref>. In real world sequences another problem often encountered is multiple or transparent motion. The framework presented in this paper could also be extended to incorporate this type of motion <ref type="bibr" target="#b34">[34]</ref>.</p><p>The unambiguous marking of objects with a certain motion feature suggests some sort of artificial intelligence in the algorithm. But currently the visual marks are based solely on the motion values. The inclusion of a-priori knowledge about the objects in the images could help to resolve even more difficult situations than those in the presented examples. From the implementational point of view we want to involve the CPU in the processing by decoding a camera's video stream and reusing its coarse motion estimators in real-time, while the graphics processor executes the precise motion estimation and visualization.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :Figure 2 :</head><label>12</label><figDesc>The steps of the visualization pipeline described in Section 3. Every fifth frame of the sequence is shown. Color maps used for the coloring of the velocities</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 5 :Figure 6 :</head><label>56</label><figDesc>The visible tiling in the adaptive scheme for much too aggressive culling. InFigure 1cthe standard setting is used. a b Visual emphasis of faster moving persons. In the upper row only the slightly brighter green conveys the qualitative velocity difference. Below the visual mark makes it much clearer.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 7 :Figure 8 :</head><label>78</label><figDesc>Marking of people who move in the wrong direction. Despite the occlusion the visual emphasis is very accurate. High velocities detected in the blood flow emphasized by a color fading. At the time point of frame b no velocities can be detected, such that without the fading the frame would not show any color at all.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 9 :</head><label>9</label><figDesc>Detected regions of wide-stretched motion in the vascular system. Color indicates the modulus of velocity.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Speedups</head><label></label><figDesc>Sequence GF5800/P4-2.0 GF5800/P4-2.8 P4-2.8/P4-2</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>Figure 3: A simple diagram of the DX9 graphics pipeline. Light gray represents data containers, dark gray processing units. In each pass a different texture can serve as the target pbuffer for the output data stream.</figDesc><table><row><cell>vertex</cell><cell>Vertex Processor</cell><cell>vertex</cell><cell>Rasterizer</cell><cell></cell><cell></cell></row><row><cell>data</cell><cell></cell><cell>data</cell><cell>fragments</cell><cell>Processor Fragment</cell><cell>values</cell><cell>pbuffer</cell></row><row><cell></cell><cell></cell><cell>textures</cell><cell>values</cell><cell></cell><cell></cell></row><row><cell cols="3">motion estimation {</cell><cell></cell><cell></cell><cell></cell></row><row><cell cols="6">start loading of the image for the next iteration</cell></row><row><cell cols="4">sample down current image</cell><cell></cell><cell></cell></row><row><cell cols="6">assemble the weighted structure tensor J (Eq. 6) {</cell></row><row><cell></cell><cell cols="5">estimate the gradient with optimized Sobel filter D</cell></row><row><cell></cell><cell cols="6">compute the products of gradient components ( d p d q ) pq</cell></row><row><cell></cell><cell cols="3">apply the binomial filter B</cell><cell></cell><cell></cell></row><row><cell>}</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell cols="6">classify irrelevant regions for culling (Eqs. 9,10)</cell></row><row><cell cols="7">perform an eigenvector analysis of the tensor J(Eq. 4) {</cell></row><row><cell></cell><cell cols="5">diagonalize the tensor with Jacobi rotations (Eq. 7)</cell></row><row><cell></cell><cell cols="4">compute the coherence measure c e (Eq. 8)</cell><cell></cell></row><row><cell></cell><cell cols="3">estimate the motion p (Eq. 5)</cell><cell></cell><cell></cell></row><row><cell>}</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>}</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell cols="2">visualization {</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell cols="4">select a range of velocities</cell><cell></cell><cell></cell></row><row><cell cols="6">smooth the selected motion regions hierarchically</cell></row><row><cell cols="4">record the selected motion areas</cell><cell></cell><cell></cell></row><row><cell cols="5">visualize the result: coloring, blending, fading</cell><cell></cell></row><row><cell cols="4">display the result at the desired scale</cell><cell></cell><cell></cell></row><row><cell>}</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>This work was partially funded by the DFG within the special research program on time sequence analysis and image processing. We want to thank the students of the research group digital image processing of the IWR, Heidelberg for help in creating the image sequences. Furthermore, we thank Stefan Böhm from Siemens Medical Solutions and Joachim Hornegger from the University Erlangen-Nürnberg for support with the medical data sets.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Performance of optical flow techniques</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">L</forename><surname>Barron</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Fleet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Beauchemin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal of Computer Vision</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="43" to="77" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">The computation of optical flow</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">S</forename><surname>Beauchemin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">L</forename><surname>Barron</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computing Surveys</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="433" to="467" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Multidimensional orientation estimation with application to texture analysis and optical flow</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bign</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">H</forename><surname>Granlund</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wiklund</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Pattern Analysis and Machine Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="775" to="790" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Sparse matrix solvers on the gpu: Conjugate gradients and multigrid</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jeff</forename><surname>Bolz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ian</forename><surname>Farmer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eitan</forename><surname>Grinspun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Schröder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SIGGRAPH 2003</title>
+		<meeting>SIGGRAPH 2003</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Interactive visualization of timeresolved contrast-enhanced magnetic resonance angiography (CE-MRA)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ethan</forename><surname>Brodsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Walter</forename><surname>Block</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Computing optical flow from an overconstrained system of linear algebraic equations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Campani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Verri</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ICCV</title>
+		<meeting><address><addrLine>Osaka</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="page" from="22" to="26" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Real-time quantized optical flow</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Camus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Journal of Real-Time Imaging</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="71" to="86" />
+			<date type="published" when="1997" />
+		</imprint>
+		<respStmt>
+			<orgName>Special Issue on Real-Time Motion Analysis</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Special section on video surveillance</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rama</forename><surname>Chellappa</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title/>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Pattern Analysis and Machine Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="745" to="746" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Fast and accurate color image processing using 3d graphics cards</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philippe</forename><surname>Colantoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nabil</forename><surname>Boukala</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jérôme</forename><surname>Da Rugna</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Vision, Modeling and Visualization</title>
+		<meeting>Vision, Modeling and Visualization</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Radiosity on graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Coombe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><forename type="middle">J</forename><surname>Harris</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anselmo</forename><surname>Lastra</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Graphics Interface</title>
+		<meeting>Graphics Interface</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+	<note>to appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Video visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gareth</forename><surname>Daniel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Min</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization 2003</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="409" to="416" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Implementation of Jacobi rotations for accurate singular value computation in floating point arithmetic</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Drmac</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal of Scientific Computing</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="1200" to="1222" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Velocity determination in scenes containing several moving objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Fennema</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Thompson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics and Image Processing</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="301" to="315" />
+			<date type="published" when="1979" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">A multigrid solver for boundary-value problems using programmable graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nolan</forename><surname>Goodnight</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cliff</forename><surname>Woolley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gregory</forename><surname>Lewin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Luebke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Greg</forename><surname>Humphreys</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics/SIGGRAPH Workshop on Graphics Hardware</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">GPGPU -general purpose computation using graphics hardware</title>
+		<ptr target="http://www.gpgpu.org" />
+		<editor>/. Mark J. Harris</editor>
+		<imprint/>
+		<respStmt>
+			<orgName>GPGPU</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Fast and flexible high-quality texture filtering with tiled highresolution filters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Markus</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ivan</forename><surname>Viola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Theußl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Helwig</forename><surname>Hauser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Vision, Modeling, and Visualization 2002</title>
+		<meeting>Vision, Modeling, and Visualization 2002</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Data-stream-based computing: Models and architectural resources</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Reiner</forename><surname>Hartenstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Microelectronics, Devices and Materials (MIDEM 2003)</title>
+		<meeting><address><addrLine>Ptuj, Slovenia</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2003-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Computing optical flow with physical models of brightness variation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauecker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Fleet</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CVPR&apos;00</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="volume">2</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauecker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Spies</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Motion</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Jhne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauecker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Geiler</surname></persName>
+		</author>
+		<title level="m">Handbook of Computer Vision and Applications</title>
+		<imprint>
+			<publisher>Academic Press</publisher>
+			<date type="published" when="1999" />
+			<biblScope unit="volume">2</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Computations underlying the measurement of visual motion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">C</forename><surname>Hildreth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="page" from="309" to="354" />
+			<date type="published" when="1984" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Accelerating 3d convolution using graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization &apos;99</title>
+		<meeting>Visualization &apos;99</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="471" to="474" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Determining optical flow</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">K P</forename><surname>Horn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Schunk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Artificial Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="page" from="185" to="204" />
+			<date type="published" when="1981" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title/>
+		<idno>2003. ISBN 0-7695-1971-7</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Society</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Principles of filter design</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Jhne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Scharr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">; B</forename><surname>Krkel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauecker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Geiler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Handbook of Computer Vision and Applications</title>
+		<imprint>
+			<publisher>Academic Press</publisher>
+			<date type="published" when="1999" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="125" to="151" />
+		</imprint>
+	</monogr>
+	<note>Jhne</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">A review of vessel extraction techniques and algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cemil</forename><surname>Kirbas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">H</forename><surname>Francis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Quek</surname></persName>
+		</author>
+		<ptr target="http://vislab.cs.wright.edu/review/extraction.html" />
+	</analytic>
+	<monogr>
+		<title level="m">Vision Interfaces and Systems Laboratory (VISLab)</title>
+		<meeting><address><addrLine>Dayton, Ohio</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2002-11" />
+		</imprint>
+		<respStmt>
+			<orgName>Wright State University</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Based Biometrie Person Authentication</title>
+		<idno>2003. ISBN 3-540-40302-7</idno>
+	</analytic>
+	<monogr>
+		<title level="m">4th International Conference</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Representing local structure using tensors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Knutsson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The 6th Scandinavian Conference on Image Analysis</title>
+		<meeting><address><addrLine>Oulu, Finland</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Andrés Bruhn, and Joachim Weickert. Domain decomposition for parallel variational optical flow computation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Timo</forename><surname>Kohlberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christoph</forename><surname>Schnörr</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of DAGM-Symposium</title>
+		<meeting>DAGM-Symposium</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="196" to="203" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Linear algebra operators for gpu implementation of numerical algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jens</forename><surname>Krueger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ruediger</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics (TOG)</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="908" to="916" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Interactive visualization and deformation of level set surfaces using graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lefohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kniss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Handen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Whitaker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization</title>
+		<meeting>Visualization</meeting>
+		<imprint>
+			<publisher>IEEE CS Press</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="73" to="82" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Statistical change detection with moments under time-varying illumination</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S.-Z</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C.-W</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chang</forename><forename type="middle">S</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Image Processing</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="page" from="1258" to="1268" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">An iterative image registration technique with an application to stereo vision</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Lucas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kanade</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">DARPA Image Understanding Workshop</title>
+		<imprint>
+			<date type="published" when="1981" />
+			<biblScope unit="page" from="121" to="130" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">FPGA processor for real-time optical flow computation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Selene</forename><surname>Maya-Rueda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miguel</forename><surname>Arias-Estrada</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings FPL 2003</title>
+		<meeting>FPL 2003</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="1103" to="1106" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Analytic solutions for multiple motions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Mota</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Stuke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Barth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of International Conference on Image Processing</title>
+		<meeting>of International Conference on Image essing</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="917" to="920" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Cg programming language</title>
+		<imprint/>
+		<respStmt>
+			<orgName>NVIDIA</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Teukolsky</surname></persName>
+		</author>
+		<title level="m">Numerical Recipes in C. Cambridge University Press</title>
+		<meeting><address><addrLine>Cambridge, MA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+	<note>2 edition</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Generalized distance transforms and skeletons in graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Robert</forename><surname>Strzodka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alexandru</forename><surname>Telea</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EG/IEEE TCVG Symposium on Visualization VisSym &apos;04</title>
+		<meeting>EG/IEEE TCVG Symposium on Visualization VisSym &apos;04</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+		<title level="m" type="main">Effective Color Displays</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Travis</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1991" />
+			<publisher>Academic Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Image based flow visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Jarke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Van Wijk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings ACM SIGGRAPH 2002</title>
+		<meeting>ACM SIGGRAPH 2002</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Level set based integration of segmentation and computational fluid dynamics for flow correction in phase contrast angiography</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Masao</forename><surname>Watanabe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ron</forename><surname>Kikinis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carl-Fredrik</forename><surname>Westin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Medical Image Computing and Computer-Assisted Intervention -MICCAI 2002</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">A Texture-Based Framework for Spacetime-Coherent Visualization of Time-Dependent Vector Fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Erlebacher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Procceedings of IEEE Visualization &apos;03</title>
+		<meeting>ceedings of IEEE Visualization &apos;03</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="107" to="114" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">The memory gap (keynote)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Maurice</forename><surname>Wilkes</surname></persName>
+		</author>
+		<ptr target="http://www.ece.neu.edu/conf/wall2k/wilkes1.pdf" />
+	</analytic>
+	<monogr>
+		<title level="m">Solving the Memory Wall Problem Workshop</title>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Mean square slope of the wind-disturbed water surface, their magnitude, directionality, and composition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jin</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Radio Sience</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="37" to="48" />
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Hardware architecture for optical flow estimation in real time</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Aitzol</forename><surname>Zuloaga</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">José</forename><forename type="middle">L</forename><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Joseba</forename><surname>Ezquerra</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings ICIP 1998</title>
+		<meeting>ICIP 1998</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="972" to="976" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

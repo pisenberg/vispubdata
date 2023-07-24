@@ -1,0 +1,666 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Converting Sets of Polygons to Manifold Surfaces by Cutting and Stitching</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">André</forename><surname>Guéziec</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gabriel</forename><surname>Taubin</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Francis</forename><surname>Lazarus</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><surname>Horn</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ibm</forename><forename type="middle">T J</forename><surname>Watson</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Research</forename><surname>Center</surname></persName>
+						</author>
+						<title level="a" type="main">Converting Sets of Polygons to Manifold Surfaces by Cutting and Stitching</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:38+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Polygonal Surface</term>
+					<term>Manifold</term>
+					<term>Cutting</term>
+					<term>Stitching</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Many real-world polygonal surfaces contain topological singularies that represent a challenge for processes such as simplification, compression, smoothing, etc. We present an algorithm for removing such singularities, thus converting non-manifold sets of polygons to manifold polygonal surfaces (orientable if necessary). We identify singular vertices and edges, multiply singular vertices, and cut through singular edges. In an optional stitching phase, we join surface boundary edges that were cut, or whose endpoints are sufficiently close, while guaranteeing that the surface is a manifold. We study two different stitching strategies called &quot;edge pinching&quot; and &quot;edge snapping&quot;; when snapping, special care is required to avoid recreating singularities. The algorithm manipulates the polygon vertex indices (surface topology) and essentially ignores vertex coordinates (surface geometry). Except for the optional stitching, the algorithm has a linear complexity in the number of vertices edges and faces, and require no floating point operation.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Polygonal surfaces are a common choice for representing three dimensional geometric models. Such models are used for generating pictures and animations, and are also used in CAD systems, in Scientific Visualization and Medical Imaging. Many such polygonal surfaces contain topological singularities, (e.g., edges shared by more than two triangles, several triangle fans incident to a single vertex) that represent a challenge for various algorithms that operate exclusively on a manifold surface. A manifold polygonal surface is such that the neighborhood of every vertex can be continuously deformed to a disk (to a half disk at the boundary: see <ref type="bibr">Section 2)</ref>. In fact, this corresponds to an intuitive definition of what a "surface" is, as opposed to an arbitrary collection of polygons.</p><p>In this paper, we essentially ignore the coordinates associated with the surface elements, and we look at the property of being a manifold as a purely topological one. Topological degeneracies can occur by design choice (e.g., vertex merging to avoid duplicating coordinates, or polygon reduction tools), or they can be produced by incorrect algorithms for building surfaces (e.g., iso-surfaces, triangulation of scattered points), or by correct algorithms containing software bugs, etc. Futuroscope Cedex, France, lazarus@sic.univ-poitiers.fr</p><p>Some concrete examples of algorithms that fail on input containing topological singularities are: algorithms for surface subdivision <ref type="bibr" target="#b0">[1]</ref>; algorithms that simplify surfaces ( <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b2">3]</ref>); algorithms for surface compression <ref type="bibr" target="#b3">[4]</ref>; algorithms for progressive transmission (Hoppe <ref type="bibr" target="#b4">[5]</ref> relies on each triangle having no more than three neighbors); algorithms that (scan) convert a polygonal boundary representation of a potential solid for Rapid Prototyping <ref type="bibr" target="#b5">[6]</ref>. Other algorithms yield undesired results when executed on non-manifold input, such as surface smoothing <ref type="bibr" target="#b6">[7]</ref> (see <ref type="bibr">Section 6)</ref>.</p><p>Several approaches are possible:(1) modifying algorithms to handle non-manifold input; (2) trying to understand the source of errors in modeling or CAD packages, and lobbying (and hoping) for such errors to be corrected; (3) developing methods to correct the input. Following the first approach is application-dependent, and probably requires re-defining objectives (beyond just accepting non-manifold input). For instance, a number of surface simplification methods accept non-manifolds, but often they introduce many more degeneracies than those originally present. The second approach has little short term impact and may not be a complete solution in the long term as well (there will always be software bugs).</p><p>We have chosen the third approach. In this paper, we provide the complete description of a novel and efficient method for automatically converting a non-manifold surface to a manifold surface. Although our ideas are conceptually simple, our experience showed that implementing such algorithms without omitting any special case can be complicated and error prone. We assume that the topology of the surface is already built for the most part, and concentrate on removing the singularities. However, we have developed a stitching method (edge snapping) to help build the topology. In general, we assume that the corrections will involve a relatively small number of surface elements. The algorithm is decomposed into two main parts: cutting and stitching. Cutting is a general method for disconnecting the surface topology along a set of marked edges or vertices. We mark singular edges and vertices; an edge is singular if more that two faces are incident to it; a singular vertex is defined in Section 2. In Section 4 we describe two different methods for cutting: a global method and a local method. The global method operates on all the faces and vertices of the surface at once, by first breaking all connections between faces and later joining adjacent faces that share a unmarked edge. The local method operates only on marked vertices and endpoints of marked edges, by counting the number of (unmarked) edge-connected sets of faces incident to a vertex, by multiplying the vertex, and by assigning a different copy of that vertex to each connected set. The global method is more appropriate when there is a large number of topological singularities to correct. The local method is more efficient when there are only few singular elements in a generally correct topology.</p><p>As illustrated in <ref type="figure">Fig. 1</ref>, several manifolds can be mapped to the original non-manifold by identifying vertices. To reduce the number of vertices, holes, or components, the cutting operation is followed by stitching. As defined in <ref type="table">Section 5, stitching consists of   A   B  C1  C2   D1  D2  D3</ref> E1 E2 E3 <ref type="figure">Figure 1</ref>: Converting to a manifold surface: A,B,C: cutting through singular edges; For illustrative purposes, topologically disconnected vertices are shown apart. We implement two stitching strategies: "pinching" edges along the same boundary (D) or "snapping" together edges belonging to different boundaries (E).</p><p>taking two boundary edges and identifying them, while guaranteeing that the surface is a manifold. We have observed that stitching is a delicate operation: for instance, when using the "zipping" method reported in <ref type="bibr" target="#b7">[8]</ref>, singular edges can be created when stitched multiple times. We show examples in Section 6 and provide sample timings. <ref type="figure">Fig. 1</ref> is a diagram illustrating our method. We consider two tetrahedra sharing an edge: we subdivide the surface of the tetrahedra into smaller triangles, resulting in the surface of <ref type="figure">Fig. 1A</ref>. We label singular edges and vertices and color them in red in <ref type="figure">Fig. 1B</ref> (regular edges are orange). After multiplying singular vertices, we have created two disconnected surface components in <ref type="figure">Fig. 1C</ref>, each of which has a boundary of length eight (in green); as explained in Section 4, the three singular vertices in <ref type="figure">Fig. 1B</ref> that are shared by two singular edges are multiplied four times each. The two singular vertices shared by one singular edge only are multiplied twice. After stitching along the same boundaries (or "pinching"), we have created in <ref type="figure">Fig. 1D</ref> two disconnected solids. Instead, when stiching along different boundaries (or "snapping"), we create <ref type="figure">Fig. 1E</ref> a single surface without boundaries. All three surfaces C, D, and E are manifolds with the same geometrical realization as A.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Polygonal Surfaces</head><p>For our purposes, a (polygonal) surface Sfv i g; ffjg is defined with a set of vertices fv i g and a set of faces ffjg. Each vertex has coordinates in R 3 . Each face is specified with a tuple of at least three vertex indices. The face is said to be incident on such vertices. A pair (vertex, incident face) is called a corner. Each vertex must have at least one incident face. The vertex indices in a face must all be different. Otherwise the face is considered invalid. An edge of a face is defined as a pair vi; v j of consecutive vertices of that face, modulo circular permutation. The face is said to be incident on the edge, and the edge incident on the vertices vi and vj. vi and vj are also said to be adjacent vertices. Edges sharing a vertex and faces sharing an edge are said to be adjacent edges and faces. There are two possible orderings for the vertices of a face modulo We call the subset of faces of ffjg that share a vertex v the star of v, noted v ? . The number of faces in v ? is called the valence of the vertex v. To form the link of a vertex, we first take all edges belonging to faces in v ? , and then remove the edges incident on v. The link is a graph made by linking up the remaining edges. See <ref type="figure">Figure 2</ref>. A regular vertex has a link formed of one polygonal curve; if the link is closed, then it must be of length at least three; otherwise the vertex is a singular vertex. We call an edge incident on one single face a boundary edge. A regular vertex incident to a boundary edge is called a boundary vertex. These cases are illustrated in <ref type="figure">Fig. 2</ref>. A surface is a manifold if each vertex is a regular vertex; otherwise it is a non-manifold surface.</p><formula xml:id="formula_0">E v v* v</formula><p>Two adjacent faces sharing an edge e have a compatible orientation if the two vertices of e listed in one face appear in opposite order in the other face. The surface is orientable if each face can be oriented such that any two adjacent triangles have a compatible orientation. An orientable manifold surface such that its faces are all oriented in a compatible way is said to be oriented. An orientable manifold surface can be oriented in only two possible ways.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Conversion of Non-Manifold Surfaces</head><p>To remove topological singularities, our method begins by cutting, or disconnecting, the surface along singular edges and at singular vertices. After this operation, which is described in more detail in Section 4, by construction each vertex has a star formed of a single component of faces connected through regular edges, meaning that the surface is a manifold according to our definition. A number of pre-processing steps may be necessary in the presence of invalid faces, and to accomodate our two different methods of cutting (locally or globally). Also, as mentioned above, stitching may be useful to reduce the number of duplicated vertices, or to build the topology from an input consisting of disconnected polygons. The details of the conversion steps are as follows:</p><p>Step I: Processing Invalid Faces Faces of length three (triangles) can only be invalid if they are geometrically degenerate, with two or more coincident vertices; there are more cases for faces of length four or higher as illustrated in <ref type="figure">Fig. 3</ref>: faces can be invalid because vertices are duplicated <ref type="figure">(Fig. 3A)</ref>. In this case, the global cutting method automatically produces the polygon marked in green in <ref type="figure">Fig. 3A</ref>. Another possibility for an invalid face is to be incident on the same edge multiple times <ref type="figure">(Fig. 3B</ref>). In this case, we mark the edge and for each endpoint, we inquire whether there is another marked edge of the invalid face incident on that endpoint; if this is e B A <ref type="figure">Figure 3</ref>: Invalid faces. A: duplicate vertex; the global method automatically produces the correction shown in green. B: face incident on the same edge e multiple times. not the case, we mark an incident edge; marked edges are shown in red in <ref type="figure">Fig. 3B</ref>; the global method produces the solution marked in green in <ref type="figure">Fig. 3B</ref>.</p><p>These methods do not apply when using the local method: in practice in this case we have simply eliminated invalid faces.</p><p>Step II Singular edges are marked when building the edge data structure, as the edges that are shared by at least three different faces.</p><p>Step III: Pre-Processing for the Local Method We label standalone vertices when looping through the face list by counting the number of face incidences (valence) for each vertex. If the number of faces is less than the valence, then at least one additional connected component exists, so the vertex is an isolated singular vertex. We eliminate the standalone vertices, renumber the remaining vertices, and update the vertex indices in faces in a second loop through the face list.</p><p>Isolated singular vertices must be marked. To determine whether a vertex v is singular, if it is not an endpoint of a singular edge, we attempt to build its star v ? by pivoting about v, starting with any "first" face f incident on v. To pivot about v, we locate in f an edge e incident on v. From the edge data structure, we infer a face g that together with f shares e; we then locate in g an edge incident on v different from e. We continue until we encounter a boundary edge or the first face f. We then count the number of faces that were visited and compare this number to the valence of v. Note that this method also works if the faces are not consistently oriented.</p><p>Step IV We apply either the global cutting method on the marked edges or the local cutting method on the marked edges and vertices.</p><p>Step V (Optional): Building an Oriented Manifold We must verify that faces incident on each edge are consistently oriented. After cutting through singular edges, we propagate the orientation of faces of the resulting manifold using a spanning tree of faces. The number of required operations is proportional to the total number of faces. After propagating the orientation, some edges may have inconsistently oriented incident faces. In a second step, we mark these edges and cut along them ( fewer edges are cut in this way as opposed to marking and cutting edges before propagating face orientations).</p><p>Step VI (Optional) We perform some stitching as described in Section 5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Cutting</head><p>As illustrated in Figs. 4 and 6 cutting consists of disconnecting the surface along a collection of marked edges or vertices: multiple copies of vertices are created and assigned new indices; vertex indices in faces are modified to refer to the proper copy 1 . We describe a "local" and a "global" methods for cutting; we mark singular edges and vertices and cut through them to obtain a manifold.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Local Method for Cutting</head><p>We call this method local because it only operates on selected vertices and faces. Starting with a list of marked edges, we mark vertices that are endpoints of marked edges. Additional vertices may</p><p>1 A rigourous definition of cutting (and stitching) can be found in Agoston <ref type="bibr" target="#b8">[9]</ref>    be marked as described below. We visit each marked vertex in turn;</p><formula xml:id="formula_1">0 g 0 f f 0 f f f f f 1 4 S 5 2 3 v v v v v v v v v v</formula><formula xml:id="formula_2">v v v v v v v 0 1 7 6 4 5 9 v 8 g 2 g 1 f 1 v 2 v 3 3 g v 10 v</formula><p>for each marked vertex v, we determine its star v ? , which can be obtained for each vertex by looping on the face array. We decompose v ? in subsets that are connected by unmarked edges. This can be performed using standard methods: we collect all unmarked edges incident on v, and maintain a partition on the faces of v ? , considering two faces adjacent if and only if they share a unmarked edge. Here we assume that all faces are valid. Invalid faces are treated in Section 3.</p><p>Once the number of connected components nc is known, we create nc , 1 additional copies of the vertex v with the same coordinates and same properties. Each instance of v is labeled from 0 to nc ,1. In v ? , we revisit each face in turn and for each face f, we locate the index of v, and we replace it with the instance of v corresponding to the component number of f. We call this operation multiplying the vertex v. Every time a vertex is multiplied, we create nc ,1 new entries in a look up table of vertices; in this look-up table we record that the ancestor of all copies of v is precisely v.</p><p>We illustrate the local cutting method on the star of a vertex v5 with six incident faces f0 : : : f 5 in <ref type="figure" target="#fig_2">Fig. 4</ref>. In <ref type="figure" target="#fig_2">Fig. 4A</ref>, marked edges are drawn bold. The unmarked edges incident on v5 are v4; v 5 and v5; v 7. Four connected components of faces g0 : : : g 3 are identified in <ref type="figure" target="#fig_2">Fig. 4B</ref>. Accordingly, four copies of the original v5 are used: v5; v 10; v 11; v 12. Again, no vertex coordinate is actually modified. We draw topologically disconnected faces as geometrically disconnected for illustrative purposes. The cut is completed once all marked vertices have been multiplied. Any two surface portions that share a collection of marked edges and no other edge or vertex will be disconnected by the cut. It is not possible to cut through any collection of edges: see <ref type="figure">Fig. 5A</ref>, we need at least two adjacent edges if none of the edges is incident to the boundary.</p><p>The cost to compute the number of connected components of faces incident on every marked vertex is less than the number of marked vertices times the largest valence of a marked vertex. Then, for each vertex v, we need to know the relative position of the corresponding corner in incident faces, in order to change the corresponding vertex index. The worst case complexity of the local cutting is proportional to the number of marked vertices multiplied by the largest valence of a vertex.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Global Method for Cutting</head><p>The global method for cutting requires the specification of a set of marked edges. We call it a global method because it operates on all the faces and vertices of the surface. The result is a cut through the marked edges as well as a cut through the isolated singular vertices.</p><p>This method first creates a new surface from the original surface S by breaking all adjacencies between faces. There are as many vertices in as corners in S. In <ref type="figure" target="#fig_4">Fig. 6A</ref>, we show the corners w0 : : : w 20 obtained by completely disconnecting v ?</p><p>5 . We then define a partition of the face corners as follows: we visit the unmarked edges in S one after the other. For each unmarked edge, we retrieve the faces sharing that edge in S, and the face corners corresponding to the edge endpoints in . For each edge endpoint, we express that the corners corresponding to that endpoint belong to the same group of corners. Once all the unmarked edges are visited, the corner groups correspond to the vertices in the surface resulting from the cut. In a look-up table, we record the mapping from corner groups to the vertices of S before the cut.</p><p>We illustrate the result of the global cutting method on v ? 5 in <ref type="figure" target="#fig_4">Fig. 6B</ref>, where the corner groups g0 : : : g 16 are shown. The example configuration that we use is the same as in <ref type="figure" target="#fig_2">Fig. 4</ref>; however, as the method is global, all vertices in the configuration are affected, and not only v5. The worst case complexity of the method is linear in the total number of corners (to disconnect the surface entirely) and in the number of unmarked edges.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Comparison of the two methods</head><p>The labeling of vertices after the cut is different in both methods, but this does not affect the surface topology. Unlike the local method, the global method implicitly cuts through isolated singular vertices, which are singular vertices that are not endpoints of singular edges (see <ref type="figure">Fig. 5B</ref>). The global method eliminates "standalone" vertices, which are vertices without incident faces.</p><p>There are cases when one method will be preferred against the other: when the cut covers a large portion of the surface, the global method has a lower cost. The global method is more effective in the presence of invalid faces (as discussed below), standalone or isolated singular vertices. Alternatively, when the number of marked edges or singular vertices is small with respect to the total numbers of surface edges and vertices, the local method is less costly because it visits only marked edges and vertices.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Stitching</head><p>Stitching corresponds to "identifying" boundary edges. The basic stitching operation is called an edge stitch. As explained in Section 4.2, the global cutting method operates by grouping corners. At the end of this process, a surface is defined by identifying every corner group with a new vertex. An edge stitch can be viewed as a continuation of the grouping process. After each stitch, a new surface can be defined by identifying each corner group with a new vertex.</p><p>When applying our conversion algorithm to the surface in <ref type="figure" target="#fig_5">Fig 7A,</ref> we would obtain the surface in B after cutting using either method of Section 4, and unfortunate stitching choices (labeled 1, 2, 3 and 4) would create in C a non-manifold surface very similar to A (ex- cept that the red as well and green edges are not identified). We address this problem specifically in Sections 5.1 and 5.2. An edge stitch is called valid if it creates no singularity. Since the vertex identifications are induced by edge stitching, the link of every vertex cannot be disconnected. Accordingly, no isolated singular vertex can appear; we must only test for the creation of singular edges. We propose two different greedy strategies for stitching. A Pinching Strategy consists of keeping the components that were created after cutting, and of stitching some of the boundary edges created when cutting. We prove that it is impossible to create a nonmanifold using the Pinching Strategy. A Snapping Strategy consists of stitching along different boundaries, whereby a test needs to be developed to avoid creating singular edges, as illustrated in Figs. 7 and 10.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Pinching Strategy: Pinching Adjacent Boundary Edges Created by Cutting</head><p>Edges are determined to be "stitchable" if we did cut through such edges in the previous stage. We compute connected components of adjacent boundary edges (i.e, boundaries). For each boundary, we choose a pair of adjacent stitchable edges and pinch them along their common boundary vertex: we diminish by two the length of the boundary. Starting from the first edge stitch, we then verify whether the adjacent pair of edges on the boundary are stitchable and if so, we stitch them. We continue until the next pair of edges is not stitchable. We repeat the operation of searching for an adjacent pair of stitchable edges. One advantage of this strategy is that we always obtain a manifold, assuming that all singular edges and vertices were cut before. Firstly, as we stitch adjacent edges, we only identify one pair of vertices v1 and v2. Secondly, let us suppose that when trying to identify v1 and v2 we observe that they are both adjacent to v0, such that v0; v 1 and v0; v 2 are not both boundary edges. Assuming that we stitch only edges that were cut, we know that before cutting, v1 and v2 were identified, meaning that v0; v 1 and v0; v 2 were the same singular edge. Accordingly, a cut was made through that singular edge. Without loss of generality, we assume that v0; v 1 is not a boundary edge, meaning that some edge was stitched to it after cutting. Using the Pinching Strategy, when stitching an edge, <ref type="figure">Figure 8</ref>: This configuration cannot be obtained by following Strategy I of pinching adjacent boundary edges.</p><formula xml:id="formula_3">v v 1 0 v</formula><p>at least one endpoint must be an interior vertex. v1 is a boundary vertex so v0 must be an interior vertex. v0 is an interior vertex that is adjacent to v1 and v2, which are both boundary vertices. After cutting, v0 was a boundary vertex; now it is an interior vertex adjacent to two boundary vertices v1 and v2: this configuration is impossible using the Pinching Strategy (see <ref type="figure">Fig. 8</ref>).</p><p>More generally, applying the Pinching Strategy to a loop of boundary edges (to a boundary), results in a loop of boundary edges to which trees of stitched (formerly singular) edges are attached. If the original surface before cutting represents a solid, this strategy for stitching has the effect of breaking all connections of zero width, and regularizing the solid by computing its interior (see <ref type="figure">Fig. 1D</ref>.) This is not true if singular edges form a graph on the surface that is not a forest: each loop of singular edges would yield two disconnected boundaries after cutting.</p><p>Having many components may be useful for the following situations: in some cases (e.g., the iso-surface of <ref type="figure">Fig. 13</ref>), most components except a few can be rejected because they correspond to noise or have no impact on a visualization. Also, some algorithms perform better with many components, e.g., the surface simplification of Rossignac and Borrel <ref type="bibr" target="#b9">[10]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Snapping Strategy : Stitching Edges Belonging to Different Boundaries</head><p>It may be useful to allow stitching between edges that were not previously identified, but which are geometrically close to one another: for instance if the surface is specified by a set of disconnected faces and if the coordinates of vertices of such faces contain small, unintended discrepancies. Also, to provide suitable input for methods such as Taubin and Rossignac's <ref type="bibr" target="#b3">[4]</ref>, that have an overhead cost for every connected component, we wish to join disconnected surfaces and minimize the number of connected components. We next present the strategy that was implemented; we describe tests to insure that the stitches are valid. Our methods were successfully applied for pre-processing 332 VRML models before geometric compression: we report statistics pertinent to this application in <ref type="table">Table 1</ref>. Strategy We start by deciding when a pair of boundary edges is stitchable and the order in which such pairs will be stitched. We consider two edges to be stitchable if each of their corresponding endpoints are located within an distance. We choose to be a fraction of the length of the shortest edge. To avoid a quadratic number of comparisons between boundary edges, we cluster the edges in an octree-like structure constructed using the distance between edge centers. To build the structure, we first compute a bounding box containing all the edge centers and then recursively subdivide it into two parts on the longest side. The boxes are enlarged by =2, such that neighboring boxes need not be visited when looking for a stitching candidate as shown in <ref type="figure" target="#fig_6">Fig. 9</ref>. The subdivision stops when either the side of a box becomes smaller than or the number of edges in a box is less than a fixed number p. In practice, we use p = 2 0 .</p><p>We consider in turn each pair of edges in each leaf box of the octree. When we encounter a pair of edges whose endpoints meet the distance criterion we verify whether the edge stitch is valid, and if so, we perform the stitch. To minimize the number of connected components we visit the octree twice: in the first pass we ε/2  only try to stitch edges from different connected components; after this pass all the stitchable edge pairs must belong to the same connected component; in the second pass we attempt to stitch any pair of edges.</p><formula xml:id="formula_4">v 0 v 1 v 0 ' v 1 ' v 0 v 1 v 0 ' v 1 ' v 0 v 1 v 0 ' v 1 ' v = A B C v 0 v 1 v v 0 ' v 1 ' v 0 v 1 v v 0 ' v 1 ' w v 0 v 1 v v 0 ' v 1 ' D E F</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Tests for Determining Valid Stitches</head><p>At each step of the stitching process, each vertex of the surface corresponds to a group of corners and each edge corresponds to two groups of corners. To avoid any confusion with the edges of the original cut surface we call such edges current edges. A stitch is performed by stitching two current edges; this in turn is performed by merging each of the two pairs of corner groups that define the endpoints of two current edges. Since the surface is a manifold before the stitch, every current edge is incident to one or two faces. This condition must also hold after the stitch. Only current edges incident to one of the four vertices involved in the stitch may be affected by the stitch. These edges must, by definition, belong to one of the stars of the four vertices. Suppose that we wish to stitch the two current edges v0; v 1 and v 0 1 ; v 0 0 by merging v0 with v 0 1 and v1 with v 0 0 . As shown in <ref type="figure" target="#fig_7">Fig. 10</ref>, several configurations may occur. In this figure circles represent groups of corners (vertices) and lines represent boundary edges of the cut surface. A current edge is represented by two circles connected by at least one edge. The manifold property requires that no more than two edges connect the same circles. The configurations can be partitioned into three classes:</p><p>Class I The stars of v0 and v1 do not intersect the stars of v 0 0 and v 0</p><p>1 . This case is illustrated <ref type="figure" target="#fig_7">Fig. 10A</ref>; the stitch is valid; it can be performed.</p><formula xml:id="formula_5">Class II Either v0; v 0 1 or v1; v 0</formula><p>0 is a current edge. <ref type="figure" target="#fig_7">Fig. 10B</ref> shows this configuration. The stitch cannot be performed since it creates a self-loop edge which is prohibited in our surface model. </p><formula xml:id="formula_6">v = v1.</formula><p>Here the stitch is invalid, since the stitched edge would be incident to three faces. For similar reasons, stitches cannot be performed for the configurations of <ref type="figure" target="#fig_7">Fig. 10D and Fig. 10E</ref>. However, the configuration of <ref type="figure" target="#fig_7">Fig. 10F</ref> yields no singular edge. In this last case, stitching v0; v 1 and v 0 1 ; v 0 0 implies stitching v;v0 and v;v <ref type="bibr">0</ref> 1 . We call this last stitch an implicit stitch. In contrast, we refer to the stitch between v0; v 1 and v 0 1 ; v 0 0 as an explicit stitch. Explicit stitches that yield a non-manifold surface are rejected. However, in the process of rejecting a proposed explicit stitch we may encounter a valid implicit stitch, in which case we merge the corresponding corner groups. This is the case for the configurations shown in <ref type="figure" target="#fig_7">Figs. 10C and 10E</ref>. A procedure called ClassifyMergingv;v 0 evaluates the effect of merging two corner groups, v and v 0 and classifies the merging as one of three types:</p><p>(1) creates at least one singular edge, <ref type="bibr" target="#b1">(2)</ref> creates no singular edge and creates no implicit stitch, (3) or creates no singular edge and creates one or two implicit stitches. Given two stitchable edges v0; v 1 and v 0 1 ; v 0 0 we perform the following steps:</p><p>Step I We evaluate ClassifyMergingv0; v 0</p><p>1 and perform the merging if there is an implicit stitch (3).</p><p>Step II We evaluate ClassifyMergingv1; v 0 0 and perform the merging if there is an implicit stitch (3).</p><p>Step III If one of the two mergings was performed (3) and if the other does not create a singular edge and no implicit stitch (2) then perform the merging.</p><p>Step IV If neither merging was performed and if both mergings would not create any singular edges (2) then perform both mergings.</p><p>It is important to perform the first two steps sequentially. In the case of <ref type="figure" target="#fig_7">Fig. 10C</ref>, the above procedure will merge v0 with v 0 1 in</p><p>Step I. However, ClassifyMergingv1; v 0 0 will prevent the second merging in</p><p>Step II. <ref type="figure" target="#fig_7">Figure 10D</ref> shows another case where order is important. ClassifyMerging() works by maintaining a list of current edges incident to the corners of a group. ClassifyMerging() verifies whether any edge is repeated in two lists. for each repetition, if both edges are boundary edges, then there is an implicit stitch, otherwise, a singular edge would be created when merging. Orientability If we wish to have an oriented surface, firstly, we enforce the orientability of the input surface using the cutting methods of Section 4. Secondly, we orient consistently the faces of the different surface connected components: we maintain a partition on the faces into connected components; each face also carries an orientation bit indicating whether the ordering of its vertices (its orientation) should be kept or reversed. The orientations of the various components are subject to change when stitching. The orientation bit of a face composed with the orientation bit of the component representative provide the current orientation of a connected component. When stitching two disconnected components, we update the current orientations to make them consistent across the stitched edges: we update the orientation bit of the representative of one of the components. When stitching edges of the same component, implicit stitches do not affect the orientability, but explicit stitches may affect the orientability: In Step IV, we retrieve the current orientations of the faces incident on the (boundary) edges v0; v 1 and v 0</p><p>1 ; v 0 0 and we make sure that they are consistent. Otherwise, we do not perform the stitch.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Examples</head><p>Conversion of Non-Manifold Surfaces Invalid faces and singular vertices and edges are frequent in real world geometric data. The following examples illustrate some of these singularities and the benefits of using our methods. We show three examples of conversions, performed using the cutting algorithm followed with either the Pinching or Snapping Strategies for stitching. As the effect of the conversion is of pure topological nature, it is essentially "invisible" in a display; however, we use the following artifices to show the various steps of our methods: we use different colors for boundary edges, regular edges and singular edges; we highlight singular vertices; in certain illustrations, we may disconnect geometrically adjoining boundary edges; we may also use different colors for painting the faces belonging to different connected components;</p><p>The first example is a polygonal CAD model of a desk lamp in <ref type="figure" target="#fig_9">Fig. 11A</ref>. The original model had 5054 triangles and 2810 vertices; we discovered 125 singular edges and 128 singular vertices. After conversion by cutting through singular edges and vertices, there were 5052 triangles and 3058 vertices. <ref type="figure" target="#fig_9">Fig. 11A</ref> shows the various connected components after conversion using different colors. The conversion took less than one second with an IBM RS6000 580.</p><p>The second example is a polygonal model of the space ship Enterprise with 12539 triangles and 15011 vertices. <ref type="figure">Fig. 13A</ref> (on the color page) is a global view of the model, where disconnected surface components are painted with different colors. We discovered 594 singular edges and 1878 singular vertices. After removing invalid triangles, there were 435 remaining singular edges and 1689 remaining singular vertices. After conversion and stitching using the Snapping Strategy, there were 12552 triangles and 7429 vertices. The conversion took 21 seconds using an IBM Power PC 42T. This example is a good advocate for automated correction methods: asking a user to decide on how to locally connect the surface 1800 times seems impractical.</p><p>The third example is a polygonal approximation of an iso-surface extracted from a CT-scan of a fossil monkey jaw, illustrated in <ref type="figure">Fig. 13A</ref>. The original model had 75842 triangles and 37624 vertices. We discovered 462 singular edges and 563 singular vertices; singular edges are shown in <ref type="figure">Fig. 13B</ref> and singular vertices in <ref type="figure">Fig. 13C</ref>. Although non-manifold iso-surfaces are justifiable in the general case, in this case singularities came from an incorrect algorithm. Invalid triangles with duplicate vertex indices contribute to the singular edge and vertex count: they are incident to the same edge (consecutive vertex index pair) twice, and provided the triangle shares that edge with neighboring triangles, the edge is singu- lar. After removing invalid triangles, we discovered 2 remaining non adjacent singular edges and 10 singular vertices. After cutting through singular edges and vertices, we obtained 75371 triangles and 37636 vertices. The conversion took 6 seconds with an IBM RS6000 580 workstation, including the removal of invalid faces. For this example, it is preferable to use the local cutting method rather than the global cutting method, since the number of singular edges and vertices is very small after removing invalid faces. Digression: Surface Smoothing and Singularities We now describe another application for our methods: an algorithm can terminate normally in the presence of singular edges and vertices but deliver unintended results. We consider the surface subdivision and smoothing algorithm of Taubin <ref type="bibr" target="#b6">[7]</ref>: designed for use on a manifold surface, it operates on a non-manifold as well; however, the resulting surface is not smooth in the vicinity of the singular edges and vertices. We use the example of two spheres sharing two edges, providing a non-manifold model in <ref type="figure" target="#fig_10">Fig. 12G</ref>. In <ref type="figure" target="#fig_10">Fig. 12H</ref> we attempt to subdivide and smooth G, and notice the non-smooth behavior in the vicinity of the singular edges. In <ref type="figure" target="#fig_10">Fig. 12I</ref>, we first cut through the singular edges using the methods of Section 4 and then subdivide and smooth. In <ref type="figure" target="#fig_10">Fig. 12J</ref>, we smooth after cutting and stitching using the Pinching strategy. In <ref type="figure" target="#fig_10">Fig. 12K</ref>, we smooth after cutting and stitching the Snapping Strategy. <ref type="figure" target="#fig_10">Fig. 12L</ref> illustrates another outcome when stitching using the Snapping strategy as well.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Related Work</head><p>Our method is very different from most of the previous work as it operates solely on the surface topology. The first category of prior art methods operate both on the geometry and topology to modify surfaces so that they can represent the boundary of solids <ref type="bibr" target="#b10">[11]</ref>. This is an important issue for Rapid Prototyping of models represented using the .STL format consisting of topologically disconnected triangles (see <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b12">13,</ref><ref type="bibr" target="#b5">6,</ref><ref type="bibr" target="#b13">14]</ref>). As was duly noted, converting a nonmanifold surface to a solid is a difficult task with floating point precision problems, computationally demanding tasks (e.g., polygon intersections), and a number of open problems, as the problem of filling a polygonal hole (boundary) with a "reasonable" polygonal surface without creating intersections <ref type="bibr" target="#b14">[15]</ref>. Relatedly, Butlin et al. <ref type="bibr" target="#b15">[16]</ref> attempt to "repair" CAD data in order to use it for engineering analyses or to simplify data exchange. Barequet and Kumar <ref type="bibr" target="#b16">[17]</ref> operate on .STL files; as with the global cutting method of Section 4.2, they first stitch through regular edges, but they can subsequently create a non-manifold after stitching additional edges. Murali and Funkhouser <ref type="bibr" target="#b17">[18]</ref> start from polygon faces to partition the volume in cells, and determine if each cell is solid. From the solid cells, they produce a manifold boundary representation.</p><p>The second category consists of tools to create and manipulate surface models. The technique of Szeliski et al. <ref type="bibr" target="#b18">[19]</ref> builds a new polygonal surface from an existing surface by defining a collection of point samples, using point repulsion methods to distribute the points evenly. Subsequently, a manifold surface triangulation of the remaining points is found. The technique of Welch et al. <ref type="bibr" target="#b19">[20]</ref> builds a polygonal surface starting from a simple surface, by applying a series of surface operations, that consist of adding, deleting or morphing a portion of surface. They use mesh cutting techniques, but cut only along simple curves. Both methods build new lists of vertices and faces, while we manipulate an existing list of face vertex indices. Veron and Leon <ref type="bibr" target="#b20">[21]</ref> detect automatically singular vertices and edges but they require user assistance for correcting the singularities.</p><p>The last category of related work is in Solid Modeling, to develop data structures and tools for building boundary representations of solids. It is related because conversions between manifold and non manifold representations are discussed, for instance in Hoffman <ref type="bibr" target="#b21">[22]</ref> (see also <ref type="bibr" target="#b22">[23,</ref><ref type="bibr" target="#b23">24,</ref><ref type="bibr" target="#b24">25]</ref>). Heisserman <ref type="bibr" target="#b25">[26]</ref> developed a method for extracting a manifold boundary representation from a set of intersecting solids. Our approach is different because we do not assume to work with solids, and do not use the notions of interior or complement.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Conclusion</head><p>We have used cutting and stitching for the automatic conversion of a set of polygons to a manifold polygonal surface, that can potentially exhibit self-intersections (which are not treated). All properties are passed on to the output surface. Face and corner properties are unchanged, as our method preserves corners. When a vertex is multiplied, the same properties are assigned to all copies.</p><p>We have successfully applied this conversion to extend algorithms for surface simplification <ref type="bibr" target="#b2">[3]</ref> and compression <ref type="bibr" target="#b3">[4]</ref>, to enable processing of non-manifold surfaces. This method was successfully applied to pre-process non-manifold polygonal surfaces before simplification in IBM Data Explorer <ref type="bibr" target="#b26">[27]</ref>. This method may not be suitable if the original surface was intended to be a nonmanifold, i.e, if topological singularities (singular edges and vertices) are an integral part of the model. Otherwise, it is general and handles any type of topological singularity without user intervention.</p><p>Aside from reducing the number of boundary edges after converting to a manifold, another application of stitching is to join topologically disconnected but geometrically adjoining surface components, which we found useful for optimizing surfaces before compressing them using Taubin and Rossignac's method. Other strategies can be developed for stitching, depending upon the application.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A Data Structures</head><p>Our methods take as an input a surface represented with a list of nv vertices and with a list of n f faces. Internally, the vertices and faces are preferably represented using a "vertex array" and a "face array". The vertex array contains the vertex coordinates (three per vertex). The face array contains the vertex indices for each face stored contiguously. We also use a "face start array" to provide the starting index of each face in the face array.</p><p>By looping through the face array, we build a structure of ne surface edges, recording the number of incident faces. For effi-</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>1</head><label></label><figDesc>IBM T.J.Watson Research Center, P.O.Box 704, Yorktown Heights, NY 10598, ftaubin,gueziec,hornwpg@watson.ibm.com 2 IRCOM-SIC (UMR CNRS 6615), SP2MI, Bvd. 3, Teleport 2, B.P. 179, 86960</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 4 :</head><label>4</label><figDesc>Local cutting. A: star of Vertex v5 with marked edges in bold. B: multiplying Vertex v5.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>A</head><label></label><figDesc>Figure 5: A: It is not possible to cut through any collection of marked edges: we need at least two adjacent edges if none of them is incident to the boundary. B: an isolated singular vertex v.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 6 :</head><label>6</label><figDesc>Global cutting. A: corner groups are shown using circular arcs. B: result of global cutting.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 7 :</head><label>7</label><figDesc>A: a non-manifold surface; after cutting through singular edges, we obtain the surfaces of B. B: an incompatible sequence of edge stitches (labeled 1,2 3 and 4), resulting in a non-manifold in C. C: spirals indicate which corners are identified (grouped) after stitching.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 9 :</head><label>9</label><figDesc>Stitchable edge pairs fall inside the same box.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 10 :</head><label>10</label><figDesc>Different configurations for a proposed stitch between v0; v 1 and v</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Class</head><label></label><figDesc>III There are two current edges of the form v;v0 and v;v 0 1 or of the form v;v1 and v;v 0 0 . Several such configurations are shown in Figs. 10C,D,E and F. Fig. 10C illustrates the case where</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>11 :</head><label>11</label><figDesc>Lamp model. A: general view. B, C, D: successive details showing edges shared by more than two faces. E,F,G: Singular edges are shown in red and singular vertices in black in increasingly detailed views.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Figure 12 :</head><label>12</label><figDesc>Surface smoothing and singularities A. non-manifold model of two spheres sharing two edges. B: after subdividing and smoothing. C: after cutting, subdividing and smoothing. D: after pinching boundary edges, subdividing and smoothing. E: after snapping boundary edges. F: another result of edge snapping.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>Figure 2: A: the star v ? of a regular vertex v of valence seven. B: the link of v. C: the star w ? of a singular vertex w. D: the link of w, composed of two disconnected polygonal curves. E: the star u ?</figDesc><table><row><cell></cell><cell></cell><cell cols="2">w</cell><cell>w</cell><cell>u</cell></row><row><cell>A</cell><cell>B</cell><cell>C</cell><cell>w*</cell><cell>D</cell><cell>u*</cell></row><row><cell>of a boundary vertex.</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell cols="6">circular permutation, resulting in two orientations for that face. In</cell></row><row><cell cols="6">this paper, we call topology of a surface, the set of ordered sub-sets of indices provided by the set of faces ffjg, modulo circular</cell></row><row><cell cols="6">permutation. We use the word geometry to mean the set of vertex coordinates fv i g. There are no particular constraints on the ge-</cell></row><row><cell cols="6">ometry for our methods to apply: polygons can be warped. Cutting</cell></row><row><cell cols="6">and stitching operate on the topology only. Additionally, vertices or</cell></row><row><cell cols="6">faces may have a number of continuous or discrete properties, such</cell></row><row><cell cols="6">as colors, normals, and texture coordinates. Properties can also be</cell></row><row><cell cols="6">associated with corners. The data structures we use are described</cell></row><row><cell>in the Appendix.</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row></table><note></note></figure>
+		</body>
+		<back>
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>When cutting and stitching, we need to maintain a partition on the faces of a vertex star or equivalently on all the corners associated to a vertex. We use the Union-Find algorithm for this purpose, whose running time is essentially On, when n elements are in the partition <ref type="bibr" target="#b27">[28]</ref>; once the partition is determined, access to representatives of faces or corners takes constant time. Partitions are also used for orienting faces consistently when stitching in Section 5. </p></div>			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Analysis of the behaviour of recursive division surfaces near extraordinary points</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Doo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sabin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Aided Design</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="356" to="360" />
+			<date type="published" when="1978" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Hierarchical Geometric Approximations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Varshney</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+		</imprint>
+		<respStmt>
+			<orgName>University of North Carolina at Chapel Hill</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Surface simplification inside a tolerance volume</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Guéziec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">J</forename><surname>Ibm T</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Watson Research</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Center</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997-03" />
+			<publisher>Yorktown Heights</publisher>
+			<pubPlace>New York</pubPlace>
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical report</note>
+	<note>revised version of RC 20440</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Geometry Compression through Topological Surgery</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Taubin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Rossignac</surname></persName>
+		</author>
+		<idno>RC-20340</idno>
+		<imprint>
+			<date type="published" when="1996-01" />
+		</imprint>
+		<respStmt>
+			<orgName>IBM Research Division</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Efficient implementation of progressive meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+		<idno>MSR-TR-98-02</idno>
+		<imprint>
+			<date type="published" when="1998-01" />
+			<pubPlace>Microsoft Research, Redmond, Washington</pubPlace>
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Removing zero-volume parts from cad models for layered manufacturing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">H</forename><surname>Bohn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="27" to="34" />
+			<date type="published" when="1995-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">A signal processing approach to fair surface design</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Taubin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Siggraph</title>
+		<meeting><address><addrLine>Los Angeles</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1995-08" />
+			<biblScope unit="page" from="351" to="358" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Generating topological structures for surface models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Sheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">R</forename><surname>Meier</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="35" to="41" />
+			<date type="published" when="1995-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Algebraic Topology. A First Course</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">K</forename><surname>Agoston</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Pure and Applied Mathematics</title>
+		<imprint>
+			<date type="published" when="1976" />
+			<publisher>Marcel Dekker, Inc</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Multi-resolution 3d approximations for rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Rossignac</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Borrel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Modeling in Computer Graphics</title>
+		<editor>B. Falcidieno and T.L. Kunii</editor>
+		<imprint>
+			<publisher>Springer-Verlag</publisher>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="455" to="465" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Partitioning polyhedral objects into non-intersecting parts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Segal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">H</forename><surname>Sequin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="53" to="67" />
+			<date type="published" when="1988-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Some efficient procedures for correcting triangulated models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Makela</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dolenc</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Symp. on Solid Freeform Fabrication</title>
+		<meeting>Symp. on Solid Freeform Fabrication</meeting>
+		<imprint>
+			<date type="published" when="1993-07" />
+			<biblScope unit="page" from="126" to="160" />
+		</imprint>
+		<respStmt>
+			<orgName>Dept. of Mech Eng., Univ of Texas at Austin</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Tele-manufacturing:rapid prototyping on the internet</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">C</forename><surname>Bailey</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="20" to="26" />
+			<date type="published" when="1995-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Voxel-based modeling for layered manufacturing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Chandru</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Manohar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">E</forename><surname>Prakash</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="42" to="47" />
+			<date type="published" when="1995-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Filling gaps in the boundary of a polyhedron</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Barequet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sharir</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Aided Geometric Design</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="207" to="229" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">CAD data repair</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Butlin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Stops</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">5th International Meshing Roundtable</title>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="7" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Repairing cad models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Barequet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kumar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization 97</title>
+		<meeting><address><addrLine>Phoenix, AZ.</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1997-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Consistent solid and boundary representations from arbitrary polygonal data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">M</forename><surname>Murali</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">A</forename><surname>Funkhouser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Interactive 3D Graphics</title>
+		<meeting><address><addrLine>Providence, RI.</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1997-04" />
+			<biblScope unit="page" from="155" to="161" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Curvature and continuity control in particle-based surface models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Szeliski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Tonnesen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Terzopoulos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Geometric Methods in Computer Vision II</title>
+		<imprint>
+			<publisher>SPIE</publisher>
+			<date type="published" when="1993-07" />
+			<biblScope unit="page" from="172" to="181" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Free-form shape design using triangulated surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Welch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Witkin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Siggraph&apos;94 Conference Proceedings</title>
+		<meeting><address><addrLine>Orlando</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1994-07" />
+			<biblScope unit="page" from="247" to="256" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Static polyhedron simplification using error measurements</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Veron</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Leon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Aided Design</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="287" to="298" />
+			<date type="published" when="1997-04" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Geometric and Solid Modeling: An Introduction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Hoffmann</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1989" />
+			<publisher>Morgan Kaufmann</publisher>
+			<pubPlace>San Mateo, California</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Representations for rigid solids: Theory, methods and systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">A G</forename><surname>Requicha</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computing Surveys</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="437" to="464" />
+			<date type="published" when="1980-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Robust set operations on polyhedral solids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Hoffmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Hopcroft</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">S</forename><surname>Karasick</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="50" to="59" />
+			<date type="published" when="1989-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">An extension of manifold boundary representations to the r-sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Desaulniers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">F</forename><surname>Stewart</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="40" to="60" />
+			<date type="published" when="1992-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Generative Geometric Design and Boundary Solid Grammars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Heisserman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1991-05" />
+		</imprint>
+		<respStmt>
+			<orgName>Carnegie Mellon University</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">An extended data-flow architecture for data analysis and visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Abram</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Treinish</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization 95</title>
+		<meeting><address><addrLine>Atlanta, GA.</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1995-10" />
+			<biblScope unit="page" from="263" to="270" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Introduction to Algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Thomas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Charles</forename><forename type="middle">E</forename><surname>Cormen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronald</forename><forename type="middle">L</forename><surname>Leiserson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Rivest</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1989" />
+			<publisher>Mac Graw Hill</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,498 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Isosurface Extraction in Time-varying Fields Using a Temporal Hierarchical Index Tree</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Han-Wei</forename><surname>Shen</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">MRJ Technology Solutions / NASA Ames Research Center</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Isosurface Extraction in Time-varying Fields Using a Temporal Hierarchical Index Tree</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:39+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>scalar field visualization</term>
+					<term>volume visualization</term>
+					<term>isosurface extraction</term>
+					<term>time-varying fields</term>
+					<term>marching cubes</term>
+					<term>span space</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Many high-performance isosurface extraction algorithms have been proposed in the past several years as a result of intensive research efforts. When applying these algorithms to large-scale time-varying fields, the storage overhead incurred from storing the search index often becomes overwhelming. This paper proposes an algorithm for locating isosurface cells in time-varying fields. We devise a new data structure, called Temporal Hierarchical Index Tree, which utilizes the temporal coherence that exists in a time-varying field and adaptively coalesces the cells&apos; extreme values over time; the resulting extreme values are then used to create the isosurface cell search index. For a typical time-varying scalar data set, not only does this temporal hierarchical index tree require much less storage space, but also the amount of I/O required to access the indices from the disk at different time steps is substantially reduced. We illustrate the utility and speed of our algorithm with data from several large-scale time-varying CFD simulations. Our algorithm can achieve more than 80 of disk-space savings when compared with the existing techniques, while the isosurface extraction time is nearly optimal.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>An isosurface represents regions that have a constant value in a three-dimensional scalar field. Displaying isosurfaces is a useful technique for analyzing scalar data due to its effectiveness in revealing the spatial structures of the field's value distribution. To compute the isosurface, Lorensen and Cline <ref type="bibr" target="#b0">[1]</ref> proposed a Marching Cubes algorithm which extracts small polygon patches from individual cells in the field. The Marching Cubes algorithm is simple and robust. However, the process of linear search for isosurface cells can be expensive. To improve the performance, researchers have proposed various schemes that can accelerate the search process. Examples include Wilhelm and Van Gelder's Octrees <ref type="bibr" target="#b1">[2]</ref>, Livnat et al. 's NOISE method <ref type="bibr" target="#b2">[3]</ref>, Shen et al. 's ISSUE algorithm <ref type="bibr" target="#b3">[4]</ref>, Itoh and Koyamada's Extrema Graph method <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b5">6]</ref>, Bajaj et al. 's Fast Isocontouring method <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b7">8]</ref>, and Cignoni et al. 's Interval Tree <ref type="bibr" target="#b8">[9]</ref> algorithm.</p><p>Inevitably, these acceleration algorithms incur overhead for storing extra search indices. For a steady scalar field, i.e., only a single time step of data is present, this extra space is often affordable, and the highly interactive speed of extracting isosurfaces can compensate for the overhead. However, for time-varying simulations, a typical solution can contain a large number of time steps, and every simulation step can produce a great amount of data. The overall storage requirement for the search index structures can be overwhelming. Furthermore, when analyzing a time-varying scalar NASA Ames Research Center, Mail Stop T27A-2, Moffett Field, CA 94035 (hwshen@nas.nasa.gov) field, a user may want to explore the data back and forth in time, with the same or different isovalues. This will require a significant amount of disk I/O for accessing the indices for data at different time steps when there is not enough memory space for the entire time sequence. As a result, the performance gain from the efficient isosurface extraction algorithm could be offset by the I/O overhead.</p><p>This paper presents an efficient isosurface extraction algorithm for time-varying scalar fields. The main focus is to devise a new search index structure for a time-varying field so that the storage overhead is kept small, while the performance of the isosurface extraction is still high. In addition, our algorithm allows flexible control of the tradeoff between performance and storage space and, thus, can be used for data with different characteristics in different computing environments. To achieve these goals, we characterize each cell in the field based on its extreme values and the variation of the extreme values over time. Consider a cell that has a high temporal coherence and, thus, a small scalar variation over several time steps. Such a cell, in a period of several time steps, may be referenced by a single index entry based on that cell's overall extreme values in time. On the other hand, for a cell that has little coherence and, thus, a high scalar variation, the cell is indexed individually at every time step by its corresponding extreme values. Our algorithm creates an isosurface cell search index for the time-varying field, called Temporal Hierarchical Index Tree. Cells that have a small amount of variation over time are placed in a single node of the tree that covers the entire time span. Cells with a larger variation are placed in multiple nodes of the tree multiple times, each for a short time span. When generating an isosurface, a simple traversal will retrieve the set of nodes that contains all of the cell index entries needed for a given time step. The cells are organized at each node using a data structure that was developed for generating isosurfaces from a steady data set. For a typical time-varying scalar field, not only does this temporal hierarchical index tree require much less storage space, but also the amount of I/O required to access the indices at different time steps from the secondary storage is greatly reduced.</p><p>We begin this paper by giving an overview of the isosurface extraction problem and some existing techniques. We then present our algorithm on building the temporal hierarchical index tree and the isosurface extraction method for time-varying fields. Finally, we present experimental results to demonstrate the effectiveness of our algorithm and provide concluding remarks and future research plans.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Background and Related Work</head><p>Given an isovalue, cells that have minimum value lower, and maximum value higher, than the isovalue are intersected by the isosurface. We call these cells isosurface cells. To expedite the isosurface cell search process, researchers have proposed various techniques for creating search indices by partitioning the cells based on their spatial and/or value information. An example of the space-partition methods is Wilhelm and Van Gelder's octrees algorithm <ref type="bibr" target="#b1">[2]</ref>, which partitions the data hierarchically and coalesces the extreme values, i.e., the minimum and maximum values, of cells within each local cluster. The octrees algorithm is primarily for structured grid data.</p><p>The efficiency of the method is reported to be Ok+logn=k <ref type="bibr" target="#b2">[3]</ref>, where k is the number of isosurface cells, and n is the total number of cells.</p><p>There are many value-partition methods proposed in the past years <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b10">11,</ref><ref type="bibr" target="#b11">12,</ref><ref type="bibr" target="#b2">3,</ref><ref type="bibr" target="#b3">4,</ref><ref type="bibr" target="#b8">9]</ref>. Among those methods, Livnat et al. <ref type="bibr" target="#b2">[3]</ref> proposed span space, a two-dimensional space where every cell in the field is represented by a point. The point's x coordinate represents the corresponding cell's minimum value, and the y coordinate represents the cell's maximum value. Livnat et al. use a Kd-Tree, and subsequently Shen et al. <ref type="bibr" target="#b3">[4]</ref> use a lattice subdivision, to subdivide the cells in span space based on their value ranges. Cignoni et al. <ref type="bibr" target="#b8">[9]</ref> proposed the use of an interval tree as the search index, which has an optimal efficiency of Ologn. Recently, Chiang and Silva <ref type="bibr" target="#b12">[13]</ref> proposed I/O optimal techniques to build the interval tree on disk, and the access of the interval tree is driven by demand. Chiang, Silva, and Schroeder also expanded the I/O-optimal techniques for out-of-core isosurface extraction <ref type="bibr" target="#b13">[14]</ref>.</p><p>In addition to the space-and value-partition methods, Itoh et al. <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b5">6]</ref> and Bajaj et al. <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b7">8]</ref> proposed algorithms using a surface propagation scheme. In their methods, a small set of seed cells is first extracted; and isosurfaces of any given isovalue can then be computed by propagating surfaces from certain seeds through adjacencies. Bajaj et al. 's algorithm is able to create only a small number of seeds and has an optimal efficiency of Ologn.</p><p>The acceleration algorithms described above inevitably incur overhead for storing extra search indices. For instance, the BON octrees proposed in <ref type="bibr" target="#b1">[2]</ref> increase the original data by 16, which is the ratio of the number of tree nodes to the original data points. This overhead does not yet include the minimum and maximum scalar values associated with each node -necessary information for isosurface extraction. In addition, the leaf node in the BON octrees is a cluster of eight cells, i.e., individual cells are not indexed. The value-partition methods index down to individual cells so that higher interactivity can be provided. However, each cell index entry needs to store the cell's minimum and maximum values and the cell identification. As a result, the total space required for the index can be larger than the size of the original data. Bajaj et al. 's method creates seed sets that incur the least amount of space overhead. However, for unstructured grid data, the required adjacency information is often not available and, thus, the space overhead can be comparable to, or even higher than, the value-partition methods if the adjacencies need to be computed and stored.</p><p>To our knowledge, to date there is no isosurface extraction algorithm that is optimized for time-varying data. Although it is possible to extend the octrees to the fourth dimension, i.e., time, it can only be used for structured grid data. In addition, the fourdimensional 'octrees' couple together the temporal and the spatial dimensions, which makes cell partitioning awkward because the underlying data may have very different resolutions in time and space. Furthermore, treating temporal and spatial domains as equals impedes the utilization of the temporal coherence existing in the data. In the following, we propose an optimization algorithm for isosurface extraction in time-varying fields. The value-partition paradigm is used because of its interactivity and its equal effectiveness for both structured and unstructured grid data. We assume that the time-varying field has a steady grid, or has a grid that is transformed, but not redefined, over time. Our goal is to reduce the overall size of the search index for data in a time-varying field, while still providing high-performance isosurface extraction. i , and use them to create a single search index. Using this approximated search index, an isosurface at a time step t; t 2 i; j , can be computed by first finding the cells that have min j i smaller and max j i larger than the isovalue. The actual scalar data of these cells at the specific time t are then used to compute the geometry of the isosurface. Using the approximated search index can greatly reduce the storage space required since only one index is used for all the j , i + 1 time steps. It also guarantees to find all the isosurface cells because:</p><p>if t 2 i; j and mint V iso and maxt V iso</p><formula xml:id="formula_0">= min j i V iso and max j i V iso</formula><p>where Viso is the isovalue and t is the time step at which the query is issued.</p><p>The algorithm just described can be inefficient because the temporal extreme values only provide a necessary but not a sufficient condition to qualify a cell as an isosurface cell. As a result, many non-isosurface cells are visited as well. In the following, we propose an adaptive scheme that enables high performance isosurface extraction, while it also reduces the storage overhead incurred by the search index for isosurface extraction in time-varying fields. We devise a new search index structure, called Temporal Hierarchical Index Tree. This tree is built by classifying the cells according to the amount of variation in the cell's values over time. Cells that have a small amount of variation are placed in a single node of the tree that covers the entire time span. Cells with a larger variation are placed in multiple nodes of the tree multiple times, each for a short time span. When generating an isosurface, a simple traversal will retrieve the set of nodes that contains all cell index entries needed for a given time step. The cells in each node can be organized using existing algorithms developed for generating isosurfaces from a steady data set. It is noteworthy that a similar concept independently developed by Finkelstein et al. <ref type="bibr" target="#b14">[15]</ref> on building a hierarchical representation of multiresolution video has been recently brought to our attention. The paper proposes a 'Time Tree' which is a binary tree of sparse quadtrees. Each node in the time tree corresponds to a single frame at some temporal resolution. The tree can grow to different depths for different regions of the frame to support a video sequence with different temporal resolutions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Temporal Hierarchical Index Tree</head><p>In this section, the temporal hierarchical index tree data structure is described. We first discuss how to characterize a cell by the temporal variation of its extreme values. We then present the tree construction algorithm using the results of cell characterization.</p><p>The span space <ref type="bibr" target="#b2">[3]</ref> is useful for analyzing the temporal variation of a cell's extreme values. In the span space, each cell is repre- and whose y coordinate represents it maximum value. For a timevarying field, a cell has multiple corresponding points in the span space, and each point represents the cell's extreme values at one time step. To characterize a cell's scalar variation over time, the area over which the corresponding points spread in the span space provides a good measure -the wider these points spread, the higher is the cell's temporal variation. This variation can be quantified by using the lattice subdivision scheme of the span space <ref type="bibr" target="#b3">[4]</ref>, which subdivides the span space into L L non-uniformly spaced rectangles, called lattice elements. To perform the subdivision, we first sort, in ascending order, all the distinct extreme values of the cells in the time-varying field within the given time interval and establish a list. We then find L + 1 scalar values, fd0; d 1 ; : : : ; d Lg, in the list that can evenly separate the list into L sublists with an equal length. These L + 1 scalar values are used to draw L + 1 vertical lines and L + 1 horizontal lines to subdivide the span space. The list di is chosen in this way to ensure that cells can be more evenly distributed among the lattice elements. <ref type="figure">Fig. 1</ref> is an example of the lattice subdivision.</p><p>Using the lattice subdivision, we propose a binary tree data structure, called Temporal Hierarchical Index Tree, to classify the cells in a time-varying field based on the temporal variations of their ex- To facilitate an efficient search for isosurface cells, a search index for each node of the temporal hierarchical tree is created. This can be done by using any existing isosurface extraction algorithm based on the value-partition paradigm. Here we propose to use a modified ISSUE algorithm <ref type="bibr" target="#b3">[4]</ref> which can provide optimal performance. For every node N j i in the temporal hierarchical index tree, cells contained in the node are represented by their extreme values min j i ; m a x j i . To create the search index, we use the lattice subdivision described previously and sort cells that belong to the lattice elements of each row, excluding the lattice element at the diagonal line, into a list based on the cells' representative minimum values in ascending order. Another list in each row is created by sorting the cells' representative maximum values in descending order. For those lattice elements at the diagonal line, the interval tree method <ref type="bibr" target="#b8">[9]</ref> is used to create one interval tree for each element.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Isosurface Extraction</head><p>Given the temporal hierarchical index tree, this section describes the algorithm that is used to locate the isosurface cells at run time. We first describe a simple traversal method to retrieve the sets of nodes that contain all cell index entries needed for a given time step. We than describe the isosurface cell search algorithm used for the lattice search index built in each node.</p><p>Given an isosurface query at time step t, we compute the isosurface by first locating the nodes in the tree that may contain the isosurface cells. This is done by recursively traversing from the root node N j i to one of its two child nodes, N b a , such that a t b until the leaf node N t t is reached. Along the traversal path, we perform the isosurface cell search, using a method that will be described next, at each encountered node. The tree is constructed so that every cell in the field exists in one of the nodes in the traversal path. These cells have their representative extreme values, temporal or time-specific, as the approximation of their actual extreme values at time step t. <ref type="figure" target="#fig_2">Fig. 3</ref> shows an example of the traversal path.</p><p>At every node along the traversal path, the lattice search index built at the node is used to locate the candidate isosurface cells.</p><p>Given an isovalue Viso, we first locate the lattice element with integer coordinates I ; I that contains the point Viso; V iso in the span space. The isosurface cells are then located in the upper left corner that is defined by the vertical line x = Viso and the horizontal line y = Viso as shown in <ref type="figure" target="#fig_3">Fig. 4</ref>. The candidate isosurface cells can be collected from the following three categories:</p><p>1. For every list in the row R;R = I + 1 ::L , 1 that was sorted by the cells' minimum values, we collect the cells from the beginning of the list until the first cell is reached which has a representative minimum value that is greater than the isovalue.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">For the list in row I that was sorted by the maximum values,</head><p>we collect the cells from the beginning of the list until the cell is reached which has a representative maximum value that is smaller than the isovalue. After the candidate isosurface cells are located, we then use the cells' actual data at time step t to perform triangulation.</p><p>Our algorithm has optimal performance since the isosurface cells in categories 1 and 2 are collected without the need for any search. The number of cells in category 3 is usually small. Furthermore, the interval tree method has an optimal efficiency of OlogN, where N is the number of cells in the field. max min <ref type="figure">Figure 5</ref>: At every tree node, the non-isosurface cells being unnecessarily visited are confined within the two rows and two columns of the lattice elements as shown in the shaded area. Increasing the resolution of the lattice subdivision can reduce the number of cells in this area, for the price of a larger temporal hierarchical index tree.</p><p>As mentioned previously, a candidate isosurface cell may not be an isosurface cell after all. These non-isosurface cells come from non-leaf nodes in our temporal hierarchical index tree since a cell's time-specific extreme values, mint and maxt, may not contain the given isovalue even though the approximated extreme values, i.e., the temporal extreme values min j i and max j i , do contain the isovalue. Although this problem will not cause a wrong isosurface to be generated, since the triangulation routine will detect the case and create no triangles from these cells, it does incur performance overhead. Actually, this performance overhead is an expected consequence of using temporal extreme values as the approximated extreme values for cells, where we trade performance for storage space.</p><p>In fact, the performance overhead is bound by the resolution of the lattice subdivision in the span space. In our algorithm, we place a cell into the node N j i in the temporal hierarchical index tree in such a way that its representing points at different time steps within time interval i; j always reside within an area of 2 2 lattice elements in the span space. Therefore, for any node N j i in the tree, the worst case for the number of the non-isosurface cells being visited is estimated as the number of cells in the two rows and two columns of the lattice elements at the boundary layers of the lattice elements that are searched for the candidate isosurface cells, as shown in the shaded area in <ref type="figure">Fig. 5</ref>. Therefore, the user-specified parameter L, in an L L lattice subdivision becomes a control parameter that is used to determine the tradeoff factor between the storage space and the isosurface extraction time.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Node Fetching and Replacement</head><p>Ideally, if the entire temporal hierarchical index tree resides in main memory, there is no I/O required when the user randomly queries for isosurfaces at different time steps. However, the memory requirement is usually too high to make this practical. In our algorithm, the temporal hierarchical tree can be output to a file. When an isosurface at a time step is queried, our algorithm follows the traversal path as described previously and brings those nodes into main memory. Initially, all nodes on the traversal path need to be read in. Subsequently, if the user queries for an isosurface at a different time step, our algorithm traverses the search tree and brings in only those nodes that are not already in main memory. In fact,   <ref type="table">Table 1</ref>: Density fields in three CFD simulation data sets were used in our experiments. Information listed here is for one time step, and the file sizes are in megabytes.</p><p>because the non-leaf nodes contain cell index entries that are shared by several time steps, they are very likely to be in memory already. In this case, only the differential nodes, a small portion of the index tree, need to be read in from the disk. As a result, the amount of I/O required for a subsequent isosurface query can be considerably smaller. <ref type="figure">Fig. 6</ref> gives an example. Although it is always desirable to retain as many nodes in memory as possible in case that the user needs to go back and forth in time when querying the isosurfaces, those nodes that are not in use have to be replaced when the memory limitation is exceeded. To determine which node needs to be replaced, we develop a node replacement policy that assigns a priority to every node, based on its depth in the tree. The smaller the depth of a node is, the higher is its priority. For example, the root of a tree has a depth of zero therefore it has the highest priority. The reason is that the root node contains search index entries to those cells that have the lowest temporal variations, and, thus, these index entries are used by many time steps. When a node has to be replaced, we select the node that has the lowest priority. If there are more nodes than one with the same priority, we remove the one that is the least recently used (LRU).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Results and Discussion</head><p>In this section, we present experimental results of isosurface extraction for time-varying scalar fields using the temporal hierarchical index tree. Three curvilinear gridded time-varying data sets generated from computational fluid dynamics (CFD) simulations were used <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b16">17,</ref><ref type="bibr" target="#b17">18]</ref>, as shown in <ref type="table">Table 1</ref>. The time and storage space measurements shown in the following for the Delta Wing and the Post data sets were performed on an SGI Onyx2 workstation with an R10000 microprocessor and 512 megabytes of memory. For the F-18 data set, the measurements were performed on an SGI Onyx2 RealityMonster with an R10000 microprocessor and four gigabytes   <ref type="table">Table 3</ref>: The sizes (in megabytes) of the temporal hierarchical index trees for the F-18 data set using three different lattice resolutions.</p><p>of memory. We studied the characteristics of our algorithm and compared these characteristics with the regular Marching Cubes algorithm, the Interval Tree algorithm, and the ISSUE algorithm. All of these algorithms were implemented by the author. In our tests, each temporal hierarchical index tree was built using twenty time steps of data. We performed our experiments at three different time sequences in each of the test data sets, as shown in <ref type="table" target="#tab_2">Table 2</ref>; and we denote these sequences as Sequence 1, Sequence 2, and Sequence 3. To understand the storage overhead incurred by the existing value-partition techniques, the Interval Tree and the ISSUE algorithms were used to create search indices for data at every time step. <ref type="table" target="#tab_2">Table 2</ref> shows the sizes of search indices for one time step and the sizes of the search indices for twenty time steps. It is not a surprise that the size of the search index for one time step is much larger than the solution data itself because the cell search index needs to store each cell's minimum, maximum values, and the cell's identification. <ref type="bibr" target="#b0">1</ref> For a time-varying field such as the F-18 data set, more than 500 megabytes of storage were required to index 20 time steps of data. This overhead is rather overwhelming.</p><p>Three different resolutions of lattice subdivisions were used in our experiments to build temporal hierarchical index trees. A coarse resolution of lattice structure indicates that more cells are characterized as having low temporal variations. As a result, the temporal hierarchical index tree will have a smaller size since more cells in the time-varying field are placed into the non-leaf nodes in the tree. The tradeoff is that the search index tree that results from a coarse lattice subdivision will be relatively less efficient in extracting iso-  30.7% 45.5% <ref type="table">Table 5</ref>: The sizes (in megabytes) of the temporal hierarchical index trees for the Post data set.</p><p>surfaces. <ref type="table">Table 3</ref> shows the sizes of the temporal hierarchical index trees built for the F-18 data set. The percentages shown in the table are the ratios of the tree sizes to the overall space required by the IS-SUE algorithm, in a period of twenty time steps, as listed in <ref type="table" target="#tab_2">Table 2</ref>.</p><p>The test results from the three different time sequences consistently showed that the storage overhead was significantly reduced, namely from more than 500 megabytes to about 30 megabytes in the 1010 lattice, and to about 100 megabytes in the 80 80 lattice; the disk space savings amount to more than 80. <ref type="table" target="#tab_4">Table 4</ref> and <ref type="table">Table 5 list</ref> the results for the Delta Wing and the Post data sets. The Post data set has a higher scalar variation in time. However, even with a high resolution of lattice subdivision we still had about 50 saving in storage; for the smaller resolutions of lattice subdivision, we achieved about 75 , 90 space savings. <ref type="table" target="#tab_6">Table 6</ref> shows the performance of isosurface extraction using the temporal hierarchical index tree for the F-18 data set. We also show the performance of the regular Marching Cubes algorithm (denoted as MCs), the Interval Tree method (denoted as Int. Tree), and the ISSUE algorithm. We chose two representative isovalues at each of the three representative time steps. Among the techniques, the Interval Tree and the ISSUE algorithms have optimal performance, which can save about 80 , 95 isosurface extraction time compared with the regular Marching Cubes algorithm. Using the temporal hierarchical index tree, it can be seen that when a high resolution lattice such as the 80 80 subdivision was used, the performance of isosurface extractions was very close to the optimal performance gained from using the Interval Tree or the ISSUE algorithms, while only about 20 of the storage space used by the Interval Tree or the ISSUE algorithm was needed for storing the temporal hierarchical index tree. For the low resolution lattice such as the 10 10 subdivision, although the performance was slightly lower, it was still significantly faster than the regular Marching Cubes algorithm. Considering that less than 10 of space was required to store the search index compared with a full set of ISSUE or Interval Tree indices, this tradeoff can be very beneficial for certain applications. <ref type="table" target="#tab_7">Table 7 and Table 8</ref> show the results for the Delta Wing and the Post data sets, which had very similar characteristics. <ref type="table">Table 9</ref> shows the number of non-isosurface cells that were visited with lat-  In our algorithm, the nodes in the temporal hierarchical index tree are read into main memory only when necessary. In the case when a user roams a time-varying data set back and forth in time, many non-leaf nodes containing search indices that are shared by consecutive time steps can be retained in memory. As a result, only nodes that are specific to the time step for the current isosurface query need to be brought into main memory and placed into the tree. This can result in a substantially smaller amount of I/O. <ref type="figure" target="#fig_7">Fig. 7</ref> shows our experimental results. In our tests, we used the F-18 data set and queried the isosurfaces for a fixed isovalue of 0:99 from time step 10000 to 11900 in ascending order. As shown in the figure, at the first time step, no node in the traversal path was in main memory, so a higher amount of I/O was required. However, in the subsequent time steps, only the nodes that are not resident in main memory needed to be brought in. The amount of time for fetching the nodes shown in the figure is proportional to the number of nodes specific to each time step.</p><p>Finally, the color plate shows images of isosurfaces extracted from the test data sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Conclusions and Future Work</head><p>We have presented a new isosurface extraction algorithm for timevarying scalar fields. In the algorithm, we characterize the cells in the field based on their extreme values and the extreme values' variations over time. For a cell that has a low temporal variation, its extreme values at consecutive time steps are coalesced, and the overall extreme values are used to refer to a cell at many time steps. We adaptively compute the representative extreme values for every cell in the time-varying field and place the cells into a search structure called Temporal Hierarchical Index Tree. This index tree can efficiently locate isosurface cells in a time-varying field, while the size of the tree for a series of time steps is substantially smaller than the space required by the search indices of the existing isosurface extraction algorithms. Our algorithm allows flexible control of the tradeoff between performance and storage space and, thus, can be used for data with different characteristics in different computing environments. We have tested our algorithm using three large-scale time-varying data sets from CFD simulations. The space savings can amount to more than 80, while the isosurface extraction performance remains nearly optimal. In addition, using the temporal hierarchical index tree, the amount of I/O for accessing the search indices at different time steps can be greatly reduced.</p><p>Future work includes devising an out-of-core algorithm for creating and accessing the temporal hierarchical index tree. The method we described in section 3:3 is a coarse out-of-core model since a whole node is fetched into main memory at a time. In fact, it is also desirable to devise a finer grind out-of-core algorithm for accessing the temporal hierarchical index tree so that only the subset of the nodes' lattice needed for the current isovalue is brought into main memory at a time. In addition, we would like to investigate a combination of the space-and value-partition algorithms. Furthermore, developing time-varying methods for surface-propagation schemes is also an interesting research subject.      <ref type="table">Table 9</ref>: Number of non-isosurface cells that were visited with lattice subdivisions of different resolutions.</p><p>Color Plate: Isosurfaces of density fields in the F−18, Delta Wing, and Post data sets. The surfaces are colored by velocity magnitudes, with red being a high magnitude and blue being a low magnitude.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>3</head><label></label><figDesc>Isosurface Extraction from Timevarying Fields Given a time interval i; j and a time-varying field, we define a cell's temporal extreme values, that is, the extreme values over time, in this interval as: min j i = MINmint; t = i::j max j i = MAXmaxt; t = i::j where MIN and MAX are the functions that compute the minimum and the maximum values, and mint and maxt are the cell's extreme values at the t th time step; we call them the cell's timespecific extreme values. To locate the isosurface cells in the timevarying field, one can approximate a cell's extreme values at any time step within the time span i; j by the cell's temporal extreme values, min j i and max j</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 1 :Figure 2 :</head><label>12</label><figDesc>sented by a point whose x coordinate represents its minimum value max min In this example, the span space is subdivided into 9 9 lattice elements. Each lattice element is assigned an integer coordinate based on its row and column number. The shaded lattice element in this figure has a coordinate 2; 4. Cells in a time-varying field are classified into a temporal hierarchical index tree based on the temporal variations of their extreme values. In this figure, the tree is built from a time-varying field with a time interval [0,5].</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>In this example, tree nodes that are inside the rectangular boxes are on the traversal path for an isosurface query at time step1. treme values. Given a time interval i; j in the time-varying field, the root node in the temporal hierarchical index tree, denoted as N j i , contains cells that have low scalar variations in the time interval i; j . We determine that a cell has a low temporal variation by inspecting the locations of the cell's j , i + 1 corresponding points in the span space. If all of the cell's corresponding points are located within an area of 22 lattice elements, we characterize the cell as a cell of low temporal variation. This cell is then placed into the node N j i , and is represented by its temporal extreme values min j i and max j i . On the other hand, for cells that do not satisfy the criterion, we split the time interval i; j in half, that is, into i; i + j , i + 1 =2 , 1 and i + j , i + 1 =2; j , and continue to classify the cells recursively into each of N j i 's two subtrees that have roots N i+j,i+1=2,1 i and N j i+j,i+1=2 . The temporal hierarchical tree has leaf nodes N t t ; t = i::j. The leaf nodes contain cells that have the highest scalar variations in time so that the cells' time-specific extreme values are used. Cells that are classified into non-leaf nodes are represented by their temporal extreme values.The use of the temporal extreme values directly contributes to the reduction of the overall index size because the temporal extreme values are used to refer to a cell for more than one time step.Fig. 2shows an example of the temporal hierarchical index tree with a time interval 0; 5 .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 4 :</head><label>4</label><figDesc>In this case, lattice element 4; 4 contains the point Viso; V iso. Isosurface cells are located in the shaded area.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>3 .</head><label>3</label><figDesc>Collect the isosurface cells from the interval tree built at lattice element I ; I . The method and its details are presented in<ref type="bibr" target="#b8">[9]</ref>.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 6 : 2 2</head><label>62</label><figDesc>In this case, if the user changes the isosurface query from time step 1 to time step 2, only the node N needs to be brought in from the disk.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 7 :</head><label>7</label><figDesc>The time (in milliseconds) for restoring tree nodes from the disk when the user sequentially queries the isosurface in time. The F-18 data set was used.tice subdivisions of different resolutions. The percentage numbers are the ratios to the total number of cells in the field. It can be seen that even with a low resolution subdivision such as 10 10, the overhead is fairly small.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head></head><label></label><figDesc>10 10 0.26 0.16 0.39 0.20 0.39 0.20 40 40 0.25 0.14 0.29 0.16 0.27 0.15 80 80 0.24 0.14 0.26 0.14 0.26 0.14</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 2 :</head><label>2</label><figDesc>The time sequences in the test data sets and the storage space (in megabytes) required for creating the search indices for one time step and for twenty time steps of data using the ISSUE and the Interval Tree algorithms.</figDesc><table><row><cell></cell><cell>F-18</cell><cell></cell><cell></cell></row><row><cell cols="4">Lattice Resolution 10 10 40 40 80 80</cell></row><row><cell>Sequence 1</cell><cell>31.6</cell><cell>56.1</cell><cell>82.5</cell></row><row><cell></cell><cell>5.9%</cell><cell>10.5%</cell><cell>15.4%</cell></row><row><cell>Sequence 2</cell><cell>32.9</cell><cell>67.2</cell><cell>102.5</cell></row><row><cell></cell><cell>6.2%</cell><cell>12.6%</cell><cell>19.2%</cell></row><row><cell>Sequence 3</cell><cell>30.4</cell><cell>53.4</cell><cell>79.3</cell></row><row><cell></cell><cell>5.7%</cell><cell>10%</cell><cell>14.8%</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 4 :</head><label>4</label><figDesc>The sizes (in megabytes) of the temporal hierarchical index trees for the Delta Wing data set.</figDesc><table><row><cell></cell><cell>Post</cell><cell></cell><cell></cell></row><row><cell cols="4">Lattice Resolution 10 10 40 40 80 80</cell></row><row><cell>Sequence 1</cell><cell>11.9</cell><cell>18.5</cell><cell>23.1</cell></row><row><cell></cell><cell>28.3%</cell><cell>44%</cell><cell>55%</cell></row><row><cell>Sequence 2</cell><cell>4.8</cell><cell>12.7</cell><cell>18.9</cell></row><row><cell></cell><cell>11.4%</cell><cell>30.2%</cell><cell>45%</cell></row><row><cell>Sequence 3</cell><cell>4.9</cell><cell>12.9</cell><cell>19.1</cell></row><row><cell></cell><cell>11.7%</cell><cell></cell><cell></cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6"><head>Table 6 :</head><label>6</label><figDesc>The performance of isosurface extraction (in seconds) for the F-18 data set.</figDesc><table><row><cell></cell><cell></cell><cell cols="2">Delta Wing</cell><cell></cell><cell></cell><cell></cell></row><row><cell>Time Step</cell><cell>760</cell><cell></cell><cell>780</cell><cell></cell><cell>800</cell><cell></cell></row><row><cell>Isovalue</cell><cell>0.96</cell><cell>0.89</cell><cell>0.96</cell><cell>0.89</cell><cell>0.96</cell><cell>0.89</cell></row><row><cell cols="7"># of Triangles 50,962 17,288 52,728 16,760 47,842 17,990</cell></row><row><cell>MCs</cell><cell>7.86</cell><cell>7.72</cell><cell>7.87</cell><cell>7.72</cell><cell>7.85</cell><cell>7.73</cell></row><row><cell>Int. Tree</cell><cell>0.63</cell><cell>0.21</cell><cell>0.65</cell><cell>0.20</cell><cell>0.59</cell><cell>0.22</cell></row><row><cell>ISSUE</cell><cell>0.61</cell><cell>0.20</cell><cell>0.63</cell><cell>0.19</cell><cell>0.57</cell><cell>0.21</cell></row><row><cell></cell><cell cols="4">Temporal Hierarchical Index Tree</cell><cell></cell><cell></cell></row><row><cell cols="7">10 10 1.39 0.35 0.14 0.36 0.13 0.36</cell></row><row><cell cols="7">40 40 0.82 0.27 0.84 0.28 0.75 0.30</cell></row><row><cell cols="7">80 80 0.70 0.25 0.73 0.25 0.66 0.27</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7"><head>Table 7 :</head><label>7</label><figDesc>The performance of isosurface extraction (in seconds) for the Delta Wing data set.</figDesc><table><row><cell></cell><cell></cell><cell></cell><cell>Post</cell><cell></cell><cell></cell><cell></cell></row><row><cell>Time Step</cell><cell cols="2">12100</cell><cell cols="2">12300</cell><cell cols="2">12500</cell></row><row><cell>Isovalue</cell><cell>1.00</cell><cell>0.98</cell><cell>1.00</cell><cell>0.98</cell><cell>1.00</cell><cell>0.98</cell></row><row><cell cols="7"># of Triangles 18,932 11,168 20,476 11,480 20,158 11,064</cell></row><row><cell>MCs</cell><cell>1.52</cell><cell>1.48</cell><cell>1.52</cell><cell>1.48</cell><cell>1.52</cell><cell>1.48</cell></row><row><cell>Int. Tree</cell><cell>0.22</cell><cell>0.13</cell><cell>0.24</cell><cell>0.13</cell><cell>0.23</cell><cell>0.13</cell></row><row><cell>ISSUE</cell><cell>0.22</cell><cell>0.12</cell><cell>0.24</cell><cell>0.13</cell><cell>0.23</cell><cell>0.12</cell></row><row><cell></cell><cell cols="4">Temporal Hierarchical Index Tree</cell><cell></cell><cell></cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8"><head>Table 8 :</head><label>8</label><figDesc>The performance of isosurface extraction (in seconds) for the Post data set.</figDesc><table><row><cell>Lattice Resolution</cell><cell cols="2">10 10</cell><cell cols="2">40 40</cell><cell cols="2">80 80</cell></row><row><cell>F-18</cell><cell></cell><cell></cell><cell cols="2">Time Step 13000</cell><cell></cell><cell></cell></row><row><cell>Isovalue</cell><cell>0.99</cell><cell>0.93</cell><cell>0.99</cell><cell>0.93</cell><cell>0.99</cell><cell>0.93</cell></row><row><cell cols="7">Non-isocell Visited 62,551 20,193 22,972 12,031 11,973 7,186</cell></row><row><cell>Percentage</cell><cell>3.7%</cell><cell>1.2%</cell><cell>1.4%</cell><cell>0.7%</cell><cell>0.7%</cell><cell>0.4%</cell></row><row><cell>Delta Wing</cell><cell></cell><cell></cell><cell cols="2">Time Step 780</cell><cell></cell><cell></cell></row><row><cell>Isovalue</cell><cell>0.96</cell><cell>0.89</cell><cell>0.96</cell><cell>0.89</cell><cell>0.96</cell><cell>0.89</cell></row><row><cell cols="2">Non-isocell Visited 48,261</cell><cell>9,738</cell><cell>11,289</cell><cell>4,586</cell><cell>4,531</cell><cell>2,918</cell></row><row><cell>Percentage</cell><cell>7.3%</cell><cell>1.5%</cell><cell>1.7%</cell><cell>0.7%</cell><cell>0.7%</cell><cell>0.4%</cell></row><row><cell>Post</cell><cell></cell><cell></cell><cell cols="2">Time Step 12300</cell><cell></cell><cell></cell></row><row><cell>Isovalue</cell><cell>1.00</cell><cell>0.98</cell><cell>1.00</cell><cell>0.98</cell><cell>1.00</cell><cell>0.98</cell></row><row><cell cols="2">Non-isocell Visited 10,062</cell><cell>4,266</cell><cell>3,138</cell><cell>1,429</cell><cell>1,558</cell><cell>595</cell></row><row><cell>Percentage</cell><cell>8.2%</cell><cell>3.5%</cell><cell>2.6%</cell><cell>1.2%</cell><cell>1.3%</cell><cell>0.5%</cell></row></table><note></note></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="1">In our experiments, we intentionally chose not to cluster multiple cells to form meta cells for building the index as in<ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b13">14]</ref>, or use the nice chessboard approach as suggested in<ref type="bibr" target="#b8">[9]</ref>, so we can more easily study the behavior of the underlying algorithms. However, these techniques can be equally well applied to all the methods, including our new algorithm, discussed in this section.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>This work was supported in part by NASA contract NAS2-14303. We would like to thank Ken Gee, Neal Chaderjian, and Dennis Jespersen for providing their data sets. Special thanks to Randy Kaemmerer and David Ellsworth for their meticulous proofreading of this manuscript and valuable suggestions. We also thank Tim Sandstrom and other members in the Data Analysis Group at NASA Ames Research Center for their helpful comments and technical support.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Marching cubes: A high resolution 3d surface construction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="163" to="169" />
+			<date type="published" when="1987-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Octrees for faster isosurface generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="201" to="227" />
+			<date type="published" when="1992-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">A near optimal isosurface extraction algorithm using the span space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<date type="published" when="1996-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Isosurfacing in span space with utmost efficiency (ISSUE)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;96</title>
+		<meeting>Visualization &apos;96<address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="287" to="294" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Automatic isosurface propagation using an extrema graph and sorted boundary cell lists</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Itoh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Koyamada</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<date type="published" when="1995-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Volume thinning for automatic isosurface propagation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Itoh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Yamaguchi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Koyamada</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;96</title>
+		<meeting>Visualization &apos;96<address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="303" to="310" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Fast isocontouring for improved interactivity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">L</forename><surname>Bajaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">R</forename><surname>Schikore</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">1996 Symposium for Volume Visualization</title>
+		<meeting><address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1996-10" />
+			<biblScope unit="page" from="39" to="46" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Figure 8: Color Plate -Isosurfaces of density fields in the F-18, Delta Wing, and Post data sets. The surfaces are colored by velocity magnitudes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Van Kreveld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Van Oostrum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">L</forename><surname>Bajaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">R</forename><surname>Schikore</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of 13th ACM Symposium on Comp. Geom</title>
+		<meeting>13th ACM Symposium on Comp. Geom</meeting>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="212" to="219" />
+		</imprint>
+	</monogr>
+	<note>Contour trees and small seed sets for isosurface traversal</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Speeding up isosurface extraction using interval trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cignoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Marino</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Montani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Puppo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopigno</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<date type="published" when="1997-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Advanced interactive visualization for CFD</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Giles</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Haimes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computing Systems in Engineering</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="51" to="62" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Span filter: An optimization scheme for volume visualization of large finite element models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">S</forename><surname>Gallagher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;91</title>
+		<meeting>Visualization &apos;91<address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="68" to="75" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Sweeping simplices: A fast isosurface extraction algorithm for unstructured grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;95</title>
+		<meeting>Visualization &apos;95<address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="143" to="151" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">I/O optimal isosurface extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y.-J</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;97</title>
+		<meeting>Visualization &apos;97<address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="293" to="300" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Interactive outof-core isosurface extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y.-J</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">J</forename><surname>Schroeder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;98</title>
+		<meeting>Visualization &apos;98<address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Multiresolution video</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Finkelstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">E</forename><surname>Jacobs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">H</forename><surname>Salesin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACM SIGGRAPH &apos;96</title>
+		<meeting>ACM SIGGRAPH &apos;96</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="281" to="290" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Computation of F-18 tail buffet</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Gee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Murman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Schiff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Aircraft</title>
+		<imprint>
+			<biblScope unit="volume">33</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<date type="published" when="1996-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Numerical simulation of flow past a tapered cylinder</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Jespersen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Levit</surname></persName>
+		</author>
+		<idno>RNR-90-021</idno>
+		<imprint>
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+	<note type="report_type">RNR Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Navier-Stokes analysis of a delta wing in static and dynamic roll</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Chaderjian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Schiff</surname></persName>
+		</author>
+		<idno>AIAA-95-1868</idno>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

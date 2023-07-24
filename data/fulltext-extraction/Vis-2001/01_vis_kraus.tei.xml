@@ -1,0 +1,539 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Cell-Projection of Cyclic Meshes</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Kraus</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Ertl</surname></persName>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="department">Visualization and Interactive Systems Group</orgName>
+								<orgName type="institution">Universität Stuttgart</orgName>
+								<address>
+									<country key="DE">Germany</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff1">
+								<address>
+									<settlement>San Diego</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Cell-Projection of Cyclic Meshes</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:45+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>I.3.3 [Computer Graphics]: Picture/Image Generation</term>
+					<term>I.3.5 [Computer Graphics]: Computational Geometry and Object Modeling</term>
+					<term>I.3.7 [Computer Graphics]: Three-Dimensional Graphics and Realism cell-projection</term>
+					<term>direct volume rendering</term>
+					<term>tetrahedral meshes</term>
+					<term>unstructured meshes</term>
+					<term>visibility cycles</term>
+					<term>visibility ordering</term>
+					<term>visibility sorting</term>
+					<term>volume visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>We present the first algorithm that employs hardware-accelerated cell-projection for direct volume rendering of cyclic meshes, i.e., meshes with visibility cycles. The visibility sorting of a cyclic mesh is performed by an extended topological sorting, which computes and isolates visibility cycles. Measured sorting times are comparable to previously published algorithms, which are, however, restricted to acyclic meshes. In practice, our algorithm is also useful for acyclic meshes as numerical instabilities can lead to false visibility cycles. Our method includes a simple, hardware-assisted algorithm based on image compositing that renders visibility cycles correctly. For tetrahedral meshes this algorithm allows us to render each tetrahedral cell (whether it is part of a cycle or not) by hardware-accelerated cell-projection. In its basic form our method applies only to convex cyclic meshes; however, we present an exact and a simpler but inexact extension of our method for nonconvex meshes.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Several visualization techniques, in particular direct volume rendering based on cell-projection <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b1">2,</ref><ref type="bibr" target="#b5">6,</ref><ref type="bibr" target="#b6">7,</ref><ref type="bibr" target="#b7">8,</ref><ref type="bibr" target="#b8">9,</ref><ref type="bibr" target="#b10">11,</ref><ref type="bibr" target="#b11">12,</ref><ref type="bibr" target="#b13">14,</ref><ref type="bibr" target="#b15">16,</ref><ref type="bibr" target="#b16">17,</ref><ref type="bibr" target="#b17">18]</ref>, require a visibility ordering of the cells of a mesh, for example in order to composite the projections of cells correctly. A visibility ordering (or depth ordering) of a set of cells is an ordering of the cells such that a cell b precedes another cell a in the ordering if a obstructs b. (This defines a back-to-front ordering; reversing the ordering will result in a front-to-back ordering.)</p><p>While the visibility ordering is trivial for certain meshes (e.g., rectilinear grids), the ordering for unstructured or curvilinear meshes has to be computed explicitly. In this paper we will focus on unstructered meshes consisting of convex polyhedral cells. We also assume that each pair of cells either does not intersect or shares a vertex, an edge, or a face.  The computation of a visibility ordering is crucial for interactive volume visualization as it has to be performed for each viewpoint separately. Thus, several algorithms have been proposed that exploit particular properties of meshes (e.g., convexity or the Delaunay property) in order to improve the performance of the visibility sorting. We will give an overview of some of these algorithms in Section 2.</p><p>Unfortunately, the price of exploiting certain properties of meshes is the restriction to the corresponding classes of meshes. The goal of this paper, however, is to overcome one particular constraint, namely the acyclicity of tetrahedral meshes and meshes with convex polyhedral cells in general. Acyclic meshes are characterized by the absence of visibility cycles for all viewpoints. <ref type="bibr">Figures 9 and 19</ref> show examples of visibility cycles formed by polygons and tetrahedra, respectively.</p><p>While image-based algorithms (e.g., ray-casting) are usually not affected by visibility cycles as they calculate the cells' visibility ordering for each viewing ray separately, all published algorithms based on hardware-assisted cell-projection cannot sort visibility cycles-simply because there is no visibility ordering of a visibility cycle. One possible approach to this problem is to split cells of a cyclic mesh appropriately in order to transform it into an acyclic mesh. However, the resulting additional cells will decelerate the visibility sorting. Moreover, numerical instabilities might still generate visibility cycles.</p><p>Our solution of the problem is twofold: Firstly, the visibility sorting suggested by Williams in <ref type="bibr" target="#b15">[16]</ref> is extended in order to compute and sort visibility cycles. This is achieved by computing visibility cycles with a standard graph algorithm and gathering all cells of each cycle in one "cell cluster" for each cycle. This allows us to find a visibility ordering of the combined set of single cells that are not part of a cycle and of cell clusters resulting from visibility cycles. Our sorting algorithm is described in Section 3.</p><p>Secondly, the cyclic cell clusters have to be rendered. We employ an enhanced variant of an algorithm for resolving cyclic occlusions of polygons published by Snyder et al. in <ref type="bibr" target="#b12">[13]</ref>, which allows us to render visibility cycles without splitting. However, the rendering time for each cluster is quadratic in the number of its cells. In Section 4 our rendering algorithm for visibility cycles is presented in detail.</p><p>While Sections 3 and 4 are restricted to convex meshes, we will describe extensions for nonconvex meshes in Section 5. In Section 6 several relevant details of our implementation are discussed. Measured sorting and rendering times are given in Section 7 and Section 8 presents our conclusions and plans for future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Previous Work</head><p>Remarkably, the two most important approaches to the computation of visibility orderings of unstructured meshes are both based on results of Edelsbrunner <ref type="bibr" target="#b2">[3]</ref> and published by Max et al. in <ref type="bibr" target="#b7">[8]</ref>. The first method is to sort the cells of a tetrahedral mesh with respect to the tangential distance from the viewpoint to the circumscribing sphere of each cell. The resultant visibility orderings are exact for Delaunay meshes; however, they may be inexact if the Delaunay property does not apply. Note that the visibility ordering has to be inexact for a mesh with visibility cycles as there is no ordering of the cells of a visibility cycle. Nonetheless, variants of this ordering algorithm are often employed (see for example <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b5">6,</ref><ref type="bibr" target="#b17">18]</ref>), in particular because of the algorithm's high performance. Unfortunately, this algorithm appears to be completely inappropriate for our purpose of computing (and rendering) visibility cycles.</p><p>In <ref type="bibr" target="#b7">[8]</ref> Max et al. also presented a second visibility sorting algorithm for convex meshes, i.e., meshes with a convex boundary. This algorithm will be described in Section 3. It was published independently by Williams in <ref type="bibr" target="#b15">[16]</ref>, who named it MPVO (Meshed Polyhedra Visibility Ordering).</p><p>An extension of the MPVO algorithm for nonconvex meshes (called MPVONC) was also published by Williams in <ref type="bibr" target="#b15">[16]</ref>. However, the computed visibility orderings are inexact for some nonconvex meshes (see <ref type="bibr" target="#b15">[16]</ref>). Several years later Silva et al. published an extension of the MPVO algorithm for nonconvex meshes called XMPVO in <ref type="bibr" target="#b11">[12]</ref>, which computes visibility orderings. The performance of this algorithm was improved by the BSP-XMPVO algorithm of Comba et al. in <ref type="bibr" target="#b1">[2]</ref>.</p><p>Note that the MPVO algorithm and its descendants are limited to acyclic meshes as the topological sorting of the MPVO algorithm is not applicable to cyclic meshes. However, it is possible to compute visibility cycles by employing an algorithm for the computation of strongly connected components published by Tarjan in <ref type="bibr" target="#b14">[15]</ref>. This approach is well-known for visibility cycles formed by polygons (see <ref type="bibr" target="#b4">[5]</ref> or <ref type="bibr" target="#b12">[13]</ref>).</p><p>We will render the projections of single tetrahedral cells by hardware-accelerated cell-projection as proposed by Shirley and Tuchman in <ref type="bibr" target="#b10">[11]</ref> and improved by Stein et al. in <ref type="bibr" target="#b13">[14]</ref>. To render visibility cycles, we enhanced and adapted a technique published by Snyder and Lengyel in <ref type="bibr" target="#b12">[13]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Visibility Sorting of Cyclic Meshes</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Overview of the MPVO Algorithm</head><p>Before discussing the case of cyclic meshes, we will briefly describe the MPVO algorithm for convex acyclic meshes. In <ref type="bibr" target="#b15">[16]</ref> Williams defines three phases of the MPVO algorithm: Phase I is a preprocessing step, i.e., the computations are independent of the viewpoint. Thus, the results can be reused for different viewpoints. In particular, coefficients of the plane equations for all faces of all cells are calculated in this phase. Moreover, most of the data structures required in the following phases are constructed and initialized.</p><p>Phase II is a loop over all faces that are shared by two cells. For each face the behind relation " " (a b if a is behind b, i.e., b obstructs a) between the two cells is calculated by evaluating the plane equation of the face for the given viewpoint. We will restrict our considerations to perspective projections; see <ref type="bibr" target="#b15">[16]</ref> for the calculation of the behind relation for orthographic projections. From these behind relations a directed graph is built, where each cell is represented by a node and each face shared by two cells is represented by an edge between two nodes. The directions of the edges of this graph correspond to the behind relation between the corresponding cells, i.e., the edge is directed from node a to b if a b.</p><p>An example in two dimensions is sketched in <ref type="figure" target="#fig_3">Figures 1 and 2</ref>. The acyclic triangular mesh consists of eight labeled cells and is viewed from a point at the top of the figures. <ref type="figure" target="#fig_3">Figure 1</ref> depicts the behind relation for each shared face (i.e., shared edge of two triangular cells) while <ref type="figure" target="#fig_5">Figure 2</ref> shows the resulting directed acyclic graph.</p><p>Phase III of the MPVO algorithm computes a visibility ordering of the mesh by topologically sorting the directed acyclic graph constructed in phase II. The topological sorting can be implemented by    a breadth-first search (phase III-BFS) or a depth-first search (phase III-DFS). However, for the depth-first search the directions of all edges have to be reversed prior to the topological sorting.</p><p>The breadth-first search of the graph of <ref type="figure" target="#fig_5">Figure 2</ref> is visualized in <ref type="figure">Figure 3</ref>. It starts with the set of source nodes, i.e., nodes without incoming edges; in our example nodes 3 and 4. Note that the set of source nodes necessarily corresponds to a set of non-obstructing cells. In fact, the breadth-first search will result in a sequence of sets of non-obstructing cells. The corresponding sets of nodes are separated by gray horizontal lines in <ref type="figure">Figure 3</ref>.   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Computing and Ordering Visiblity Cycles</head><p>Strictly speaking, there is no visibility ordering of a cyclic mesh. In particular, a phase III-DFS will detect a cycle and return an inexact visibility ordering. For example, <ref type="figure">Figure 5</ref> depicts a cyclic mesh as the cells labeled 5, 6, and 7 form a visibility cycle, i.e., each of these cells (indirectly) obstructs each other. This cycle is more obvious in <ref type="figure">Figure 6</ref> and corresponds to a non-atomic strongly connected component, which includes the nodes labeled 5, 6, and 7. All other strongly connected components in this example consist of single nodes.</p><p>Note that the algorithms discussed in this paper cannot handle nonconvex cells in general; however, the nonconvex cell 5 in Figure 5 allowed us to create a simple cyclic mesh in two dimensions. In fact, cyclic tetrahedral meshes are more easily constructed than cyclic triangular meshes; see <ref type="figure" target="#fig_3">Figure 19</ref>.</p><p>A failed topological sort of the graph with reversed directions is visualized in <ref type="figure">Figure 7</ref>: The cycle is detected when the algorithm descends from node 5 to node 6 (see the position marked with "!") as node 6 was visited earlier in the same descent. In order to compute the strongly connected components of the visibility graph we will employ the depth-first search algorithm by Tarjan published in <ref type="bibr" target="#b14">[15]</ref>. Fortunately, this algorithm will also compute a visibility ordering of the strongly connected components. As a result we have to render these components instead of single cells. If a component does not consist of a single cell, a visibility cycle has to be rendered as will be discussed in Section 4.</p><p>The basic idea of the algorithm by Tarjan is to keep track of the highest node (frontmost cell) that can be accessed from the current node. This node will usually be identical to the current node as outgoing edges are in general directed to the back of the mesh (compare Figures 4, 7, and 8), i.e., by following any outgoing edge we will usually not be able to reach a cell that is closer to the front than the current cell. The situation is, however, different for a cycle. For example node 7 in <ref type="figure">Figure 8</ref> has an outgoing edge to node 5, which has an edge to node 6, but cell 6 is in front of cell 7. This feature is exploited by Tarjan's algorithm to compute and topologically sort the strongly connected components of a directed graph as illustrated in <ref type="figure">Figure 8</ref>.</p><p>The algorithm given in <ref type="bibr" target="#b14">[15]</ref> is quite simple; however, we based our code on a slightly improved version published in <ref type="bibr" target="#b9">[10]</ref>, which can be easily adapted to replace the phase III-DFS algorithm given in <ref type="bibr" target="#b15">[16]</ref>. The resulting variant of the MPVO algorithm will be called MPVOC (C for cyclic). When comparing this pseudo code with the pseudo code of the MPVO phase III-DFS algorithm in <ref type="bibr" target="#b15">[16]</ref>, note that the graph's edges have been reversed as depicted in <ref type="figure">Figure 8</ref>. Consequently, the terms sink and source cells, and predecessor and successor switch their meanings. Also note that each cell of the mesh is required to store one additional integer variable (called num), which is not required by the original phase III-DFS algorithm. The time and space complexities of the MPVOC phase III algorithm are O¢ n¤ , where n is the number of cells of the mesh. These complexities are inherited from the algorithm by Tarjan (see <ref type="bibr" target="#b14">[15]</ref>).</p><p>Strongly connected components are identified by the last ifstatement in the procedure dfs. If one of these components consists of more than one cell, it corresponds to a visibility cycle and has to be rendered as discussed in Section 4. However, the MPVOC is advantageous even without the possibility to render cyclic obstructions. According to our measurements, the phase III-BFS algorithm is slower than MPVOC phase III (see Section 7) and it does not visit all cells of a mesh when a cycle exists (see <ref type="bibr" target="#b15">[16]</ref>). Note that numerical errors can generate cycles even in acyclic meshes. The phase III-DFS algorithm is slightly faster but does not compute any information about the cycles. On the other hand the MPVOC algorithm computes minimal sets of cyclic cells; thus, if only one cell in a group is visible (i.e., all other cells are either completely transparent or degenerate or "imaginary", see <ref type="bibr" target="#b15">[16]</ref> and Section 5) then the MPVOC algorithm can still guarantee that the mesh is ren-dered exactly. This is also true if only two adjacent convex cells of a visibility cycle are visible.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Rendering of Visibility Cycles</head><p>This section introduces a new OpenGL hardware-assisted algorithm for rendering possibly semi-transparent and/or intersecting polygons, which may form visibility cycles. The rendering of visibility cycles of convex polyhedral cells (as required by the MPVOC algorithm) will be discussed at the end of this section.</p><p>The algorithm presented here is derived from an algorithm by Snyder and Lengyel published in <ref type="bibr" target="#b12">[13]</ref>. However, there are several crucial differences, which will be discussed below. Before specifying the algorithm, we will present its formal background.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Formal Background</head><p>Following the notation of <ref type="bibr" target="#b12">[13]</ref> we represent an image I ¢ P¤ of an orderless collection of polygons P ¢ ¡</p><formula xml:id="formula_0">P i £ with i 1£ ¥ ¤ ¥ ¤ ¦ ¤£</formula><p>n as a twodimensional array of 4-tuples with red, green, blue, and α components:</p><formula xml:id="formula_1">I ¢ P¤ § I r ¢ P¤ £ I g ¢ P¤ £ I b ¢ P¤ £ I α ¢ P¤ © ¤</formula><p>We need two operations on images, which are addition</p><formula xml:id="formula_2">A ¡ B § A r ¡ B r £ A g ¡ B g £ A b ¡ B b £ A α ¡ B α ©</formula><p>and "out" (which has higher precedence than "+"):</p><formula xml:id="formula_3">A out B § A r ¢ 1 B α ¤ £ A g ¢ 1 B α ¤ £ A b ¢ 1 B α ¤ £ A α ¢ 1 B α ¤ © ¤</formula><p>In words, A out B is the image A attenuated by B. Based on these operations accumulator operators ∑ and OUT are defined, e.g.,</p><formula xml:id="formula_4">D OUT A B C ¢ ¢ D out A¤ out B¤ outC ¤</formula><p>Note that the order of the arguments</p><formula xml:id="formula_5">¡ A£ B£ C £</formula><p>is not relevant. Additionally, we define the "over" operator:</p><formula xml:id="formula_6">A over B A ¡ B out A£</formula><p>which is the composition of a background image B with a foreground image A.</p><p>Our algorithm solves the following problem: Given a background image I bg and a set of polygons P </p><formula xml:id="formula_7">¡ P i £ with i 1£ ¥ ¤ ¦ ¤ ¥ ¤£ n ,</formula><formula xml:id="formula_8">I ¢ P¤ n ∑ i 1 I ¢ P i ¤ OUT I P j P i ! P j £</formula><p>where P i P j means that the polygon P j occludes P i . In words, the image I ¢ P¤ is given by the sum of the images of all polygons P i , each being attenuated by all polygons that occlude P i . As we intend to replace all occlusion tests by OpenGL z-tests, we rewrite this equation as</p><formula xml:id="formula_9">I ¢ P¤ n ∑ i 1 I ¢ P i ¤ n OUT j 1 j " i I #¢ P j ¤ £</formula><p>where I# </p><formula xml:id="formula_10">P¤ I bg n OUT i 1 I ¢ P i ¤ ¡ n ∑ i 1 I ¢ P i ¤ n OUT j 1 j " i I# ¢ P j ¤ £<label>(1)</label></formula><p>i.e., we attenuate the background image I bg by all polygons and add the contribution of the attenuated images of these polygons.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Algorithm</head><p>It is straightforward to translate Equation <ref type="formula" target="#formula_10">1</ref>into an algorithm. The steps of this algorithm are:</p><p>1. Set the display buffer I d to the background image:</p><formula xml:id="formula_11">I d : I bg .</formula><p>(This is, of course, unnecessary if I bg is already stored in</p><formula xml:id="formula_12">I d .) 2. For each polygon P i with i 1£ ¥ ¤ ¦ ¤ ¥ ¤£</formula><p>n attenuate the display buffer:</p><formula xml:id="formula_13">I d : I d out I ¢ P i ¤ . 3. For each polygon P i with i 1£ ¦ ¤ ¥ ¤ ¥ ¤£</formula><p>n set the additional image buffer:</p><formula xml:id="formula_14">I P : I ¢ P i ¤ OUT n j 1 I# ¢ P j ¤</formula><p>and add the resultant image to the display buffer:</p><formula xml:id="formula_15">I d : I d ¡ I P .</formula><p>Before discussing the main features of this algorithm, we will give a simple step-by-step example.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Example: Ternary Cycle</head><p>The goal in this example is to render a visibility cycle formed by three polygons P 1 , P 2 , and P 3 in front of a white background I bg . The geometry of this scene is sketched in <ref type="figure" target="#fig_11">Figure 9</ref>. Each polygon has a constant color (see <ref type="figure" target="#fig_3">Figures 11, 13, and 15</ref>) and a constant α-value, which is 0¤ 9, 0¤ 8, and 0¤ 7 for P 1 , P 2 , and P 3 , respectively.  In terms of our formal specification of the algorithm we set n 3 and P</p><formula xml:id="formula_16">P 1 P 2 P 3</formula><formula xml:id="formula_17">¡ P 1 £ P 2 £ P 3 £</formula><p>. Moreover, I bg is a completely white image. Therefore, the first step of our algorithm is to copy this white background into the display buffer I d .</p><p>The second step is to attenuate the display buffer by the images of the polygons. The result of the three (commutative) attenuation operations is depicted in <ref type="figure" target="#fig_3">Figure 10</ref>.</p><p>The third step consists of a loop over the three polygons. Each polygon is attenuated by the occluding polygon, i.e., P 1 by P 2 (see <ref type="figure" target="#fig_3">Figure 12</ref>), P 2 by P 3 (see <ref type="figure" target="#fig_3">Figure 14)</ref>, and P 3 by P 1 (see <ref type="figure" target="#fig_3">Figure 16</ref>). The sum of the three resultant images is shown in <ref type="figure" target="#fig_3">Figure 17</ref>. Finally, this sum is added to the background, see <ref type="figure" target="#fig_3">Figure 18</ref>.    More precisely spoken, the sum corresponding to <ref type="figure" target="#fig_3">Figure 17</ref> is evaluated and added to the background by squentially adding the contribution of each polygon <ref type="figure" target="#fig_3">(Figures 12, 14, and 16)</ref> to the display buffer, which initially holds the attenuated background image <ref type="figure" target="#fig_3">(Figure 10</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Comparison with the Algorithm by Snyder and Lengyel</head><p>Compared to the original algorithm by Snyder and Lengyel published in <ref type="bibr" target="#b12">[13]</ref> our algorithm features several advantages:</p><p>only one (instead of two) additional image buffer is needed;    where n is the number of polygons, it is impractical for rendering complex scenes. However, it is useful for rendering visibility cycles formed by a few primtives.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Rendering of Cyclic Convex Polyhedral Cells</head><p>Cyclic obstructions of convex polyhedral cells (instead of polygons) can be rendered by cell-projection of the cells because cellprojection reduces the problem of rendering a volumetric cell to the problem of rendering a polygon. However, the polygonal projection of each cell must be placed within the cell as the z-coordinates of the pixels of the polygons are used in z-tests. Note that cells with a volumetric intersection cannot be rendered this way. However, this kind of intersection is already excluded by the requirements of phase III of the MPVOC and MPVO algorithms.</p><p>For tetrahedral cells the cell-projection can be performed by the projected tetrahedra approach published by Shirley and Tuchman in <ref type="bibr" target="#b10">[11]</ref> and improved by Stein et al. in <ref type="bibr" target="#b13">[14]</ref>. Further improvements are discussed in <ref type="bibr" target="#b8">[9]</ref>, but were not employed here. The combination of this projected tetrahedra algorithm with our algorithm for the rendering of visibility cycles of polygons allows us to render any visibility cycles of tetrahedra.</p><p>For example, <ref type="figure" target="#fig_3">Figure 19</ref> depicts three tetrahedra, which form a visibility cycle. After defining colors and opacities at the vertices of the tetrahedra, we can employ our method to render these tetrahedra in front of a white background as shown in <ref type="figure" target="#fig_5">Figure 20</ref>. The geometry of this example is discussed in more detail in <ref type="bibr" target="#b15">[16]</ref>. As this mesh is nonconvex, it cannot be sorted with the MPVOC algorithm; however, we will discuss extensions of the MPVOC algorithm for nonconvex meshes in the following.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Extensions for Nonconvex Meshes</head><p>In <ref type="bibr" target="#b15">[16]</ref> Williams suggests two extensions of the MPVO algorithm for nonconvex meshes. We will briefly discuss the integration of these extensions in the MPVOC algorithm presented in this paper.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">MPVONC for Cyclic Meshes</head><p>The first adaption of the MPVO algorithm for nonconvex meshes (here called MPVONC) is a heuristic, the limitations of which are discussed in detail in <ref type="bibr" target="#b15">[16]</ref>. The basic idea is to replace the source cell list (i.e., the sink cell list for the non-reversed directions) by a new list that contains all cells with (at least) one boundary face that faces the viewpoint (i.e., is a front face of the cell). After sorting the list according to the distances of the centroids of the cells to the viewpoint, a depth-first search is performed for each cell in the list starting with the most distant one.</p><p>Obviously, this extension works without modifications for the MPVOC algorithm as the only differences of the MPVOC algorithm are encapsulated in the depth-first search, i.e, in the function dfs specified in Section 3. The resulting algorithm will be referred to as the MPVONCC algorithm.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Convexification of Meshes</head><p>Unfortunately, the MPVONCC (and the MPVONC) algorithm does not guarantee a correct visibility ordering for all nonconvex meshes. Therefore, Williams also suggested an alternative extension of the MPVO algorithm that guarantees exact visibility orderings of nonconvex meshes, but is in general considerably more difficult to implement. The idea is to convexify a nonconvex mesh by tetrahedralizing all voids (empty spaces enclosed in the mesh) and cavities of the mesh (empty spaces between the boundary of the mesh and its convex hull). The new tetrahedra are imaginary, i.e., for the purpose of sorting they are treated in exactly the same way as all other cells, but they are simply ignored in the rendering step.</p><p>The resultant convexified mesh can be sorted in the same way as any other convex mesh; therefore, the MPVOC algorithm is able to render any cyclic nonconvex mesh, provided the convexification of the mesh can be computed. As a convexification algorithm is hard to implement in general, we convexified our nonconvex example data sets with a simple semi-automated algorithm for tetrahedralizing the (convex) cavities.</p><p>A convexification of the mesh depicted in <ref type="figure" target="#fig_3">Figure 19</ref> is described in <ref type="bibr" target="#b15">[16]</ref>. It adds one additional vertex and eight imaginary tetrahedra to the three actual tetrahedra. <ref type="figure" target="#fig_3">Figure 21</ref> shows the boundary of the convexified BluntFin data set. The convexification of the BluntFin data set added 3534 imaginary tetrahedra to the 187318 tetrahedra of the tetrahedralized BluntFin data set (without degenerate tetrahedra). Analogously, <ref type="figure" target="#fig_5">Figure 22</ref> depicts the Tapered Cylinder data set with 624960 actual and 5766 imaginary tetrahedra. Our third data set, the HeatSink in <ref type="figure" target="#fig_5">Figure 23</ref>, consists of 121668 actual and 2484 imaginary tetrahedra.   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Some Implementation Details</head><p>Before presenting our results in Section 7, we will comment on some implementation issues, which are quite important as the MPVO and the MPVOC algorithms are already of optimal (linear) time complexity in the number of cells.</p><p>In particular, we investigated the performance of different implementations of the MPVO algorithm. <ref type="table">Table 1</ref> summarizes our results on an SGI Octane using one 250 MHz R10000 processor. Apart from the original implementations (labeled "orig. impl." in Table 1) of the depth-first ("rec. DFS") and breadth-first search ("nonrec. BFS") algorithms by Williams (which are part of the HIAC system, see <ref type="bibr" target="#b16">[17]</ref>), we included our own implementations which employ different data structures. We also included a non-recursive implementation of the depth-first search ("non-rec. DFS"), i.e., the recursive function call was substituted by a loop together with an additional stack keeping track of the previously visited cells.</p><p>The total sorting times of the original implementations are slightly greater than ours; however, the times for the topological sorting (i.e., phase III) are smaller. The latter is due to fewer references in the data structures of the original implementation. However, this advantage is more than compensated by an improvement in our implementation of the computation of the behind relations (i.e., phase II) as explained in the following paragraph. Phase II is a loop over all faces of all cells. In this loop the orientation of each face with respect to the viewpoint is computed. This information is not only stored in the data structure of the face, but also in the data structures of the two cells. It is straightforward to store this information for the face of the cell which is indexed by the loop parameters; however, in order to store this information for the face of the adjacent cell, the original implementation performs a third loop over all faces of the adjacent cell in order to identify the index of the face in this cell. We avoid this third loop by storing the orientation information (which can be looked up in the data structure of the face) when the loop over all tetrahedra reaches the adjacent cell and the inner loop over the faces reaches the already processed face for the second time.</p><p>Furthermore, <ref type="table">Table 1</ref> indicates that the recursive depth-first search is faster than the non-recursive depth-first and faster than the breadth-first search. This is probably due to the fact that the latter two require more accesses to the main memory than the former. In particular, the breadth-first search requires to access each node of the directed graph at least as often as the node has incoming edges, i.e., up to three times.</p><p>These results for the MPVO algorithm indicate that the best implementation of phase III of the MPVOC algorithm is in fact the recursive depth-first search discussed in Section 3. Thus, we did not attempt to implement any other variants of the MPVOC algorithm. <ref type="table" target="#tab_3">Table 2</ref> summarizes our time measurements for the MPVOC algorithm compared to our and Williams' implementation of the MPVO algorithm (see Section 6). As the MPVOC and MPVO algorithms are restricted to convex meshes, the convexified versions of the data sets have been used (see <ref type="bibr">Section 5)</ref>. The measurements were performed on an SGI Octane using one 250 MHz R10000 processor. Each number is an average of a set of sorting times for 100 different viewpoints. Note that no cycles were found in these data sets for any of the viewpoints and no rendering times are included.   <ref type="table">Table 1</ref>. <ref type="table" target="#tab_6">Table 3</ref> includes the analogous measurements for the MPVONCC and MPVONC algorithms. As discussed in Section 5, this extension for nonconvex meshes does scarcely affect the new phase III of the MPVOC algorithm; therefore, the discussion of the differences between the MPVO and the MPVOC algorithm from above does also apply to the comparison between the MPVONC and the MPVONCC algorithm. The times in <ref type="table" target="#tab_6">Table 3</ref>   Apart from the MPVOC and MPVONCC algorithms there are no visibility sorting algorithms for cyclic meshes. Ray-casting algorithms, however, perform a visibility ordering for each pixel; therefore, they offer an alternative for rendering cyclic meshes. However, they are considerably slower for useful image sizes. For example, Farias et al. report a total rendering time of 6 seconds for the BluntFin data set for a 256 256 pixels image in <ref type="bibr" target="#b3">[4]</ref>. Note that this time includes the computation and composition of color contributions of the cells.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Results</head><p>The best exact visibility sorting algorithms for acyclic meshes (assuming that numerical errors do not generate cycles) are the MPVO algorithm for convex meshes and the BSP-XMPVO algorithm for nonconvex meshes. The latter was published by Comba et al. in <ref type="bibr" target="#b1">[2]</ref> and is considerably slower than the MPVO algorithm (about factor 3.5).</p><p>Inexact visibility sorting algorithms for acyclic meshes are substantially faster than the MPVO algorithm according to <ref type="bibr" target="#b17">[18]</ref>. However, these algorithms (see for example <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b5">6,</ref><ref type="bibr" target="#b17">18]</ref>) appear to be inappropriate for rendering visibility cycles in principle as no information about a possible cyclic structure is computed. <ref type="figure" target="#fig_5">Figure 24</ref> summarizes our results for the rendering of visibility cycles of tetrahedra (see Section 4) on an SGI Octane using one 250 MHz R10000 processor and an MXE graphics pipeline. The visibility cycles were constructed by a convexification of the tetrahedral mesh depicted in <ref type="figure" target="#fig_3">Figures 19 and 20</ref>. In order to increase the number of projected tetrahedra in visibility cycles, we also rendered imaginary tetrahedra. The rendering times for small visibility cycles in <ref type="figure" target="#fig_5">Figure 24</ref> are obviously dominated by the number of image copy operations (linear in the number of tetrahedra), while the quadratic dependency on the number of projected tetrahedra is hardly visible.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Conclusions and Future Work</head><p>As mentioned the MPVOC algorithm is the first algorithm that employs hardware-assisted cell-projection for direct volume rendering of cyclic meshes. The small performance loss of 12% for the enhanced visibility sorting of our algorithm is already justified by the improved robustness of the sorting against numerical instabilities. Moreover, the MPVOC algorithm allows us to render cyclic meshes by hardware-assisted cell-projection instead of ray-casting and therefore accelerates the rendering of these meshes significantly.</p><p>Future work includes the implementation of a general convexification algorithm as described in Section 5 and the integration of our method in other visibility sorting algorithms, in particular the XMPVO algorithm <ref type="bibr" target="#b11">[12]</ref>, the BSP-XMPVO algorithm <ref type="bibr" target="#b1">[2]</ref>, and the hardware-assisted extension of the XMPVO algorithm presented in <ref type="bibr" target="#b6">[7]</ref>.   </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>¡</head><label></label><figDesc>Universität Stuttgart, IfI, Abt. VIS, Breitwiesenstr. 20-22, 70565 Stuttgart, Germany; E-mail: ¢ Martin.Kraus</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>£</head><label></label><figDesc>Thomas.Ertl¤ @ informatik.uni-stuttgart.de .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 1 :</head><label>1</label><figDesc>Behind relations in an acyclic triangular mesh.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 2 :</head><label>2</label><figDesc>The directed acyclic graph corresponding to the behind relations ofFigure 1.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 3 :Figure 4 :</head><label>34</label><figDesc>Topological sorting of the graph ofFigure 2using a breadth-first search. Same asFigure 3but using a depth-first search. Note that all directions have been reversed for the depth-first search.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure 4</head><label>4</label><figDesc>visualizes the depth-first search of the reversed directed acyclic graph ofFigure 2. The search is in fact a sequence of recursive graph traversals starting at each of the source cells, which are nodes 1 and 2. (The set of source nodes of the graph with reversed edges inFigure 4corresponds to the set of sink nodes of the graph inFigure 2, i.e., the nodes without outgoing edges.) The two traversals are marked by gray lines inFigure 4.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Figure 5 :Figure 6 :Figure 7 :Figure 8 :</head><label>5678</label><figDesc>Behind relations of a cyclic mesh. The directed cyclic graph corresponding to the behind relations of Figure 5. Failed topological sort of the cyclic graph of Figure 6 (with reversed directions) using a depth-first search for acyclic graphs. Topological sorting of the strongly connected components of the graph of Figure 6(with reversed directions) using an extended depth-first search.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>1 ¡</head><label>1</label><figDesc>MPVOC Phase III Algorithm set i : 0; empty stack S; for each cell of the mesh set cell's num : 0; for each cell on the source cell list dfs(cell); dfs(cell): push cell onto the stack S; set i : i ¡ 1; set front : i; set cell's num : front; for each successor p of cell if p's num 0 set front : min¢ front£ dfs¢ p¤ ¥ ¤ else set front : min¢ front£ p's num¤ if cell's num front pop all cells from S until cell has been popped; set these cells' nums : number of the mesh's cells; output these cells (including cell); return front.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Figure 9 :</head><label>9</label><figDesc>Three polygons P 1 , P 2 , and P 3 , which form a visibility cycle.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Figure 10 :</head><label>10</label><figDesc>I bg out I</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head>Figure 11</head><label>11</label><figDesc>Figure 11: I ¢ P 1 ¤ : the image of polygon P 1 . I α ¢ P 1 ¤ is 0¤ 9 within the polygon and 0 otherwise.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_14"><head>Figure 12</head><label>12</label><figDesc>of polygon P 1 attenuated by the image of polygon P 2 .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_15"><head>Figure 13</head><label>13</label><figDesc>Figure 13: I ¢ P 2 ¤ : the image of polygon P 2 . I α ¢ P 2 ¤ is 0¤ 8 within the polygon and 0 otherwise.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_16"><head>Figure 14</head><label>14</label><figDesc>of polygon P 2 attenuated by the image of polygon P 3 .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_17"><head>Figure 15 : I ¢ P 3 ¤: 3 ¤</head><label>1533</label><figDesc>the image of polygon P 3 . I α ¢ P is 0¤ 7 within the polygon and 0 otherwise.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_18"><head>Figure 16</head><label>16</label><figDesc>of polygon P 3 attenuated by the image of polygon P 1 .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_19"><head>Figure 17 1 ¤:</head><label>171</label><figDesc>the final contribution of the images of the polygons P 1 , P 2 , and P 3 .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_20"><head>Figure 18 : 1 ¤:</head><label>181</label><figDesc>I bg out I the final image. no α-values (opacities) are buffered; no occlusion tests have to be performed in software; no occlusion graph is constructed or sorted;intersecting polygons do not need any special treatment.As all occlusion tests are done by OpenGL z-tests instead of complex calculations in software, a naive implementation of the algorithm will be quite small. In fact, our implementation of this algorithm consists of about 50 lines of C code (excluding the code required to render a single polygon).The disadvantages include the need for a z-buffer and additional image operations. As our algorithm is of time complexity O¢ n 2 ¤ ,</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_21"><head>Figure 19 :</head><label>19</label><figDesc>A visibility cycle formed by three tetrahedra.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_22"><head>Figure 20 :</head><label>20</label><figDesc>Volume rendering of the tetrahedra ofFigure 19.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_23"><head>Figure 21 :</head><label>21</label><figDesc>Boundary of the convexified BluntFin data set. The tetrahedralized cavity is at the bottom of the original mesh.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_24"><head>Figure 22 :</head><label>22</label><figDesc>Boundary of the Tapered Cylinder data set. The thin cavity is in the center of the cylinder.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_25"><head>Figure 23 :</head><label>23</label><figDesc>Boundary of the convexified HeatSink data set. The cubic cavity in front has been tetrahedralized with 2484 imaginary tetrahedra.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_26"><head>Figure 24 :</head><label>24</label><figDesc>Rendering times for visibility cycles of tetrahedra.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_27"><head>Figure 25 :</head><label>25</label><figDesc>Volume visualization of the convexified BluntFin data set using the MPVOC algorithm.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_28"><head>Figure 26 :</head><label>26</label><figDesc>Same as Figure 25 for the Tapered Cylinder data. Figure 27: Same as Figures 25 and 26 for the HeatSink data.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_29"><head>Figure 28 :</head><label>28</label><figDesc>Same as Figure 20.Figure 29: Similar to Figure 20 but ignoring the visibility cycle. As a result there is an incorrect obstruction in the lower right corner of the image.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>what is the final image I</figDesc><table /><note>¢ P¤ over I bg ? According to [13] I¢ P¤ (for non-intersecting polygons) is given by</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>P¤ over I bg we could now calculate the final image. However, we prefer to implement the equivalent expression I bg out I P¤ in order to avoid the need to buffer opacities. Inserting the result for I</figDesc><table><row><cell>By evaluating I</cell></row></table><note>¢ P j¤ denotes the image of P j rasterized with active z-test but disabled writing to the z-buffer, while I¢ P i¤ was rendered with active writing into a previously cleared z-buffer.¢¢ P¤¡ I¢¢ P¤ yields I ¢</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 2</head><label>2</label><figDesc>indicates that the time complexity of the MPVOC al-gorithm is indeed linear in the number of tetrahedra, and that the MPVOC algorithm is only about 12% slower than a comparable implementation of the MPVO algorithm. The improved performances of our implementations as compared to the implementation of the MPVO by Williams is due to an optimization in phase II, which is discussed in Section 6.</figDesc><table><row><cell>convexified data set</cell><cell>HeatSink</cell><cell>BluntFin</cell><cell>Tapered Cylinder</cell></row><row><cell>number of tetrahedra</cell><cell>124,152</cell><cell>190,852</cell><cell>630,726</cell></row><row><cell>MPVOC</cell><cell cols="3">0.23 sec. (0.12+0.11) (0.17+0.17) (0.59+0.61) 0.34 sec. 1.20 sec.</cell></row><row><cell>MPVO</cell><cell cols="3">0.21 sec. (0.13+0.08) (0.19+0.12) (0.63+0.44) 0.31 sec. 1.07 sec.</cell></row><row><cell>MPVO</cell><cell>0.25 sec.</cell><cell>0.34 sec.</cell><cell>1.26 sec.</cell></row><row><cell cols="4">(orig. impl.) (0.17+0.08) (0.23+0.11) (0.87+0.39)</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 2 :</head><label>2</label><figDesc>Sorting times for the convexified meshes with our algorithm for convex cyclic meshes MPVOC. For comparison the times ofTable 1of our and Williams' implementations of the MPVO algorithm with a recursive depth-first search are included. Times are specified as in</figDesc><table /><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6"><head>Table 3 :</head><label>3</label><figDesc>Sorting times for the (nonconvex) meshes with our algorithm for nonconvex cyclic meshes MPVONCC. For comparison the times of our and Williams' implementations of the MPVONC algorithm for nonconvex acyclic meshes are included. Times are specified as inTable 1.</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">Acknowledgements</head><p>The authors would like to thank the NASA-Ames Research Center for distributing the BluntFin and Tapered Cylinder data sets and the anonymous reviewers for their valuable suggestions and comments.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">On The Optimization Of Projective Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cignoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Monatani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Sarti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopigno</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization in Scientific Computing 1995 (Proc. EUROGRAPHICS Workshop)</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="59" to="71" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Fast Polyhedral Cell Sorting For Interactive Rendering Of Unstructured Grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Comba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">T</forename><surname>Klosowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S B</forename><surname>Mitchell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">L</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. EUROGRAPHICS &apos;99)</title>
+		<meeting>EUROGRAPHICS &apos;99)</meeting>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="page" from="369" to="376" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">An Acyclicity Theorem For Cell Complexes In d</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Edelsbrunner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Dimensions. Combinatorica</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="251" to="260" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">ZSWEEP: An Efficient And Exact Projection Algorithm For Unstructured Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Farias</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S B</forename><surname>Mitchell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of Volume Visualization And Graphics Symposium</title>
+		<meeting>of Volume Visualization And Graphics Symposium</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="91" to="99" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Predetermining Visibility Priority in 3-D Scenes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Fuchs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><forename type="middle">M</forename><surname>Kedem</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Naylor</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of SIGGRAPH &apos;79</title>
+		<meeting>of SIGGRAPH &apos;79</meeting>
+		<imprint>
+			<date type="published" when="1979" />
+			<biblScope unit="page" from="175" to="181" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Visualization Of Three-Dimensional Delaunay Meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Karasick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lieber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Nackman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Rajan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Algorithmica</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">1-2</biblScope>
+			<biblScope unit="page" from="114" to="128" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">A Hardware-Assisted Visibility-Ordering Algorithm With Applications To Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Krishnan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Wei</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of VisSym &apos;01</title>
+		<meeting>of VisSym &apos;01</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Area And Volume Coherence For Efficient Visualization Of 3D Scalar Functions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computer Graphics (San Diego Workshop on</title>
+		<imprint>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="27" to="33" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Hardware-Accelerated Volume And Isosurface Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Röttger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of Visualization &apos;00</title>
+		<meeting>of Visualization &apos;00</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="109" to="116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Sedgewick</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Algorithms</title>
+		<imprint>
+			<date type="published" when="1988" />
+			<publisher>Addision-Wesley</publisher>
+		</imprint>
+	</monogr>
+	<note>2nd ed</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A Polygonal Approximation To Direct Scalar Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Shirley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tuchman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computer Graphics (San Diego Workshop on</title>
+		<imprint>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="63" to="70" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">An Exact Interactive Time Visibility Ordering Algorithm for Polyhedral Cell Complexes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S B</forename><surname>Mitchell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of 1998 Symposium on Volume Visualization</title>
+		<meeting>of 1998 Symposium on Volume Visualization</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="87" to="94" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Visibility Sorting And Compositing Without Splitting For Image Layer Decomposition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Snyder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Lengyel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of SIGGRAPH &apos;98</title>
+		<meeting>of SIGGRAPH &apos;98</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="219" to="230" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Sorting And Hardware Assisted Rendering For Volume Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Stein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">G</forename><surname>Becker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">L</forename><surname>Max</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of 1994 Symposium on Volume Visualization</title>
+		<meeting>of 1994 Symposium on Volume Visualization</meeting>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="83" to="89" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Depth First Search And Linear Graph Algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">E</forename><surname>Tarjan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal of Computing</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="146" to="160" />
+			<date type="published" when="1972" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">L</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Visibility Ordering Meshed Polyhedra ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="103" to="126" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">A High Accuracy Volume Renderer For Unstructured Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">L</forename><surname>Williams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">L</forename><surname>Max</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Stein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="37" to="54" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">CellFast: Interactive Unstructured Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Wittenbrink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;99 Late Breaking Hot Topics</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="21" to="24" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

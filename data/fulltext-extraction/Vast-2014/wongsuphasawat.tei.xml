@@ -1,0 +1,1172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Using Visualizations to Monitor Changes and Harvest Insights from a Global-Scale Logging Infrastructure at Twitter</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Krist</forename><surname>Wongsuphasawat</surname></persName>
+							<email>kristw@twitter.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jimmy</forename><surname>Lin</surname></persName>
+						</author>
+						<title level="a" type="main">Using Visualizations to Monitor Changes and Harvest Insights from a Global-Scale Logging Infrastructure at Twitter</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:04+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Information Visualization</term>
+					<term>Visual Analytics</term>
+					<term>Log Analysis</term>
+					<term>Log Visualization</term>
+					<term>Session Analysis</term>
+					<term>Funnel Analysis</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1. Scribe Radar (Icicle View)-This interactive visualization displays a collection of log events from a hypothetical product that operates on three platforms: strawberry, coconut, and banana. Log events follow a six-level naming hierarchy (client:page:section:component:element:action). Here, we see that the event strawberry:search:personal:-:-:impression increased in frequency compared to seven days ago, indicated by a light blue rectangle, while a light red rectangle shows that the event strawberry:inbox:inbox:conversation:-:impression dropped slightly.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Many consumer internet companies depend on establishing a virtuous cycle that involves building a high-quality product, growing an engaged user base, and then learning from user activities to improve the product. Understanding user behavior based on activity logs forms an essential component of what we call data science today. These logs can be used for understanding how a product is used, determining which variant of a feature is better (A/B testing), and generating insights about user behavior. The advent of scalable, distributed, and fault-tolerant frameworks for data processing-especially the Hadoop open-source implementation of MapReduce <ref type="bibr" target="#b6">[7]</ref>-has made it easier for organizations to perform "big data" analytics.</p><p>Previously, Twitter has built a unified logging infrastructure <ref type="bibr">[</ref>  <ref type="table">Table 1</ref>. Hierarchical decomposition of client event names (left) and simplified definition of a client event (right).</p><p>The rest of this paper is organized as follows: We begin with an overview of data analytics at Twitter. Section 3 summarizes related work. Section 4 describes our application for monitoring events and Section 5 focuses on funnel analysis. We conclude with future plans in Section 6.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">PROBLEM DOMAIN</head><p>Twitter provides a global platform for public self-expression and conversation in real-time across multiple clients: Twitter for iPhone, Twitter for Android, the Twitter website, TweetDeck, etc. The company's data warehouses provide an analytics platform that allows data scientists and engineers to better understand user activities across a multitude of usage scenarios and build useful data products. The analytics platform is comprised of thousands of Hadoop nodes across multiple datacenters, ingesting over one hundred terabytes of raw data every day. Engineers and data scientists from dozens of teams run tens of thousands of Hadoop jobs collectively; these jobs accomplish everything from data cleaning to simple aggregations and report generation to training machine-learned models for promoted products, spam detection, follower recommendation, and much more.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Logging at Twitter</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1.1">Scribe</head><p>Twitter uses Scribe <ref type="bibr" target="#b35">[36]</ref>, a system for aggregating high volumes of streaming log data in a robust, fault-tolerant, and distributed manner; see details in <ref type="bibr" target="#b22">[23]</ref>. A Scribe daemon runs on every production host and is responsible for sending local log data across the network to a cluster of dedicated aggregators in the same datacenter. Each log entry consists of two strings, a category and a message. The category is associated with configuration metadata that determines, among other things, where the data are written. The aggregators in each datacenter are co-located with a staging Hadoop cluster. Their task is to merge per-category streams from all the server daemons and write the merged results to the Hadoop Distributed File System (HDFS) of the staging Hadoop cluster, compressing data on the fly. Another process is responsible for moving these logs from the per-datacenter staging clusters into the main Hadoop data warehouse. It applies certain sanity checks and transformations, such as merging many small files into a few big ones and building any necessary indexes. At the end of the log mover pipeline, data arrive in the main Hadoop data warehouse and are deposited in per-category, per-hour directories on HDFS (e.g., /logs/category/YYYY/MM/DD/HH/).</p><p>Each application writes logs using its own Scribe category. In practice, this creates a resource discovery problem, in that there are dozens of Scribe categories, many non-intuitively named or whose contents have substantially diverged from when the Scribe category was first established, making the category name meaningless at best or misleading at worst. Since the application developers are often disjoint from the data scientists who perform the analyses downstream, it is sometimes difficult, particularly for new data scientists, to even figure out what logs are available. As documentation falls out of sync with code over time, we often rely on tacit knowledge passed along through group mailing lists and by word of mouth.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1.2">Client Events</head><p>To address the challenges described above, "client events" represent an effort within Twitter to develop a unified logging framework to simplify analyses without imposing substantial additional burden on application developers.</p><p>Generalizing the notion of Scribe categories, the core idea is to impose a hierarchical six-level naming scheme for all events (comprised of client, page, section, component, element, action), outlined in Table 1 (left). This six-level decomposition aligns with the view hierarchy of Twitter clients. For example, in the case of the main web client (i.e., the twitter.com site), the namespace corresponds to the page's DOM structure, making it possible to automatically generate event names and thereby enforce consistent naming. This also enables reverse mappings; that is, given the event name, we can determine the DOM element where the event was triggered.</p><p>For example, web:home:mentions:stream:avatar:profile click is triggered whenever there is an image profile click on the avatar of a Tweet in the mentions timeline for a user on twitter.com ("reading" the event name from right to left). This hierarchical namespace makes it easy to slice-and-dice categories of events with simple regular expressions to focus on an ad hoc grouping of interest. For example, analyses could be conducted on all actions on the user's home mentions timeline on twitter.com by considering web:home:mentions: * ; or track profile clicks across all clients (twitter.com, iPhone, Android, etc.) with * :profile click.</p><p>A client event itself is a structure that contains the components shown in <ref type="table">Table 1</ref> (right); the structure is simplified, but still preserves the essence of the design. The event details field holds event-specific details as key-value pairs. For example, in the profile click event described above, the details field would hold the id of the profile clicked on. For an event corresponding to a search result, the event details field would hold the target URL, rank in the results list, and other such information. Since different teams can populate these key-value pairs as they see fit, the message structure can be flexibly extended without central coordination.</p><p>In summary, client events form the foundation of our unified logging infrastructure in two senses of the word "unified": first, in that all log messages share a common format with clear semantics, and second, in that log messages are stored in a single place (as opposed to different Scribe category silos with application-specific logging).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1.3">Session sequences</head><p>User sessions, delimited by a 30-minute inactivity interval, form the starting point of many analytics queries. Many Hadoop jobs begin by reconstructing these user sessions from client events. Therefore, it makes sense to simply pre-materialize the sessions. Because the hierarchical event namespace provides a lot of information alone and many queries can be answered using only the sequence of client event names within a user session, we omit the event details and encode only the event names in compressed summaries called session sequences.</p><p>A session sequence is defined as a sequence of symbols S = {s 0 , s 1 , s 2 ...s n } where each symbol is drawn from a finite alphabet Σ. We define a bijective mapping between Σ and the universe of event names, so that the sequence of symbols corresponds to the sequence of client events that comprise the user session. Each symbol is represented by a unicode code point, such that any session sequence is a valid unicode string, i.e., sequence of unicode characters. Furthermore, we define the mapping between events and unicode code points (i.e., the dictionary) such that more frequent events are assigned smaller code points. This in essence captures a form of variable-length coding, as smaller code points require fewer bytes to physically represent. For example, the event web:home:mentions:stream:avatar:profile click might get mapped to \u0235. Unicode comprises 1.1 million available code points, and it is unlikely that the cardinality of our alphabet will exceed this. Since each session sequence is a valid unicode string, we can express analyses in terms of regular expressions and other common string manipulations. Note that these session sequences are not meant for direct human consumption, and they need to be decoded first to be human-readable.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Data Analysis at Twitter</head><p>Academic researchers often focus on tasks that have well-defined goals, clean data, and clear success metrics. However, problems that data scientists in industrial settings face on a daily basis are far more "messy". Let us illustrate with a realistic but hypothetical scenario: The analysis typically begins with a poorly formulated problem, often driven from outside engineering and aligned with strategic objectives of the organization, e.g., "we need to attract a specific group of users". It is the data scientist's job to operationalize vague directives into a concrete, solvable problem, with the prospect that the solution will lead to a better understanding of how to fulfill the objective (attract users). For example:</p><p>• When does this group of users typically log in and out?</p><p>• How frequently?</p><p>• What features of the product do they use?</p><p>• Do they behave differently from other groups of users?</p><p>• Do these activities correlate with engagement?</p><p>Data identification is the first step in answering these questions. Data scientists need to identify relevant data from the many data sources available (Tweets, the follower graph, client events, etc.). It is common for new data scientists to be overwhelmed by the volume and variety of data available. Even within a single data source, finding the right subset to look at is not an easy task.</p><p>Data identification is usually followed by exploratory data analysis, which invariably reveals data quality issues (formatting bugs, corrupted records, etc.) <ref type="bibr" target="#b16">[17]</ref>. In our recollection, we have never encountered a large, real-world dataset that was directly usable without data cleaning. When data collection errors are discovered, the engineers who are responsible are notified to fix the issues. Unfortunately, this type of verification is often too late, and logging errors often go unnoticed until the data are required for analysis. Typically, data cleaning and verification is an iterative process that is intertwined with data exploration. These activities are often performed by running Hadoop jobs to retrieve and pre-process the data, followed by analysis in R, Tableau, or other tools.</p><p>After exploratory data analysis, the data scientist can more precisely formulate the problem, cast it into a data mining or machine learning task, and define metrics for success. With the task more clearly defined, standard techniques such as classification, regression, clustering, etc. can be brought to bear in a manner that most academic researchers would be familiar with. The data analysis lifecycle concludes with the delivery of an insight, an actionable plan, or a data product; the cycle then starts afresh with the next analysis.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Motivation for this Work</head><p>There is clearly much room for improvement in the data analysis lifecycle: we see opportunities to leverage information visualization to improve data identification and exploratory analysis. Our work focuses on log data, particularly client events, because it is one of the most important datasets at Twitter. Furthermore, log analysis is a sufficiently common and general problem that our lessons learned can be applied to other systems and large-scale analytics tasks.</p><p>The first scenario we examined is monitoring and exploring the collection of client events. There are multiple roles at Twitter whose responsibilities depend at least in part on these data. The first role is the data scientist: identifying the client events related to their analyses is challenging since all Twitter clients contribute to the unified logging infrastructure. Currently, there are tens of thousands of client event types, whose numbers are still growing. What are the client events related to "log in"? The second role is the software engineer, who implements the data collection mechanisms (typically as part of product features). We would like to provide more visibility into the event stream so they can more easily spot errors and improve overall data quality. There are also product managers and engineering managers who occasionally check the movements of client events as indicators of product performance. This scenario and our proposed solution, a system called Scribe Radar, are detailed in Section 4.</p><p>The second scenario is funnel analysis, a common analytics task that explores patterns of event sequences. By applying information visualization techniques for event sequences <ref type="bibr" target="#b43">[44]</ref> to the session sequences, we aim to provide data scientists a visual interface for exploring user sessions-the hope is that interesting behavioral patterns will map into distinct visual patterns, such that insights will literally "leap off the screen". The volume of data forced us to rethink standard visualization techniques and we developed data transformations to pre-aggregate the data. The entire process and visualization system called Flying Sessions are explained in Section 5.</p><p>Again, we recognize that the visualizations in this paper are adaptations of existing techniques and do not claim novelty in this regard. Instead, the value of this paper lies in real-world experiences of how we applied information visualization techniques at a large scale. We also share case studies of how our colleagues were able to derive insight using our applications.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">RELATED WORK 3.1 Tree Visualizations</head><p>Most of the data in this work are trees or raw data that are transformed into trees. The most common way to display a tree, or hierarchy, is a node-link layout in 2D <ref type="bibr" target="#b41">[42,</ref><ref type="bibr" target="#b30">31]</ref>, 3D <ref type="bibr" target="#b31">[32]</ref>, or hyperbolic space <ref type="bibr" target="#b21">[22,</ref><ref type="bibr" target="#b25">26]</ref>. Space-filling techniques, such as treemaps <ref type="bibr" target="#b15">[16]</ref>, icicle trees <ref type="bibr" target="#b19">[20,</ref><ref type="bibr" target="#b8">9]</ref> and sunburst trees <ref type="bibr" target="#b33">[34]</ref> use implicit containment and geometry features to present a hierarchy. Icicle trees, also called icicle plots, display hierarchical data as stacked rectangles, usually ordered from top to bottom. The root takes the entire width. Each child node is placed under its parent with the width proportional to the percentage it consumes relative to its siblings. This visualization directly inspired our design ( <ref type="figure">Figure 8</ref>). Another variation orders the tree from left to right, placing the children to the right of instead of under their parent ( <ref type="figure" target="#fig_9">Figure 1</ref>).</p><p>Another thread of work focuses on making comparisons, which can be categorized according to complexity factors of the differences <ref type="bibr" target="#b11">[12]</ref>: T -topological changes (added/removed nodes, moved subtrees), Vnode value changes, and I -whether the interior nodes' values are independent from their children's values. One group of work focuses on comparing only topological changes (T ). Common techniques place the compared trees side-by-side and provide interactions or visual cues that highlight the differences <ref type="bibr" target="#b26">[27]</ref>. Another group of work focuses on node value changes without topological changes (V ), mostly involving treemaps <ref type="bibr" target="#b39">[40,</ref><ref type="bibr" target="#b36">37]</ref>. The Map of the Market <ref type="bibr" target="#b39">[40]</ref> represents stock market price changes using color-coded treemaps. Recently, StemView <ref type="bibr" target="#b11">[12]</ref> was developed to support all types of value changes and to provide partial support for topological changes, showing only added/removed nodes but not subtree movements (t +V + I). Scribe Radar (Section 4) falls into the same class (t +V + I). It compares two client event hierarchies to show partial topological changes (new/deleted events) and value changes (increased/decreased event counts). Although the interior nodes' values are aggregated values from their children in our scenario, the visualization can support cases when interior values are independent from their children as well. There are two main differences from StemView: First, our display shows a color-coded icicle tree ordered left-to-right instead of a mixture of bar charts and icicles, providing more intuitive interpretability. Second, interactions provided by the regular expression search box introduce new exploration capabilities.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Event Sequence Visualizations</head><p>Session sequences represent a type of event sequence, i.e., a sequence of timestamped events. A number of researchers have explored vi-  <ref type="table">Table 2</ref>. Sample rows of client event counts in the database (simulated data); counts are generated on a daily basis.</p><p>sualization techniques for such data. Many early systems focused on visualizing a single record <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b12">13,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b29">30]</ref>. The most common approach is to place events on a horizontal timeline according to the time that events occurred. Later, attention shifted towards visualizing multiple records in parallel. One popular technique is to stack instances of single-record visualizations and to provide additional functionality for aligning <ref type="bibr" target="#b38">[39]</ref>, searching <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b37">38,</ref><ref type="bibr" target="#b44">45]</ref>, filtering <ref type="bibr" target="#b38">[39]</ref>, and grouping <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b27">28]</ref>. However, as event sequence databases became larger, techniques that can provide abstractions of multiple event sequences are needed. Life-Flow <ref type="bibr" target="#b43">[44]</ref> introduces a way to aggregate and provide an abstraction for multiple event sequences. LifeFlow's aggregation combines multiple event sequences into a tree based on an alignment point. Outflow <ref type="bibr" target="#b42">[43]</ref> combines multiple event sequences into a graph of states based on the assumption that events are persistent and accumulate overtime. Life-Flow's successor EventFlow <ref type="bibr" target="#b24">[25]</ref> extends support to events with intervals, e.g., ("lunch", 12-1pm) instead of ("lunch", 12pm). It handles overlaps and includes new simplification methods for intervals. Since client events do not have duration and the events are not persistent, we had to adapt LifeFlow to funnel analysis and also modify the technique to scale to hundreds of millions of records.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Visual Log Analysis</head><p>Visual log analysis can be traced back to user paths and web traffic visualizations <ref type="bibr" target="#b28">[29,</ref><ref type="bibr" target="#b14">15,</ref><ref type="bibr" target="#b13">14,</ref><ref type="bibr" target="#b5">6]</ref> in the time when websites were less dynamic and mostly consisted of a fixed set of HTML pages. Usability log visualization <ref type="bibr" target="#b10">[11]</ref> is another group of work dedicated to supporting a small number of sessions from usability studies. There are also systems designed for computer log analysis, such as <ref type="bibr" target="#b34">[35]</ref>.</p><p>Later advances increased the amount and complexity of log data that could be visualized. Work in network security visualization, such as VAFLE <ref type="bibr" target="#b9">[10]</ref>, focus on analyzing raw packet captures, IDS alerts, firewall logs, etc. Our work is closer to another thread of work that analyzes logs to learn about user behavior. Session Viewer <ref type="bibr" target="#b20">[21]</ref> was designed primarily to analyze web search logs, where users visit arbitrary pages across many domains. There is also increasing integration with large scale computing <ref type="bibr" target="#b32">[33]</ref> and data mining techniques <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b40">41]</ref>. One closely-related work both in terms of scale and technique is Trail-Explorer2 <ref type="bibr" target="#b32">[33]</ref>, where the authors performed session analysis on top of MapReduce at eBay. However, there are a few differences: Trail-Explorer2 requires users to define a sequence of events or funnel (e.g., CheckOut → PaymentReview → PaymentConfirm → CheckoutSuccess) and then analyzes only the defined funnel (including time spent within each step). Our work (Section 5) asks for a set of events to be included and collects all possible funnels that can be generated from the given set of events. We also support dynamic event definition and let users define custom events. Finally, we provide additional data transformation to aggregate rare patterns.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">MONITORING AND EXPLORING CLIENT EVENTS</head><p>Standard summary statistics of all client events are computed daily using Hadoop and stored in Vertica, a column-oriented DBMS; see sample data in <ref type="table">Table 2</ref>. Daily counts of each event type are displayed in a dashboarding system as a time series line chart, resulting in one line chart per each event type. Changes in these time series indicate usage trends, impacts after feature releases, logging errors, and other anomalies. However, it is impractical to inspect all these time series manually, and there is no easy way to obtain an overall sense of which events are increasing or decreasing in volume.</p><p>Furthermore, exploring or searching for event names using the existing interface was inconvenient. Users must select each level of the client event hierarchy until they locate the events that they are looking for: "client" and "page" are quite straightforward, but the "section", "component" and "element" levels are much more loosely defined. Many of these fields are empty. For instance, when looking for client events related to tweet composer, one might wonder if it is a "section", "component" or "element"?</p><p>To address these issues, we built an interactive visualization to support monitoring and exploring client events.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Design</head><p>We gathered requirements through discussions with potential users (mainly engineers and data scientists) and defined the following goals:</p><p>1. Users can search for events. The six-part event names are hard to remember, so the search feature should not require the user to know (or guess) the level of the hierarchy they are interested in.</p><p>Typos or invalid event names should also be expected. The interface should not discourage users from retrying the search when getting wrong or empty results. 2. Users can understand the event collection better. Although users are aware that client events are designed using the six-level hierarchy, this can be very abstract since most have never seen all the events together, nor have they seen how each event contributes to the overall structure. We should make these hierarchical relationships more concrete and help users see the "big picture" more clearly. For example, what are all the events under iphone:home:profile? What is the proportion of events under iphone:home:profile relative to iphone:home? 3. Users can notice changes in event volumes. Users should be able to detect events that have changed in volume significantly in the past n days without clicking through thousands of graphs by hand.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Description of the system</head><p>Our visualization tool, called Scribe Radar, is shown in <ref type="figure" target="#fig_9">Figure 1</ref>. The front-end was implemented in Javascript using D3.js <ref type="bibr" target="#b2">[3]</ref> and AngularJS, while the back-end was written in Ruby on Rails, providing access to data in Vertica. Scribe Radar provides multiple views of the client events collection: icicle tree,  <ref type="figure" target="#fig_2">(Figure 4</ref>). They can also customize the date range and filter events by properties such as the user's country. The data transformation flow is illustrated in <ref type="figure" target="#fig_3">Figure 5</ref> and our design choices are explained as follows:</p><p>Implement search as a filter. To provide rapid interaction, search is implemented as a filter. A standard textbox serves as the main input: in the basic use case, users can perform simple keyword search. The textbox also accepts regular expressions to provide more control over results. When a search is submitted, the application retains only matching event types and displays filtered events without refreshing the page. Animated transitions transform previous results into new results, providing a seamless experience.</p><p>Use the event collection as the focus of attention. Whether users want to search for events or monitor changes, the output is always a collection of events, so we focus on visualizing such data and build a visual display that can show overviews and highlight changes.  Build an event hierarchy based on the six-level namespace. As shown in <ref type="figure">Figure 6</ref>, an event hierarchy can be constructed from a collection of events. Rows of events and their counts on given dates are queried from Vertica. To calculate changes, we build two separate event hierarchies using data from different date ranges and then compute a diff tree, which is small enough to store in browser memory.</p><p>Provide multiple views of the event collection. We want to provide users with alternative views to support different tasks. The first view is a standard table of event names that users can sort by different columns. This view is simple, fast to render, and has almost no learning curve. However, it cannot provide an overview of the entire collection or show the structure of the events.</p><p>To display the event hierarchy, we considered a few alternative tree visualizations and evaluated prototypes informally with a few colleagues. A standard collapsible/expandable node-link tree was chosen first due to its simplicity and familiarity to users. However, with a large and bushy tree, expanding all nodes at once results in heavy occlusion and fails to highlight changes in the nodes.</p><p>To make better use of space, we considered a few space-filling techniques. The first prototype was implemented using a treemap <ref type="bibr" target="#b15">[16]</ref>. However, the six-level structure became less explicit and identifying the levels of inner nodes can be challenging. Our next idea was to use a sunburst tree <ref type="bibr" target="#b33">[34]</ref> because it displays each inner node in its own block rather than overlaying on the leaf nodes and separates nodes into one ring for each level, but the left side of the sunburst tree, where the levels are placed "backwards", is unnatural for reading. Ultimately, the icicle tree was chosen due to its efficient use of space and readability. We laid out the icicles left to right, thus the height of each rectangle encodes the volume of events and its color represents changes. The red-to-blue sequential color palette encodes relative change for each client event from negative to positive. Darker colors indicate more dramatic changes. Users can click on each node to zoom into a subtree of the selected node. The icicle view has emerged as our preferred approach for visualizing the event collection.</p><p>We had also considered StemView <ref type="bibr" target="#b11">[12]</ref>, an icicle-based visualization that adds more visual encodings for displaying changes. However, the downside is that the visualization is less explicit in showing hierarchical structure and requires additional explanation. In our initial implementation, we wanted the visualizations to be self-explanatory with a low learning curve. Show time series as details-on-demand. Scribe Radar follows the visual analytics mantra <ref type="bibr" target="#b18">[19]</ref> "Analyze first, show the important, zoom, filter and analyze further, details on demand." It analyzes the client event counts to compute the event hierarchy and diff tree; highlights important changes in the visualization; lets users zoom and filter by clicking or searching. The final component is to provide details on demand for the selected event. Users can click on any rectangle (in the icicle view) or any node (in the node-link diagram view) to open a popup dialog that displays the time series for the selected client event <ref type="figure" target="#fig_2">(Figure 4)</ref>. In this pop-up, users can toggle between long-term data (aggregated daily) and real-time data (updated every minute). When users see rectangles with intense colors (indicating a significant change), they can click on it to inspect the changes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">User Feedback and Use Cases</head><p>Scribe Radar has been deployed inside Twitter since December 2013. According to the access logs, as of June 2014 (6 months after deployment), Scribe Radar has been visited more than 1,500 times and has been used by more than 500 unique users within the company; there are 8.72 unique visitors per day on average. To gather feedback, we sent a short questionnaire to an internal mailing list that includes engineers, data scientists, and product managers. We also received feedback from users via email and had discussions with them while providing technical support. Our findings are summarized as follows: Learning and adoption. Unlike standard usability studies or controlled experiments, most users received no training from us and had to figure out how to use the tool by themselves. Many users learned about the tool from an announcement email that describes a few examples or heard about the tool from colleagues. Only a small number of users had seen a live demo. Use cases. With broad adoption within the company among different groups of users (data scientists, engineers, and product managers), we can identify three main use cases: </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Display the diff tree !</head><p>as an icicle tree.</p><p>1. Build hierarchy! from event counts. <ref type="figure">Fig. 6</ref>. Building the event hierarchy -This diagram explains how we construct an event hierarchy from two sets of events. (simulated data)</p><p>1. Searching for client events of interest. This clearly matches one of the design goals. When asking for users' feedback about the things that they liked the most, here are some of their answers: "great for looking up data for a particular set of events", "what I liked the most was the client [events] searching methods". 2. Monitoring overall changes in client events. Some users look for unexpected changes with Scribe Radar; this corresponds to the other main use case we designed for. One product manager told us about an incident where he noticed an unexpected intense red rectangle in the visualization. He was familiar with this client event and did not expect it to drop. He quickly suspected that the drop might be due to a logging issue. Investigating further, he entered a part of that client event name in the search box and found another event which was a typo of that event (e.g., click vs. clcik). Based on this, his team was able to identify the code change that introduced this typo and fixed the issue. This incident shows how the visualization helped to detect issues and can be used to improve overall data quality by providing better visibility. 3. Examining behavior effects after product feature launches. This mode of usage was discovered during development. By filtering the event collection, users can see only changes in events of interest. For example, after a product release that launched feature X on a particular date, we can determine how a user behavior of interest (e.g., marking a Tweet as a "favorite") was affected, compared to before the feature release. This analysis can be quickly performed by selecting the date and entering favorite$ in the search box. <ref type="bibr" target="#b0">1</ref> To narrow down to the iPhone only, for example, the user can refine the search to iphone:. * :favorite$.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">FUNNEL ANALYSIS BASED ON LOG EVENTS</head><p>Funnel analysis <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b23">24]</ref>, originally developed in the context of ecommerce sites, focuses on user attention in multi-step processes. A classic example is the purchase checkout flow, where one funnel might be: users visit their shopping carts, enter billing and shipping addresses, select the shipping option, enter payment details, and finally confirm. The funnel analogy is apt because it captures abandonment at each step, e.g., users never complete the purchase. An e-commerce site wants to maximize the number of users that flow through the entire funnel (i.e., complete a purchase) along with related metrics (e.g., <ref type="bibr" target="#b0">1</ref> The symbol $ indicates "end of word" in regular expressions. start <ref type="formula">4</ref>end <ref type="bibr" target="#b0">(1)</ref> end (1) tweet <ref type="bibr" target="#b1">(2)</ref> end <ref type="bibr" target="#b0">(1)</ref> home <ref type="formula">4</ref>4 sessions \u0070 \u0082 \u0085 \u0071! \u0070 \u0082 \u0071 session:start -&gt; web:home::::impression -&gt; web:profile::::impression -&gt; session:end! session:start -&gt; web:home::::impression -&gt; session:end start -&gt; home -&gt; tweet -&gt; end! start -&gt; home -&gt; tweet -&gt; end! start -&gt; home -&gt; profile -&gt; end! start -&gt; home -&gt; end \u0101 \u0110 \u0111 \u0102! \u0101 \u0110 \u0111 \u0102! \u0101 \u0110 \u0112 \u0102! \u0101 \u0110 \u0102</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Session Sequences</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Flying Sessions Visual Display</head><p>Aggregate into a tree and display as color-coded icicle tree total revenue). The number and nature of each step in the funnel plays an important role; for example, shortening the number of steps potentially comes at the cost of making each step more complex; on the other hand, users have little patience for activities that require too many steps. Companies typically run A/B tests to optimize the flow and to assess the impact on end-to-end metrics.</p><p>In the context of Twitter, there are a variety of complex funnels. An important one is the sign up flow, which is the sequence of steps taken by a user to join the service. For example, we might ask how many users went through the funnel (on a particular day): front page → sign up page → sign up completed?</p><p>Previously, we implemented simple Hadoop-based jobs <ref type="bibr" target="#b22">[23]</ref> to count occurrences of specified funnels based on the session sequences described in Section 2. These jobs read a collection of session sequences and count the number of sessions with a given pattern, defined as an array of regular expressions of event names (simplified in the following pseudocode): The query Q 1 returns a count of the funnel front page → sign up page → sign up completed. However, this is only one possible path in the user interaction flow. Users might visit the sign up page but do not complete the sign up process. Another query Q 2 would be required to count all sequences of the form front page → sign up page. The number of visitors who did not complete the sign up flow can be computed by Q 2 − Q 1 . For more complex analyses, there are multiple steps (e.g., import contact list) and actions (e.g., import, skip) that users can perform between the initial and terminal events. In order to learn at which step users "gave up", we need to include the corresponding event types and submit additional queries.</p><p>Instead of trying to count all the "funnel fragments" and combine them to understand the entire sign up flow, it would be more effective to provide an overview of all possible paths users take after they visit the sign up page. A data scientist should be able to simply ask "What happens after users visit the sign up page?" and analyze the results, without needing to explicitly specify all funnel combinations.</p><p>Based on the LifeFlow <ref type="bibr" target="#b43">[44]</ref> technique for visualizing event sequences, multiple session sequences can be aggregated into an overview visualization. The original technique shows time gaps between events, but the session sequences do not explicitly encode timestamps (recall that by design they capture sequences of event names only). Thus, we decided to simplify the visual display and omit the time dimension, as illustrated in <ref type="figure" target="#fig_6">Figure 7</ref>. However, even without the time dimension, the LifeFlow technique has never before been applied to such a large number of event sequences and event types, and this represented a challenge that we needed to overcome. Not surprisingly, an attempt to visualize the raw session sequences with the LifeFlow technique "out of the box" failed: there were too many patterns with too many event types, making any interpretation very difficult.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Design</head><p>The client events logging infrastructure was explicitly designed to record as much detail as possible. Thus, trying to visualize the raw session sequences introduces too many irrelevant distractions and is too slow. The expected data for the visualization are unique sequences and their counts. Ultimately, we need to reduce the number of unique sequences (Q) to reveal insights. There are two main factors that contribute to the number of unique sequences:</p><formula xml:id="formula_0">Q ∝ T L</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.">Number of event types (T ):</head><p>Many raw sequences are unique or occur only a few times due to the large number of event types. 2. Sequence length (L): Entire session lengths could be anywhere from one to thousands of events (outliers). However, an analysis is likely to focus on only a small part of each session.</p><p>We collaborated closely with data scientists to identify common themes in questions they ask using session sequences and tried to map them to the two optimization goals above. We met a few times per week to receive feedback and iterate on prototypes. A few initial attempts to reduce the number of unique patterns included (1) limiting the sessions to only the first n events, (2) ignoring less frequent sequences, (3) focusing only on client and page from the six-level hierarchy, and a few more. Approach (1) did not work because the granularity of the log events is too fine. A simple action such as logging in can generate a multitude of events since it involves multiple back-end services that together render the home view. Thus, even for relatively large values of n, little useful information beyond the first few user actions are shown. Approach (2) ended up ignoring a significant portion of the sessions; in fact, rare sessions may be exactly what the data scientist was searching for. Approach (3) was promising and started to reveal interesting patterns. However, the fixed clientpage abstraction limited the flexibility of the analysis and failed to show finer-grained interaction information. This approach was also unable to group together multiple pages that were less important in order to reduce the number of unique patterns. Learning from initial prototypes, we developed a general template for the question that our funnel analysis tool was designed to answer: What are the sequences of (set of events) (before/after) (alignment point)? For example, what are the sequences of (pages) (after) (users look at the home timeline)? The data scientist must define pages and users look at the home timeline from raw client events, and from that specification our tool generates an interactive visualization that answers the question. Thus, the system supports these tasks:</p><p>1. Map raw event types to custom event types. For example, the user might define a mapping that collapses all Tweet events on the iPhone to an aggregate new event type called iphone:tweet. By mapping events to synthetic aggregates of coarser granularity, the number of event types is reduced. 2. Select a set of event types. Users are required to pick a set of events to be included in the analysis, which can be custom event types from above. This also has the effect of limiting the number of event types. 3. Pick an alignment point and duration (n events) before or after the alignment point. By explicitly specifying which part of the session to analyze, we can limit the sequence length to ≤ n.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">System Description</head><p>Ideally, we wish to provide an entirely interactive experience for exploring session sequences. However, changing event mappings requires re-processing all raw session sequences (&gt;100 million rows per day), which is computationally expensive. Our solution was to split the system into two components: The first part is data pre-processing,</p><p>where we designed a set of Hadoop data transformations and a simple GUI for specifying those transformations. The second part is the visualization tool to display results from the first step. Using this workflow, users first submit a Hadoop job, wait for the job to complete, and then explore results using the visualization tool.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.1">Data Pre-processing</head><p>Step 1: Dynamic event definition. Users first need to define a dictionary, i.e., a mapping from raw events to custom events, which also specifies the list of events that will be included in the analysis. A dictionary consists of multiple rules, where each rule specifies a mapping from a regular expression of raw event names to custom event names. Multiple rules can map to the same custom event. A unique unicode character encoding is automatically generated for each custom event.</p><p>To resolve raw event names that match multiple rules, we take advantage of rule order and apply only the first match. For example, consider a sample dictionary rule below: 1 'web:. * :. * :. * :. * :tweet' =&gt; 'tweet'</p><p>Any event that matches the regex web:. * :. * :. * :. * :tweet will be converted to the custom event tweet; behind the scenes, this custom event will be stored in the output string as a unicode character (for example, T or \u0054). Raw events that do not match any rule in the dictionary will be removed during pre-processing, thus reducing the total number of events under consideration and reducing visual complexity downstream. To assist the user in getting started, we have predefined a default dictionary that converts raw client events into custom events at the page-level granularity. This default ignores details below the page level and treats all impression events as page visits. One common approach is to explicitly track only major pages and group the remaining minor pages into a "wildcard category" (e.g., web:others). ...</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>5</head><p>'web:. * :. * :. * :. * :impression' =&gt; 'web:others'</p><p>Step 2: Customize alignment, direction, and window size. Users then select an event from the dictionary in the previous step as the alignment point, the "direction" of analysis (before or after the alignment point), and window size (number of events). Hadoop jobs will search for the alignment point in each session and capture a subsequence around the alignment point based on the window size and the direction of analysis. By default, the alignment point is set to the beginning of sessions. It is possible that there are multiple occurrences of the alignment event in a sequence, so users can choose to include all, the first k, or the last k occurrences.</p><p>Step 3: Run data transformation job. At this point, a Hadoop data transformation job takes over to process and aggregate the raw data as follows: Each session sequence in the data warehouse is first decoded into a sequence of raw event names. For example, the session sequence \u0560\u0562\u0564\u0561 would be decoded into session:start → web:home:-:-:-:impression → web:home:composer:-:-:tweet → session:end.</p><p>Each raw event name is mapped to a custom event using the dictionary from Step 1 and converted into a unicode character using new encodings for the custom events. For instance, the example sequence above is converted into a sequence of custom events start → home → tweet → end and encoded as \u0041\u0043\u0054\u0042 or ACTB. Next, duplicate consecutive events within each session are removed. For example, the session AABCCCCABCA is transformed into ABCABCA. After that, the job finds the alignment point(s) and creates window(s) of the appropriate size. For instance, using B as the alignment event and a window size of three (after the alignment), the sequence ABCABAD is transformed into two windows BCA and BAD. The data transformation job then takes the union all windows from all sequences and performs a group by to count occurrences.</p><formula xml:id="formula_1">{(BCA), (BCA), (BAD)} → {(BCA, 2), (BAD, 1)} = sequences</formula><p>If the number of unique sequences (Q = n(sequences)) is small enough, the data pre-processing can end here and users can view the results, but this is often not the case. Long and infrequent patterns are the main issues. In the example below, two sequences ABCDF and ABCDG occur only once. In reality, an analysis might generate thousands of single-occurrence sequences. These rare sequences comprise a significant portion of typical results and cannot simply be ignored. To retain them but reduce the number of unique sequences, we developed a heuristic squeezeSequences algorithm to truncate rare sequences and aggregate them based on a minimum frequency threshold: Empirically, we have found that this algorithm works well. After processing the data in this manner, the output is ready to be visualized. Via the data transformation process, hundreds of millions of session sequences (terabytes) are summarized into a small data file (typically &lt;15MB), which can be stored in MySQL or simply as a plain CSV file to serve as input to the visualization interface.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.2">Visualization tool</head><p>Our visualization tool, called Flying Sessions, is shown in <ref type="figure">Figure 8</ref>. It was implemented using D3.js <ref type="bibr" target="#b2">[3]</ref> and Ruby on Rails. The system is a simplified version of LifeFlow with two main differences: First, the time dimension is removed, and thus the visual display is a standard icicle tree. Second, the layout is changed from left-to-right to top-tobottom to make it easier to render labels. The control panel on the left allows users to filter the sessions based on a few dimensions: user type, platform, experiment bucket, etc. Users can enable/disable events to hide them from the view: these are the custom set of events that users have defined in the data transformation step (not the raw events). Users can also change the colors associated with these events.</p><p>On the right, the results are visualized as an icicle tree. Each rectangle represents an event and its color encodes the event type. The width of each rectangle encodes the number of sessions. If the rectangle is wide enough, the label for the event type is displayed. Future events are placed under previous events, so the entire interface flows downward temporally. Users can click on any rectangle to zoom into the subsequence after the clicked rectangle (event).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Case studies</head><p>Flying Sessions was deployed for internal use in January 2013, with detailed documentation. Due to its complexity, it attracted a smaller group of users compared to Scribe Radar, but the users were willing to spend more time learning the tool. For some users, we helped them run their analyses and analyzed the results together. In other cases, we provided technical support in the beginning and let users perform additional analyses by themselves. Summarizing our experiences, a few representative use cases are as follows:</p><p>Case 1: What do users do when they first visit Twitter? We believe that users' first actions when they visit Twitter are predictive of overall engagement, and thus we wanted to explore the early portions of session sequences. To accomplish this, we defined a dictionary that mapped raw events to page-level granularity (web:home, web:profile, web:search, web:connect, etc.) and examined ten events from the beginning of sessions (session-start).</p><p>The resulting visualization clearly shows the fraction of traffic to each page. From the interface, we can identify common navigation patterns that correspond to how users engage with different product features. For example, we can see the number and fraction of sessions that begin with a visit to the home timeline (session-start → web:home). We can identify which pages users navigated from the home timeline to next. The interface allows us to drill down and examine sessions with a specific pattern, e.g., a visit to the home timeline followed by a visit to the profile page (session-start → web:home → web:profile). Overall, Flying Sessions provides a high-level understanding of where and how people begin spending time on Twitter.</p><p>This particular analysis has proven to be sufficiently useful that we have deployed an automatically scheduled task that recomputes the latest data on a daily basis. <ref type="figure">Figure 8</ref> demonstrates the same use case applied to a hypothetical product.</p><p>Case 2: How did the introduction of a new feature change user behavior? Flying Sessions can be used to understand the impact of a particular feature. We illustrate with one example: there was an experiment that changed the design of the logged out home page to include a new feature. Let's call it feature X. The explicit goal was to encourage users to try X and engage with the product. The engineers who ran the experiment used our tool to analyze the results: a visit to the logged out home page (web:front) was used as the alignment point, with a window size of ten following events. The custom dictionary included a client event that indicates the use of feature X (web:x) and the rest are page-level events (web:home, web:search, web:others) from the default dictionary.</p><p>Results showed that a small percentage of users invoked feature X after their visit to the logged out home page (web:front → web:x). However, comparing results between the control and the treatment group, it was discovered that the number of users who then log in from the new logged out home page dropped significantly (web:front → web:home). The engineers realized that the new design inadvertently made the log in box less prominent on the page, an insight made possible by our visualization.</p><p>Case 3: Where do follows happen? The "follow" relationship defines the Twitter interest graph, and the creation of additional edges in this network is one of the most important actions on Twitter since denser connections lead to more user engagement. There are multiple locations in the interface where users can perform the follow action, and we would like to better understand follow behavior.</p><p>For this analysis, the custom dictionary was modified from the default dictionary to provide finer-grained details. Because the profile page (web:profile) has a few sections related to follows, we broke the web:profile event down into section-level events: <ref type="figure">Fig. 8</ref>. Flying Sessions -This screenshot shows the beginnings of user sessions from a hypothetical product on the banana platform. We see that 30% of users started in the inbox (purple); some of these sessions continued with a series of back and forth visits to alert (pink) and inbox; another 20% of sessions began at the welcome page (cyan), 40% of these successfully logged in and moved to the inbox. Users can mouse over any rectangle in the display to see more detail via tooltips or click to zoom in. This example illustrates the ability of our tool to specify analyses at an arbitrary level of detail. The data transformation was performed using the follow event as an alignment point, retaining the previous ten events. The resulting visualization in Flying Sessions shows user paths that led up to the follow: examining these sequences might be useful in improving the overall flow of the interface. For example, we might find that users click on follow from page X frequently; furthermore, the visualization might tell us that page Y is actually responsible for driving the traffic to page X. If users navigate from page Y to page X simply to follow, it might be a good idea to let users follow on page Y directly, thereby creating a useful navigation shortcut.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSIONS AND FUTURE WORK</head><p>This work explores the application of information visualization techniques to data analytics on large-scale event logs. One important characteristic of these data is the multi-level hierarchical event namespace, which unifies logs from multiple platforms to simplify data discovery. Due to this structure, many analyses are possible using only the event names, a feature we exploit via session sequences. Taking advantage of the multi-level event hierarchy, we describe an interactive visualization called Scribe Radar, built on top of preprocessed event counts from Hadoop. Scribe Radar facilitates the data identification process and improves how data scientists search for events related to their analyses. In addition, the tool provides engineers visibility into data quality issues and assists in detecting data anomalies. We also found Scribe Radar to be useful for understanding the impact of product features after their introduction.</p><p>We bring visualization and large-scale funnel analysis together in Flying Sessions. Users can specify the granularity of their analyses by defining custom dictionaries and selecting parts of the sessions. Hadoop then handles data transformations to provide users aggregated results that can be explored interactively in a visualization interface.</p><p>The biggest challenge when designing these systems is defining appropriate intermediate data, as illustrated in <ref type="figure" target="#fig_12">Figure 9</ref>. Because the magnitude of raw data is beyond the capabilities of standard client machines and many traditional databases, we must reduce intermediate data size prior to visualization. This is usually accomplished via data aggregation, which may limit the user's ability to explore the data since the dimension of interest might have been eliminated via the aggregation. Providing richer methods for data exploration on the client side requires more detail and thus more intermediate data.</p><p>One approach that has worked for us is to use traditional DBMS technologies to hold intermediate data (beyond what can be held in memory inside the browser); the client application can then query for relevant data and perform additional online processing as needed. Although our techniques directly exploit a hierarchical event namespace, we believe that they can be generalized and applied to different applications. While scale is certainly interesting, our techniques are equally applicable to cases where the data are small enough to be processed on a single machine or even directly within the browser.</p><p>While the case studies and user feedback have shown that our techniques are promising, there is still plenty of room for improvement. Event monitoring would become more convenient and effective with the inclusion of anomaly detection and a system for automatic alertsin general, we see great synergy in the integration of both visualization and data mining techniques. Another area of work is to provide more interactivity and reduce iteration time in funnel analysis, since the current setup still requires batch processing on the cluster. We envision that Flying Sessions could operate in preview mode on samples of session sequences in a truly interactive fashion, and once users are satisfied with the previewed results, they can submit a full job to process all data. Sampling may provide an effective strategy to balance the demands of interactivity and the need for large-scale batch processing. We hope that our work will inspire further research at the intersection of visualization and large-scale data analysis.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>Scribe Radar (Table View) -A simple table that lists event names and lets users sort by different criteria.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 .</head><label>3</label><figDesc>Scribe Radar (Tree View) -A node-link diagram view of the event hierarchy. Here, the user is examining events related to interest.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 4 .</head><label>4</label><figDesc>Scribe Radar (Time Series) -The details-on-demand pop-up that shows changes of each client event over time as a line chart.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 5 .</head><label>5</label><figDesc>Scribe Radar -Transformation from raw events to visualizations.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>2 .</head><label>2</label><figDesc>Calculate difference from two hierarchies.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 7 .</head><label>7</label><figDesc>Transforming session sequences into an overview visual display.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>1 Q1 2 ' 3 ' 4 '</head><label>1234</label><figDesc>web:front:-:-:-:impression', web:signup:form:-:-:impression', web:signup:form:-:-:completed' 5 ]);</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>1 ' 2 ' 3 '</head><label>123</label><figDesc>web:home:. * :. * :. * :impression' =&gt; 'web:home' web:profile:. * :. * :. * :impression' =&gt; 'web:profile' web:search:. * :. * :. * :impression' =&gt; 'web:search'4</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>1 var</head><label>1</label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>7 } 8 / 15 var 19 } 20 } 21 for</head><label>7815192021</label><figDesc>else if(sequence.pattern.length&gt;=2){ / 'ABCDx' =&gt; 'ABCx' 9 sequence.pattern = sequence.pattern 10 .substring(0, sequence.pattern.length-2) frequent = new array(), rare = new array(); else{ rare.add(seq); } (seq in rare){ truncate(seq); } 22 return groupAndCount(frequent.concat(rare));</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>1 ' 2 ' 3 / 6 / 9 / 11 =&gt;</head><label>1236911</label><figDesc>. * :. * :. * :. * :. * :follow' =&gt; 'follow' web:home:. * :. * :. * :impression' =&gt; 'web:home' / See a list of followers on the profile page4 'web:profile:followers:. * :. * :impression' 5 =&gt; 'web:profile:followers' / See a list of followees on the profile page 7 'web:profile:following:. * :. * :impression' 8 =&gt; 'web:profile:following' / See other parts of the profile page 10 'web:profile:. * :. * :. * :impression'</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Fig. 9 .</head><label>9</label><figDesc>Illustration of the tradeoff between responsiveness and detail as encoded in the intermediate data.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>23] that collects user activities across all clients it owns: all page loads, element UI element within the component button, avatar action actual user or application action impression, click, hover</figDesc><table><row><cell>Field</cell><cell>Description</cell></row><row><cell>event name</cell><cell>event name</cell></row><row><cell>user id</cell><cell>user id</cell></row><row><cell>ip</cell><cell>user's IP address</cell></row><row><cell>timestamp</cell><cell>timestamp</cell></row><row><cell>event details</cell><cell>event details</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head></head><label></label><figDesc>table, and node-link diagram, shown in Figures 1, 2 and 3, respectively. Users can search for events (top box) and click through to see details on demand</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>None of the work described in this paper would have been possible without the engineers and data scientists at Twitter. In particular, we would like to thank Linus Lee, Chuang Liu, and the visual-insights team. We also appreciate comments from VAST reviewers and feedback from Ben Shneiderman and Catherine Plaisant.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Mining sequential patterns</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Agrawal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Srikant</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Data Engineering (ICDE)</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="3" to="14" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Connecting time-oriented data and information to a coherent interactive visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bade</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Schlechtweg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Miksch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM CHI Conference on Human Factors in Computing Systems</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="105" to="112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">D3: Data-Driven Documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bostock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Ogievetsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2301" to="2309" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Timeline trees: Visualizing sequences of transactions in information hierarchies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Burch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Beck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Diehl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Working Conference on Advanced Visual Interfaces (AVI)</title>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="75" to="82" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Visualization of navigation patterns on a web site using model-based clustering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Cadez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Heckerman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Meek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Smyth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>White</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD)</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="280" to="284" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Improving web usability through visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">H</forename><surname>Chi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Internet Computing</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="64" to="71" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">MapReduce: Simplified data processing on large clusters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ghemawat</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">USENIX Symposium on Operating Systems Design and Implementation (OSDI)</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A visual interface for multivariate temporal data: Finding patterns of events across multiple histories</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Fails</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Karlson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Shahamat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Visual Analytics Science and Technology (VAST)</title>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="167" to="174" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">The InfoVis Toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-D</forename><surname>Fekete</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Information Visualization (InfoVis)</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="167" to="174" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">VAFLE: Visual analytics of firewall log events</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ghoniem</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Shurkhovetskyy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bahey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Otjacques</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization and Data Analysis</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Visualizing usability log data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gray</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Badre</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Guzdial</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Information Visualization (InfoVis)</title>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="93" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Visualizing change over time using dynamic hierarchies: TreeVersity2 and the StemView</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Guerra-Gómez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">L</forename><surname>Pack</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2566" to="2275" />
+			<date type="published" when="2013-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Timelines: An interactive system for the collection and visualization of temporal data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">L</forename><surname>Harrison</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Owen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Baecker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface (GI)</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="141" to="148" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Using interactive visualizations of WWW log data to characterize access patterns and inform site design</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hochheiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the American Society for Information Science and Technology</title>
+		<imprint>
+			<biblScope unit="volume">52</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="331" to="343" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">WebQuilt: A framework for capturing and visualizing the web experience</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">I</forename><surname>Hong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Landay</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on World Wide Web (WWW)</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="717" to="724" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Tree-Maps: A space-filling approach to the visualization of hierarchical information structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference on Visualization (VIS)</title>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="284" to="291" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Research directions in data wrangling: Visualizations and transformations for usable and credible data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kandel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kennedy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Ham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">H</forename><surname>Riche</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Weaver</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Brodbeck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Buono</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Visualization</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="271" to="288" />
+			<date type="published" when="2011-09" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Visualization using timelines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">M</forename><surname>Karam</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGSOFT International Symposium on Software Testing and Analysis</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="125" to="137" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Challenges in visual data analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">A</forename><surname>Keim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Mansmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schneidewind</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Ziegler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Information Visualization (IV)</title>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Icicle plots: Better displays for hierarchical clustering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">B</forename><surname>Kruskal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">M</forename><surname>Landwehr</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The American Statistician</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="162" to="168" />
+			<date type="published" when="1983" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Session viewer: Visual exploratory analysis of web session logs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Lam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Russell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Munzner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Visual Analytics Science and Technology (VAST)</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="147" to="154" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">The Hyperbolic Browser: A focus+context technique for visualizing large hierarchies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Lamping</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Rao</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Visual Languages &amp; Computing</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="33" to="55" />
+			<date type="published" when="1996-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">The unified logging infrastructure for data analytics at Twitter</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lorek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Ryaboy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Very Large Data Bases (VLDB)</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="1771" to="1780" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Funnel report mining for the MSN network</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD)</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="450" to="455" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Temporal event sequence simplification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Monroe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Lan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE transactions on visualization and computer graphics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2227" to="2236" />
+			<date type="published" when="2013-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">H3: Laying out large directed graphs in 3D hyperbolic space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Munzner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization Conference, Information Visualization Symposium and Parallel Rendering Symposium (VIZ)</title>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="2" to="10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">TreeJuxtaposer: Scalable tree comparison using focus+context with guaranteed visibility</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Munzner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Guimbretière</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Tasiran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="453" to="462" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Progressive multiples for communication-minded visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Phan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Paepcke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Winograd</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface (GI)</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="225" to="232" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Webviz: A tool for world wide web access log analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Pitkow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">A</forename><surname>Bharat</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on World Wide Web</title>
+		<imprint>
+			<publisher>WWW</publisher>
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">LifeLines: Using visualization to enhance navigation and analysis of patient records</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Mushlin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Snyder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Heller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AMIA Annual Symposium</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="76" to="80" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Tidier Drawings of Trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">M</forename><surname>Reingold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S</forename><surname>Tilford</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Software Engineering, SE</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="223" to="228" />
+			<date type="published" when="1981-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Information visualization using 3D interactive animation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">G</forename><surname>Robertson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Card</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Mackinlay</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">36</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="57" to="71" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Visual analysis of massive web session data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Sundaresan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization (LDAV)</title>
+		<imprint>
+			<date type="published" when="2012-10" />
+			<biblScope unit="page" from="65" to="72" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Focus+context display and navigation techniques for enhancing radial, space-filling hierarchy visualizations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Stasko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Information Visualization (InfoVis)</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="57" to="65" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Mielog: A highly interactive visual log browser using information visualization and statistical analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Takada</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Koike</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">USENIX Conference on System Administration (LISA)</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="133" to="144" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Thusoo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Shao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Anthony</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Borthakur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Jain</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sarma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Murthy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Liu</surname></persName>
+		</author>
+		<title level="m">Data warehousing and analytics infrastructure at Facebook. International Conference on Management of Data (SIGMOD)</title>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="1013" to="1020" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Visualizing changes of hierarchical data using treemaps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Tu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1286" to="1293" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">ActiviTree: Interactive visual exploration of sequences in event-based data using graph similarity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Vrotsou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Johansson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Cooper</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="945" to="52" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Aligning temporal data by sentinel events: Discovering patterns in electronic health records</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">D</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Quinn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Stanchak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Murphy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM CHI Conference on Human Factors in Computing Systems</title>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="457" to="466" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Visualizing the stock market</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wattenberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM CHI Conference on Human Factors in Computing Systems</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="188" to="189" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Visual cluster exploration of web clickstream data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Sundaresan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference on Visual Analytics Science and Technology (VAST)</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="3" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Tidy drawings of trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Wetherell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Shannon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Software Engineering, SE</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="514" to="520" />
+			<date type="published" when="1979-09" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Exploring flow, factors, and outcomes of temporal event sequences with the outflow visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Wongsuphasawat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Gotz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2659" to="2668" />
+			<date type="published" when="2012-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">LifeFlow: Visualizing an overview of event sequences</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Wongsuphasawat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Guerra Gómez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">D</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Taieb-Maimon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM CHI Conference on Human Factors in Computing Systems</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="1747" to="1756" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Shneiderman. Querying event sequences by exact match or similarity search: Design and empirical evaluation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Wongsuphasawat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Taieb-Maimon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Interacting with computers</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="55" to="68" />
+			<date type="published" when="2012-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

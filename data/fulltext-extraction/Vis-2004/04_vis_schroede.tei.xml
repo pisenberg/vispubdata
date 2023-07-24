@@ -1,0 +1,819 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Compatible Triangulations of Spatial Decompositions</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><forename type="middle">J</forename><surname>Schroeder</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Kitware, Inc</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Berk</forename><surname>Geveci</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Kitware, Inc</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mathieu</forename><surname>Malaterre</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Kitware, Inc</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Compatible Triangulations of Spatial Decompositions</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:34+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>I.3.5 [Computing Methodologies]: Computer Graphics-Computational Geometry and Object Modeling; Algorithms triangulation</term>
+					<term>tetrahedrization</term>
+					<term>adaptive grid</term>
+					<term>clipping</term>
+					<term>contouring</term>
+					<term>template</term>
+					<term>Delaunay</term>
+					<term>parallel</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>We describe a general algorithm to produce compatible 3D triangulations from spatial decompositions. Such triangulations match edges and faces across spatial cell boundaries, solving several problems in graphics and visualization including the crack problem found in adaptive isosurface generation, triangulation of arbitrary grids (including unstructured grids), clipping, and the interval tetrahedrization problem. The algorithm produces compatible triangulations on a cell-by-cell basis, using a modified Delaunay triangulation with a simple point ordering rule to resolve degenerate cases and produce unique triangulations across cell boundaries. The algorithm is naturally parallel since it requires no neighborhood cell information, only a unique, global point numbering. We show application of this algorithm to adaptive contour generation; tetrahedrization of unstructured meshes; clipping and interval volume mesh generation.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Three-dimensional spatial decompositions are routinely used in graphics and visualization to accelerate computation, model physically-based behavior, and represent sampled data. Adaptive spatial structures such as octrees, KD-trees, adaptively sampled distance fields <ref type="bibr" target="#b9">[10]</ref>, and adaptive mesh refinement data <ref type="bibr" target="#b1">[2]</ref> <ref type="bibr" target="#b0">[1]</ref> are often employed to generate implicit surfaces or perform multi-resolution visualization of large data sets. Various types of grids, including regular volumes, topologically regular structured grids, and unstructured grids, are used in physically-based modeling applications and to simulate complex physical processes <ref type="bibr" target="#b7">[8]</ref> <ref type="bibr" target="#b31">[32]</ref>. Volume data are also used to represent sampled data, such as that produced from laser digitizing systems <ref type="bibr" target="#b8">[9]</ref>, or digital sampling processes such as CT, MRI, and confocal microscopy.</p><p>Use of spatial decompositions introduces several problems into graphics and visualization applications. The so called crack problem occurs when neighboring cells in an adaptive decomposition exist at different levels of subdivision. Naive contour generation of such a decomposition results in cracks in the isosurface. The cracks may be geometric, where an actual hole exists in the surface, or topological, where T-junctions are created. Cracks may cause rendering artifacts, or introduce undesirable surface features that can adversely affect subsequent modeling operations such as decimation, connectivity analysis, or surface subdivision. Cracks can be prevented by creating compatible triangulations between spatial decompositions as shown in <ref type="figure" target="#fig_0">Figure 1</ref>, and then operating on the triangulation.</p><p>Several rendering and visualization algorithms require the existence of tetrahedral meshes, e.g., <ref type="bibr" target="#b25">[26]</ref> <ref type="bibr" target="#b17">[18]</ref>[13] <ref type="bibr" target="#b13">[14]</ref>. Structured and unstructured grids often consist of hexahedron, prism, wedge, and pyramid cell topologies and require tessellation if such tetrahedralbased algorithms are to be used. A related problem is the triangulation of higher-order basis functions (e.g., quadratic, cubic or other higher-order basis used in finite element analysis) into linear tetrahedra for processing by conventional visualization algorithms. The triangulation of grids must insure that the 1D triangulation of each cell edge is compatible with the corresponding edge neighbor, and the 2D triangulation of each cell face is compatible with the corresponding face neighbor. While template-based approaches for cell tessellation work well for simple spatial decompositions with uniform cell types (e.g., volumes with voxel cells), heterogeneous meshes or higher-order meshes are harder to triangulate. Furthermore, conventional methods require a triangulation of the entire domain, which can bloat memory consumption or require a separate pre-processing step. The algorithm presented here is fast enough so that compatible cell tetrahedrizations can be produced on the fly as each cell is processed. The tetrahedra are then discarded after they are processed to reduce memory consumption.</p><p>Modeling operations applied to spatial decompositions introduce additional challenges. Clipping a 3D mesh using an implicit function or scalar contour value introduces complex cuts across cells. Clipping is useful for viewing the interior of structures, or to generate finite element meshes of anatomic structures (i.e., generating an interval mesh between two isocontour values). The faces of neighboring elements must be triangulated to insure inter-cell compatibility. Forming compatible triangulations is very difficult when the boundary of each clipped cell must be compatible with each of its neighbors.</p><p>This paper addresses these problems by describing a simple, deterministic algorithm that produces compatible triangulations e-mail: {will.schroeder,berk.geveci,mathieu.malaterre}@kitware.com between the cells of spatial decompositions. The algorithm requires minimal knowledge of neighboring cells, only the coordinates and a unique id (i.e., point id) for each point defining a cell in the decomposition. In this paper we show how to modify the 3D Delaunay triangulation to generate unique triangulations even when degenerate points are present, thereby guaranteeing compatibility across cell faces. We will also show results for adaptive isocontouring, mesh triangulation, clipping and mesh generation. Source code for this work is also available on the web.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Several authors have encountered the isosurface crack problem and offered various methods to solve it. As early as 1988 Bloomenthal <ref type="bibr" target="#b3">[4]</ref> described an adaptive octree method for generation of implicit surfaces. Edge tracking on the more divided octant face is used to eliminate cracks, requiring complex topological structures to navigate the net of edges on octant faces and on the isosurface. <ref type="bibr" target="#b23">[24]</ref> address the problem by aligning the intersection edge generated from the higher resolution octant with the edge generated from the lower resolution octant. While this resolves the crack geometrically, it leaves topological cracks (T-junctions) in the surface that can adversely affect later operations on the mesh, including introducing rendering artifacts. <ref type="bibr" target="#b29">[30]</ref> approaches the problem in a similar way, except that the low-resolution edge is subdivided by introducing points from the higher resolution edge segments. The triangle attached to the low resolution edge is also subdivided, creating a fan of triangles. The resulting mesh is watertight with no Tjunctions. <ref type="bibr" target="#b28">[29]</ref> describe a method to create compatible tessellations of adaptive mesh refinement (AMR) grids by constructing a dual grid to the original. This shrinks the original grid by one level and leaves gaps between blocks of different resolutions. The gaps are then triangulated to produce tetrahedra and wedges, a non-trivial process. The authors mention an approach based on Delaunay triangulation, but reject it in 3D due to the issue of triangulation degeneracies, which this paper addresses.</p><p>Generation of meshes from scalar fields is another important operation in modeling and visualization. <ref type="bibr" target="#b16">[17]</ref> treats interval tetrahedrization of volumetric data. The idea behind this work is to generate a tetrahedral mesh in the volume between two isosurfaces. In application this can be used to create computational meshes from volume data, such as finite element meshes of bone structure. A principle challenge addressed by this method is to maintain compatibility between adjacent voxel triangulations. Face triangulations require control of face diagonals. Nielson's approach creates compatible triangulations using voxel templates, and is specialized for volume data. Clipping as defined by <ref type="bibr" target="#b22">[23]</ref> separates n-dimensional data into two n-dimensional parts: one below a specified isosurface value, and one above. Clipping is a specialized form of interval volume tetrahedrization, where one of the isosurface values is set at the extreme range of the scalar data.</p><p>Many algorithms require the existence of tetrahedral meshes. Direct volume rendering techniques of non-regular data such as rectilinear grids, unstructured grids, or scattered points may project triangle faces <ref type="bibr" target="#b24">[25]</ref> <ref type="bibr" target="#b20">[21]</ref>, or integrate rays through tetrahedra <ref type="bibr" target="#b25">[26]</ref>. Tetrahedra are also used to form multiresolution frameworks for volume visualization <ref type="bibr" target="#b32">[33]</ref>, including methods to decimate tetrahedral meshes <ref type="bibr" target="#b19">[20]</ref>. Visualization of irregular grids, such as streamline generation <ref type="bibr" target="#b13">[14]</ref> and detection of separation and attachment lines <ref type="bibr" target="#b12">[13]</ref> are often most efficient on tetrahedral meshes, or benefit from the simplicity of their linear interpolation functions.</p><p>In many cases these algorithms require a preprocessing step that converts the grid into tetrahedra. While this is trivial for volumes or structured grids, for unstructured grids of mixed types (e.g., hexahedra, wedge, pyramid, and tetrahedra cells) the requirement of face compatibility is difficult to satisfy. Meshes based on higher-order basis such as p-order finite element meshes are also difficult to tessellate in a compatible manner. Such meshes are used to analyze curved geometry and provide high-rate numerical convergence to the solution of partial differential equations <ref type="bibr" target="#b14">[15]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">ALGORITHM</head><p>The algorithm described here creates compatible triangulations of spatial decompositions. The algorithm is simple, general, and scalable. It creates unique triangulations on the planar faces of convex cells using a modified Delaunay triangulation algorithm. Non-planar faces, and non-convex cells can be treated by mapping to parametric space, followed by triangulation in that space. The Delaunay triangulation is modified by using a globally unique point id to resolve degenerate cases.</p><p>We begin this section by providing some terminology and mathematical background. We then show how these properties can be used to generate compatible triangulations in various applications.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Terminology</head><p>We refer to the spatial decomposition of a domain in R <ref type="bibr" target="#b2">3</ref> as D, which is a discretization of D into the closed subdomains, or cells, c i , where <ref type="formula">1</ref>The cells c i are bounded by a finite set of boundary entities of dimension m, with . A compatible spatial decomposition is one in which the intersection of any two cells c i and c j is a boundary entity common to both c i and c j with and</p><p>In application c i are typically convex and of simple topological structure: a tetrahedron, hexahedron, or octant (possibly with subdivided faces). A compatible triangulation is also a compatible decomposition, except that all c i are simplices s i (tetrahedra in R 3 ). A compatible triangulation, or simply a triangulation, can be produced by tessellating each c i in D in such a way as to preserve the properties of Equations (1) and (2).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Delaunay Properties</head><p>The Delaunay triangulation T(P) is a simple method to produce an unique triangulation of the convex hull of a set of non-degenerate points P <ref type="bibr" target="#b10">[11]</ref>. One property of the Delaunay triangulation is that for any n+1 points forming a simplex of dimension n, the circumsphere of the simplex contains no other points of the set P. Degenerate cases occur when the this property does not hold, for example the eight vertices of a cube all lie on the same circumsphere. In such cases, the triangulation is not unique and can be created by choosing one triangulation of several alternatives, as long as the triangulation remains compatible.</p><p>An important property relative to the work presented here is as follows. Given a set of points that form the triangulation , and a set of points which lie on a mdimensional hyperplane with , then is a m-</p><formula xml:id="formula_1">c i i ∪ D = f j m 0 m 2 ≤ ≤ c i c j ∩ f k m = f k m c i ⊂ f k m c j ⊂ P c i ( ) T P c i ( ) ( ) ∂P c i ( ) P c i ( ) ⊂ H m m n ≤ T ∂P c i ( ) ( ) dimensional Delaunay triangulation on</formula><p>. This property follows because the intersection of a n-dimensional Delaunay triangulation with H preserves the property of circumsphere containment <ref type="bibr" target="#b21">[22]</ref>. Note that it is possible for edges to pass from points on one side of H to the points on the other side. However, if the lies on the convex hull of c i , then no such edges can exist, since all points are on one side of H.</p><p>Given this property, a compatible triangulation can be generated from a spatial decomposition using the Delaunay triangulation, assuming that each cell c i is convex, each face lies on some H m-1 , and the points are non-degenerate. Note also that each cell c i can be triangulated independently and will generate a compatible triangulation since the faces of each form a unique triangulation.</p><p>The ability to create compatible triangulations in an independent manner from cell to cell forms the basis of our algorithm. This approach works well as long as the spatial decomposition consists of convex cells with planar faces and non-degenerate point sets. However, these conditions are rarely met in practice; especially the requirement for non-degenerate point sets. Volumes and octrees are composed of cubical cells (i.e., voxels and octants) that have degenerate points, but are convex with planar faces. Therefore, to extend the applicability of the algorithm, we must address situations when these properties do not hold.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Degenerate Points</head><p>As stated earlier, the Delaunay triangulation is unique when the generating point set P is non-degenerate. Degenerate points introduce ambiguities into the triangulation, requiring an arbitrary choice in the triangulation process. The resulting triangulation has equivalent Delaunay properties as compared to other triangulation representing different choices, and is therefore not unique with respect to the Delaunay property.</p><p>To form a unique triangulation, we introduce an additional condition regarding the choice of which triangulation to pick. This condition is simple: we use the order of the point in P, or equivalently, a unique point id that supports a mathematical ordering operation (e.g., the operations &lt; or &gt;). As <ref type="figure" target="#fig_1">Figure 2</ref> shows, the order in which points on a subdivided 2:1 octant face are inserted can be used to control the resulting triangulation. As long as the same order is used in the neighboring octants, the triangulation will be a compatible triangulation.</p><p>A variety of point ordering rules are possible. The octant on the left in <ref type="figure" target="#fig_1">Figure 2</ref> was triangulated with corner vertices first, followed by edge vertices. Finally, the center face vertex was added to the triangulation. The middle octant in <ref type="figure" target="#fig_1">Figure 2</ref> had its central face vertex inserted prior to its edge vertices. However, the simplest rule is to sort the points according to a unique integer id (or any other unique, sortable id). This will insure that the points on a face are always inserted into the triangulation in the same order. This is true whether c i or c j (the cells on either side of the face) is triangulated, since the sorted order on will always be the same.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Non-Planar Faces and Concave Cells</head><p>Many important spatial decompositions such as volumes and octrees are composed of cells that are convex with planar faces. The ordered Delaunay triangulation technique produces compatible triangulations for these types. However, there are decompositions that may consist of cells with non-planar faces such as finite element meshes (e.g., warped hexahedron or higher-order elements). Note that cells with non-planar faces implies non-convex cell shapes, since a non-planar, convex face on one cell implies a non-planar, concave face on the face neighbor.</p><p>The simplest way to treat such situations is to triangulate such cells in parametric space. Many cells such as finite elements are typically defined in an orthogonal r-s-t coordinate system that ranges from or depending on the formulation <ref type="bibr" target="#b7">[8]</ref>. This inevitably introduces degenerate points, since an element like a hexahedron with vertices at in parametric space has eight vertices all of which lie on the same circumsphere. The point ordering property is used to disambiguate the triangulation; as a result it will be compatible with its neighbor. Note that for this to be true, the mapping into parametric space must preserve point degeneracies; that is, a degenerate face in parametric space must remain degenerate independent of which face it is mapped to in parametric space. (For example, cells with tetrahedral topology should be mapped into a regular tetrahedron, not into the right-angle tetrahedron found in finite element analysis.)</p><p>In principle concave cells with planar faces may exist. This is rare in practical application. Such cells require the use of a constrained Delaunay triangulation, since the Delaunay triangulation is always convex. While simple techniques such as rejecting a simplex whose center is outside of the cell may work in many situations, there are potential cases where the triangulation may not form a valid geometric triangulation <ref type="bibr" target="#b21">[22]</ref> with the cell, and simplex deletion cannot resolve the situation. While constrained Delaunay methods are available <ref type="bibr" target="#b4">[5]</ref>, a better alternative may be to decompose the cells of the spatial decomposition into convex pieces first, followed by triangulation. In this paper we assume that cells are convex or can be mapped into a convex cell in parametric space.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">IMPLEMENTATION DETAILS AND APPLICATIONS</head><p>In this section we provide implementation details and show some results for the compatible triangulations algorithm. We apply the method to isocontour adaptive grids, triangulate unstructured grids and perform interval clipping. We begin by describing a simple algorithm for ordered Delaunay triangulation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Ordered Delaunay Triangulation</head><p>The point insertion algorithm introduced by <ref type="bibr" target="#b2">[3]</ref> and <ref type="bibr" target="#b27">[28]</ref> is a simple n-dimensional algorithm that can be readily extended to support ordered triangulations. The essence of the algorithm is that it begins with an initial Delaunay triangulation (i.e., a bounding simplex) into which points are inserted one at a time. As each point is inserted, all simplices whose circumspheres contain the point are </p><formula xml:id="formula_2">f k m f k m 1 - r s t , , 1 ≤ ≤ 0 r s t , , 1 ≤ ≤ 1 ± 1 ± 1 ± , , ( ) f k m</formula><p>deleted. This leaves a star convex insertion cavity with faces of dimension n-1. Each face of the cavity is connected to the point to form new simplices. The process repeats for each point until all points are inserted. The last step is to eliminate all simplices connected to the vertices of the original bounding triangulation. The remaining simplices form the Delaunay triangulation of the point set P.</p><p>To treat degenerate points via point ordering the basic in/out circumsphere test is modified as follows. Any point laying exactly on the circumsphere is rejected as being outside. In practice, this can be implemented by reducing the radius of the circumsphere by a small factor , typically on the order of or smaller (assuming that the cell coordinates are in the unit cube parametric space). Thus points injected early take precedence over degenerate points inserted later in the triangulation process.</p><p>Delaunay algorithms based on floating point arithmetic such as the point insertion algorithm described above are numerically sensitive. Double precision is required, but even then small perturbations in computing the circumcenter/circumsphere can cause inconsistencies in the Delaunay triangulation, and eventual algorithm failure. However, in the application described here, the number of points in is small, typically on the order of tens of points. Moreover, as described later in Section 4.4, points close to one another and likely to cause numerically problems are merged. Thus the small number of points, combined with attention to point distribution, works well in practice. Further, in our implementation we use an additional check to insure that all faces of the insertion cavity are convex to the inserted point, and adjust the cavity as necessary to insure that this is the case.</p><p>The method of point ordering is a memory intensive algorithm that creates and destroys many tetrahedra, faces, and edges. To obtain maximum performance, it is necessary to carefully manage memory allocation and deletion. In our C++ class implementation, a pool of memory is pre-allocated and reused each time a cell is triangulated. Our implementation is less than 750 lines of executable code, reflecting the simplicity of the algorithm. (The source code is available in the VTK class vtkOrderedTriangulator available at http://www.vtk.org.)</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Isocontouring Adaptive Grids</head><p>Adaptive grids such as the branch-on-need-octree (BONO) <ref type="bibr" target="#b30">[31]</ref> or block-structured adaptive mesh refinement such as CHOMBO <ref type="bibr" target="#b0">[1]</ref> can be used to represent data at varying levels of resolution and with low storage overhead. In such grids naive isosurface generation proceeds by visiting each terminal cell (i.e., octant or grid cell at the highest level of resolution at that location in the grid) using standard methods (e.g., marching cubes) to extract the isocontour in the cell, ignoring the difference in subdivision level across edges and faces. A typical result is shown in the lower left-hand side of <ref type="figure" target="#fig_4">Figure 3</ref> where cracks are clearly seen between portions of the isosurface generated from different grid resolutions. In many applications such visual artifacts may be ignored; however, in situations where further processing of the isosurface is desirable (e.g., smoothing or decimation) such cracks pose a significant problem since the topology of the mesh is altered.</p><p>To address this problem, the method of compatible triangulation is employed by modifying the isocontouring algorithm as follows. Each cell through which the contour passes is tetrahedrized by injecting the corner, edge, and face vertices required to match the neighboring grid levels (e.g., <ref type="figure" target="#fig_0">Figure 1</ref>). The vertices are numbered with a unique integer id, which can be generated based on a logical subdivision of the domain, or can be synthetically generated according to a recursive tree traversal. Once the tetrahedra are generated, each tetrahedra is isocontoured using marching tetrahedra <ref type="bibr" target="#b26">[27]</ref>. Because the triangulation is compatible, the isosurface is crack-free with no T-junctions. Note that the entire D does not need to be triangulated, only those cells through which the contour surface passes. The crack-free result is shown in the right hand side of <ref type="figure" target="#fig_4">Figure 3</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Triangulation of Unstructured Grids</head><p>Unstructured grids used in finite element analysis often consist of cells of mixed topology such as hexahedra, wedges and pyramids. Tetrahedrization of these meshes must produce triangulations that are compatible across face neighbors. The method of compatible triangulation works well for such situations as long as the triangulation is performed in parametric space. <ref type="figure" target="#fig_5">Figure 4(a)</ref> is an example of a heterogeneous finite element mesh that has been tetrahedralized using this method. Note that the parametric mapping of each face must be consistent between all cell types that may share that face (i.e., are face neighbors). That is, a triangle face mapped in parametric space for a given cell type must be similar to the matching triangle face in the neighboring cell otherwise the resulting triangulation may be incompatible.</p><p>The method of compatible triangulations has also been used to tessellate cells of higher-order basis. The p-method in finite element analysis approximates the solution field and/or cell geometry with quadratic, cubic, or even mixed/arbitrary order basis. In application, the order of the (typically polynomial) basis is modified in response to an error metric to accelerate numerical convergence. Unfortunately, visualizing the results on such cell types is poorly supported by current visualization tools since they typically pro-  vide representations for up to quadratic basis (and occasionally cubic basis). Current ad-hoc approaches address this problem by subdividing higher-order cells into a pre-specified set of linear cells. This may result in the generation of too many or too few cells. We have successfully employed the method of compatible triangulations to adaptively subdivide the cells as described by the following.</p><p>Similar to the 2D method of <ref type="bibr" target="#b6">[7]</ref>, the process begins with an initial coarse tetrahedrization of the mesh similar to that of <ref type="figure" target="#fig_5">Figure 4</ref>. (Meshes that have cell types of non-tetrahedral topology are pretessellated into tetrahedra. The ordered triangulator can be used for this task if necessary.) Then for each initial tetrahedron, an error metric is evaluated on each of the six edges. If for a particular edge the error exceeds a user-specified criterion, the edge is marked for subdivision and a new point is generated at the mid-point of the edge. Then the ordered triangulator is used to generate a new tetrahedrization of the original tetrahedron (the generation is performed in parametric space). Up to ten points may be injected (four vertices and up to six mid-edge points). The new tetrahedra are then recursively processed and the algorithm continues until the error metric satisfies the convergence criterion. <ref type="figure" target="#fig_6">Figure 5</ref> shows the result of this algorithm applied to a quadratic finite element using the method of compatible triangulations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Interval Tetrahedrization and Clipping</head><p>As defined by <ref type="bibr" target="#b16">[17]</ref>, an isosurface for the scalar field in three dimensional space is given by and the interval volume lies between two isosurfaces . Clipping is defined by the half-sided operation . It is possible to transform the volume interval into the half-sided clipping function by using the equation:</p><p>There are two approaches to clipping cells to produce an interval volume using the method of compatible triangulations. The first is to triangulate each cell, and then clip the resulting tetrahedra using standard techniques. The second, which we use in practice, is to generate cell edge intersections from the clipping function and add them to prior to ordered Delaunay triangulation. Intersection points are given a unique id based on which D edge was used to generate them. Then all tetrahedra with vertices marked "outside" the clip function are deleted. (As vertices are inserted into the triangulation they are marked "outside", "inside", and "on" the clip surface.) This leaves those tetrahedra inside the clipped region. To avoid numerical problems with the Delaunay triangulation due to tetrahedral slivers or pancakes, edge intersection points that are close to nearby cell points are merged with the cell points. Typically a merge tolerance of one one-hundredth of the edge length is used.</p><p>The process produces valid tetrahedrizations because the cell faces are convex and clipping produces at most one intersection per edge that is necessarily connected to other edge intersection points by straight lines. Cutting a convex face with one or more lines leaves convex pieces, which are in turn are triangulated correctly because the ordered Delaunay triangulation will always triangulate convex pieces in a unique, and compatible manner. <ref type="figure" target="#fig_7">Figure 6</ref> shows an example of clipping various cell types including tetrahedron, hexahedron, triangular prism (wedge), pyramid and an octant with one face subdivided 2:1. In <ref type="figure" target="#fig_8">Figure 7</ref> clipping is applied to three volume datasets-a synthetic implicit function of resolution 100 3 , a CT scan of a human head of resolution 256 2 by 94 slices, and an industrial CT scan of a turbine blade at resolution 512 2 by 300 slices-to produce tetrahedral meshes. <ref type="table">Table 1</ref> shows the number of tetrahedra produced in each model and the time to produce the tetrahedrization.   </p><formula xml:id="formula_3">F x y z , , ( ) c = α F x y z , , ( ) β ≤ ≤ C x y z , , ( ) α ≥ F x y z , , ( ) 0 ≥ C x y z , , ( ) F x y z , , ( ) α if F x y z , , ( ) α &lt; - β F x y z , , ( ) if F x y z , , ( ) β &gt; - min F x y z , , ( ) α -β F x y z , , ( ) - , ( ) otherwise ⎝ ⎜ ⎜ ⎜ ⎛ = P c i ( )</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Template Generation for Performance</head><p>The ordered triangulation technique is inherently slower than techniques based on table lookup such as that described by <ref type="bibr" target="#b16">[17]</ref>. However, it is possible to obtain nearly the same performance as these faster, templated techniques by using the ordered triangulator to generate templates on the fly, caching each template after generation, and then reusing the cached template. Indeed, we have found that generating templates is often easier to implement than manual, a priori creation of templates. For example, the octant configuration of <ref type="figure" target="#fig_0">Figure 1</ref> requires distinct combinations (here eighteen points define the convex point set -a large number of templates to manually generate and store in a pre-computed template table). Using template generation, it is possible to specify the number of stored templates and retain the most frequently used ones to minimize memory resources devoted to template storage.</p><p>To generate templates using ordered triangulations, two pieces of information are required: a template type and index. The template type refers to the topology of the template (e.g., an octant with one edge subdivided 2:1 for a total of nine points). The template index is a permutation index computed as a by product of the sorting operation. That is, when the initial point set is sorted to produce the ordered point set , a point p i in position i in the unsorted list will end up in position j in the list . The resulting swap from position i to its final position j is used to compute the template index as <ref type="bibr" target="#b2">(3)</ref> where is the number of positions the point moved during sorting.</p><p>Once generated, the template index is stored with the list of tetrahedra that it generates in a data structure providing constant or logarithmic time lookup such as an STL map. (In some applications the large number of possible templates discourages the use of constant time data containers such as vectors or linear arrays.) Later, when a cell of the same type and template index is encountered, the template is retrieved and the tetrahedra are produced directly from the template definition. <ref type="table">Table 1</ref> shows the relative timings to produce the interval tetrahedrizations of the implicit function, human skull and the turbine blade data sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.6">Parallel Implementation</head><p>The ordered triangulation method scales well in parallel application because minimal boundary information is required between cells. Each cell requires that its vertices have a unique, global point id. These ids can often be determined implicitly, for example a volume extent is enough to determine all the point ids for the voxels contained in that extent. This reduces the need to broadcast point ids across all processors. <ref type="table">Table 1</ref> shows the results of the implicit function, head and turbine blade data sets run with two, four, and eight processors. The parallel system consists of eight dual processor, Windows 2000 nodes connected via gigabit ethernet and MPI communication. Each node was configured with 1 gigabyte memory with 800-MHz processors. A simple load balancing scheme subdivided the volume across the processors. As the table shows, the blade was particularly unbalanced due to extra work required to process the larger dovetail section, while the symmetric implicit function is well balanced and scales linearly with the number of processors. Note also as the models became larger the work required to manage the output (including some swap effects) overshadowed the benefits of templates versus the ordered triangulator. In general, templating improved performance up to an order of magnitude.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">CONCLUSIONS AND FUTURE WORK</head><p>We have modified the 3D Delaunay triangulation to produce compatible triangulations of spatial decompositions. The modification 18! P c i ( )   <ref type="table">Table 1</ref>. Clipping examples with one and more processors. Different times (maximum elapsed time per processor) are presented depending on whether or not template generation and caching is used to accelerate the ordered triangulator (OT). Times are normalized by the fastest elapsed time to show relative speed (fastest time was 3.4377 seconds). Times in parenthesis are the minimum elapsed time on a processor to show relative load balance on processors.</p><p>requires the use of a unique, sortable labeling of each point in order to resolve ambiguous cases when the Delaunay property is incapable of distinguishing between triangulations. The method can be used in any spatial decomposition where the cells of the decomposition are convex with planar faces; or where cells can be mapped and triangulated in a canonical space with convex shape and planar faces. The method is general and simple: it can be easily employed by providing a list of point containing both coordinates and a unique id. Furthermore, minimal boundary information is required so the algorithm can be parallelized in a scalable manner.</p><p>The method described here is general although not as fast as algorithms based on case tables or templated triangulation rules. However, such rules are difficult to create and implement in all but the simplest spatial decompositions consisting of regular structure and a simple cell types (e.g., a volume or a structured grid with a homogeneity of hexahedral cells). Indeed, our method has used to generate case tables on the fly where the most common templates are generated and cached while the less common configurations are delegated to using the compatible triangulation algorithm.</p><p>This method can be extended to higher dimensions, since the Delaunay triangulation is inherently an n-dimensional algorithm. In addition, concave cells, or cells with non-planar faces, can be treated as well by using constrained Delaunay triangulations. However, this introduces a great deal of complexity into the algorithm, diminishing one of its key features, which is simplicity.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 .</head><label>1</label><figDesc>Compatible triangulations across neighboring octant faces in an octree at different levels of subdivision. An ordered Delaunay triangulation guarantees a unique, compatible triangulation between planar faces of convex cells. October 10-15, Austin, Texas, USA IEEE Visualization 2004 0-7803-8788-0/04/$20.00 ©2004 IEEE</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 .</head><label>2</label><figDesc>Different orderings of degenerate points on octant faces (divided 2:1) produces different triangulations.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 3 .</head><label>3</label><figDesc>Crack-free isosurface generation in an adaptive mesh refinement (AMR) grid such as that depicted by the image at top. On the lower left, naive isocontouring algorithms produce cracks between differing levels of resolution. On the lower right, compatible triangulations produce crack-free, watertight surfaces. (The thin blue lines show the outline of different blocks in the AMR grid.)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 4 .</head><label>4</label><figDesc>Triangulation of a mixed cell type unstructured grid. On the left, an exploded view of four cell types consistently triangulated. Above, a triangulation of a large, mixed cell type unstructured grid.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 5 .</head><label>5</label><figDesc>The method of compatible triangulations used to tessellate a higher-order finite element basis (in this case a quadratic isoparametric element). The tessellation is driven by a function of the edge length and variation in solution values. The tessellation is performed in parametric space.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 6 .</head><label>6</label><figDesc>Clipping cells. Red vertices are inside the clipped portion of the cell. Various cell types including hexahedron, tetrahedron, wedge, pyramid and a 2:1 subdivided octant are shown in sample clip configurations.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure 7 .</head><label>7</label><figDesc>Clipping results for the function, head and blade models. Top left, an interval volume is produced for an implicit function. Top right, a tetrahedrization of the human skull from a medical CT dataset. The resulting tetrahedral mesh is suitable for computational analysis. Lower left, a tetrahedrization of a turbine blade from an industrial CT scan produced over 24 million tetrahedron.</figDesc></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>Some of this work was supported by NSF SBIR Phase II Grant DMI-0238964. Kathleen Bonnell of Lawrence Livermore National Lab provided data and debugging help for this work.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Local Adaptive Mesh Refinement for Shock Hydrodynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Berger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Colella</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computational Physics</title>
+		<imprint>
+			<biblScope unit="volume">82</biblScope>
+			<biblScope unit="page" from="64" to="84" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Adaptive Mesh Refinement for Hyperbolic Partial Differential Equations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Berger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Oliger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computational Physics</title>
+		<imprint>
+			<biblScope unit="volume">53</biblScope>
+			<biblScope unit="page" from="484" to="512" />
+			<date type="published" when="1984" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Computing Dirichlet Tessellations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bowyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Journal</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="162" to="166" />
+			<date type="published" when="1981" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Polygonization of Implicit Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bloomenthal</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Aided Geometric Design</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Finding the Constrained Delaunay Triangulation and Constrained Voronoi Diagram of a Simple Polygon in Linear Time</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Chin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal On Computing</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="471" to="486" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Tetrahedra Based Volume Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cignoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Montani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopigno</surname></persName>
+		</author>
+		<idno>3-540-63991-8</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Mathematical Visualization-Algorithms, Applications, and Numerics</title>
+		<editor>H.-C. Hege and K. Polthier</editor>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="3" to="18" />
+		</imprint>
+	</monogr>
+	<note>Springer Verlag</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">A Simple Recursive Tessellator for Adaptive Surface Triangulation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Field</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. of Graphics Tools</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1" to="9" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<title level="m" type="main">Concepts and Applications of Finite Element Analysis, Fourth Edition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Cook</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Malkus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Plesha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Witt</surname></persName>
+		</author>
+		<idno>0471356050</idno>
+		<imprint>
+			<date type="published" when="2001" />
+			<publisher>John Wiley &amp; Sons</publisher>
+			<pubPlace>New York</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">A Volumetric Method for Building Complex Models from Range Images</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Curless</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of SIGGRAPH 96</title>
+		<meeting>of SIGGRAPH 96</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Adaptively Sampled Distance Fields: A General Representation of Shape for Computer Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Frisken</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Perry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Rockwood</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Jones</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SIGGRAPH 00</title>
+		<meeting>SIGGRAPH 00</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="249" to="254" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Primitives For The Manipulation of General Subdivisions and the Computation of Voronoi Diagrams</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Guibas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Stolfi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graphics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="74" to="123" />
+			<date type="published" when="1985" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Adaptive Polygonalization of Implicitly Defined Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Warren</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="page" from="33" to="42" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Feature Extraction of Separation and Attachment Lines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kenwright</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Henze</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Levit</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="135" to="144" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Interactive Time-Dependent Particle Tracing Using Tetrahedral Decomposition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kenwright</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lane</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="120" to="129" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Automatic p-version Mesh Generation for Curved Domains</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">S</forename><surname>Shephard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Flaherty</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">E</forename><surname>Jansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Luo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Chevaugeon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J-F</forename><surname>Remacle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">W</forename><surname>Beall</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>O'bara</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. for Applied Numerical Mathematics</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">An Introduction to Implicit Techniques</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Menon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH Course Notes on Implicit Surfaces for Geometric Modeling and Computer Graphics</title>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Interval Volume Tetrahedrization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Nielson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sung</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization 97</title>
+		<meeting>Visualization 97</meeting>
+		<imprint>
+			<publisher>ACM Press</publisher>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Hierarchical And Adaptive Visualization On Nested Grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ohlberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Rumpf</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computing</title>
+		<imprint>
+			<biblScope unit="volume">59</biblScope>
+			<biblScope unit="page" from="269" to="285" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Preparata</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Shamos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computational Geometry. Springer-Verlag</title>
+		<imprint>
+			<date type="published" when="1985" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Generalized Unstructured Decimation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Renze</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Oliver</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="24" to="32" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Interactive Volume Visualization of Hierarchical 3D-Meshes by</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rottgear</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Teitzel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Grossno</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cell-Projection. EURO-GRAPHICS</title>
+		<imprint>
+			<biblScope unit="volume">99</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Geometric Triangulations: With Application To Fully Automatic 3-D Mesh Generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">J</forename><surname>Schroeder</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+	<note>Ph.D. thesis, RPI</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">The Visualization Toolkit An Object-Oriented Approach To 3D Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">J</forename><surname>Schroeder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">M</forename><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+			<publisher>Kitware, Inc</publisher>
+		</imprint>
+	</monogr>
+	<note>3rd Edition</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Octree-Based Decimation Of Marching Cubes Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Shekhar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Fayyad</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cornhill</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization 96</title>
+		<meeting>Visualization 96</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="335" to="342" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">A Polygonal Approximation to Direct Scalar Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Shirley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tuchman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings San Diego Workshop on</title>
+		<meeting>San Diego Workshop on</meeting>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="63" to="70" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">The Lazy Sweep Ray Casting Algorithm for Rendering Irregular Grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mitchell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="142" to="157" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Regularised Marching Tetrahedra: Improved Iso-surface Extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Treece</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Prager</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Gee</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers and Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="583" to="598" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Computing the n-Dimensional Delaunay Tessellation with Application To Voronoi Polytopes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Watson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comp. J</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="167" to="172" />
+			<date type="published" when="1981" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Extraction of Crack-Free Isosurfaces from Adaptive Mesh Refinement Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Weber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Kreylos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ligocki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Shalf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hagen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the EG+IEEE VisSym in Ascona</title>
+		<meeting>the EG+IEEE VisSym in Ascona</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="22" to="30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Real-Time Exploration Of Regular Volume Data By Adaptive Reconstruction Of Isosurfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kobbelt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Visual Computer</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="100" to="111" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Octrees for Faster Isosurface Generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="201" to="227" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">Physically Based Modeling: Principles and Practice. SIG-GRAPH &apos;97, Course Notes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Witkin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Multiresolution Tetrahedral Framework for Visualizing Regular Volume Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization 97</title>
+		<meeting>IEEE Visualization 97</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

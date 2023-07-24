@@ -1,0 +1,977 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Text Scaffolds for Effective Surface Labeling</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Student Member, IEEE</roleName><forename type="first">Gregory</forename><surname>Cipriano</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Gleicher</surname></persName>
+						</author>
+						<title level="a" type="main">Text Scaffolds for Effective Surface Labeling</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:47+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>surface labeling</term>
+					<term>computational cartography</term>
+					<term>text authoring</term>
+					<term>annotation</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>In this paper we introduce a technique for applying textual labels to 3D surfaces. An effective labeling must balance the conflicting goals of conveying the shape of the surface while being legible from a range of viewing directions. Shape can be conveyed by placing the text as a texture directly on the surface, providing shape cues, meaningful landmarks and minimally obstructing the rest of the model. But rendering such surface text is problematic both in regions of high curvature, where text would be warped, and in highly occluded regions, where it would be hidden. Our approach achieves both labeling goals by applying surface labels to a &apos;text scaffold&apos;, a surface explicitly constructed to hold the labels. Text scaffolds conform to the underlying surface whenever possible, but can also float above problem regions, allowing them to be smooth while still conveying the overall shape. This paper provides methods for constructing scaffolds from a variety of input sources, including meshes, constructive solid geometry, and scalar fields. These sources are first mapped into a distance transform, which is then filtered and used to construct a new mesh on which labels are either manually or automatically placed. In the latter case, annotated regions of the input surface are associated with proximal regions on the new mesh, and labels placed using cartographic principles.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Text labels are useful to annotate features when viewing 3D models. Good labelings must address several sometimes conflicting issues: they must be legible (the text is readable), visible (the text can be seen), proximal (the labels are visually connected to the feature they annotate), and shape-conveying (they should help, not hinder the understanding of the underlying data). Cartographers have considered similar issues on 2D maps for millennia, forming a highly developed art. However, for viewing of 3D models, especially free-form models or applications where the user controls the viewpoint, many of the issues become more challenging. In this paper, we introduce Text Scaffolds, an approach for textual labeling in 3D model visualization that offers better control over the tradeoffs, often allowing all 4 goals to be met simultaneously.</p><p>There are two general strategies for annotating 3D models: placing the text on screen-aligned "billboards" or applying the text as a surface-adhering label (i.e. as a texture). The former easily meets the goals of legibility and visibility and is easy to implement. However, connection to the model can be difficult, especially as the shapes grow more complex or the number of annotations grows, and they can detract from the perception of shape (by occluding it) without the potential for elucidating it.</p><p>In contrast to screen-aligned labels, surface labels can add to shape perception by providing texture cues and motion cues (if the viewpoint is moved). However, text placed on curved surfaces may be warped (hurting legibility), or occluded (hurting visibility). Sometimes there may not even be an appropriate surface at the scale of a feature. Finally, applying the labels to free form surfaces can be challenging as it requires low-distortion parameterizations and anti-aliasing to give the crisp edges helpful for text legibility.</p><p>In this paper, we introduce a new approach for the display of textual labels to annotate features on 3D models. Our key insight is that surface labels are best at roughly conveying large-scale shape, and that the issues are most challenging when the features are small. Effectively, surface text labels work well on some surfaces, and not on others. Our basic premise is to construct a surface that is similar to the original yet amenable to surface labeling and apply surface labels to this new surface. We call such surfaces text scaffolds.  <ref type="figure" target="#fig_0">Figure 1</ref> shows some examples of labels that illustrate the advantages of our approach. Unlike screen-space labels, our scaffold labels convey a sense of the rough shape of the underlying model and features, especially when the viewpoint is moved. While they do not precisely show where the feature lies on the surface, they are often close enough to provide a visual connection. Their proximity also helps with managing clutter as the number of labels increases. Unlike direct surface labeling <ref type="figure">(Fig 2)</ref>, the scaffold text retains its legibility over small surfaces features as it is not warped by curvature details. Small pockets or bumps do not cause occlusion problems, and the label is visible when the feature is visible. Scaffolds can be constructed even when there is no obvious surface for the label <ref type="figure" target="#fig_0">(Figure 1c</ref>), and our methods can construct scaffolds from a wide variety of data.</p><p>Our discussion of the text scaffold approach begins by considering how the goals for good labeling dictate the kinds of surfaces that should be used as scaffolds. §3 introduces an approach for producing such surfaces from various source data. The approach uses signed distance fields internally, but produces a smooth triangle mesh that both approximates the original data yet is amenable for labeling. §4 then considers the problem of creating the labels on this surface. Methods are described that automatically choose paths for text to follow along the surfaces. Finally, we present an implementation that uses recent advances in surface parametrization and texture filtering to display the labels in an efficient and visually crisp manner.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.1">Contributions</head><p>The core contribution of this paper is a novel approach to presenting textual annotations on arbitrary 3D surfaces, one which conveys shape and maintains readability to a degree not possible with prior approaches. In creating this approach, we make the following contributions:</p><p>• we explore the issues in effectively presenting text on surfaces, defining the types of surfaces that are likely to be amenable for labeling; • we introduce a methodology for constructing surfaces with these properties that is efficient enough to allow for experimentation, yet flexible enough to work from a wide-variety of source data; • we consider the problem of label placement on 3D surfaces, providing an extension of cartographic principles and algorithms; • we consider the problem of rendering textual labels on 3D surfaces, providing an implementation that is simple and efficient.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Many papers deal with the task of automated label placement as 2D external labels, some for non-interactive cartographic applications <ref type="bibr" target="#b3">[4]</ref>  others for interactive 3D illustrations <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b26">27]</ref>. These techniques can generally work independently from underlying geometry, and have the advantage of being generalizable across a wide range of structures <ref type="bibr" target="#b24">[25]</ref>. Work by Ropinski, et al., most resembles our own <ref type="bibr" target="#b30">[31]</ref>. Their method fits labels to segmented regions of a smooth approximation of the depth map of a particular view. Unlike our method, which considers the surface as a whole, this optimizes for only one viewpoint, and further, does not allow label placement over disconnected regions, such as those of <ref type="figure" target="#fig_0">Figure 1</ref> (a, c and d).</p><p>Papers by Götzelmann, et al., have dealt with the concerns of data management for annotation <ref type="bibr" target="#b14">[15]</ref>, integrating internal and external labels <ref type="bibr" target="#b11">[12]</ref> and the need for methods to annotate animated 3D objects <ref type="bibr" target="#b15">[16]</ref>.</p><p>While most cartography texts (c.f. <ref type="bibr" target="#b34">[35]</ref>) discuss the issues in textual labeling on maps, the work of Imhof <ref type="bibr" target="#b21">[22]</ref> is often considered the seminal authority. The guidelines are typically very specific to 2D maps, although cartographers are beginning to consider their extension to interactive of animation maps <ref type="bibr" target="#b16">[17]</ref>, and 3D flyovers <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b18">19]</ref>. We have used these discussions to inform our design.</p><p>While there has been considerable interest in automating cartographic label placement, the focus has generally been on labeling large numbers of point features to provide labels that are as close as possible, without overlap. We do not consider interactions between labels (yet), although this problem may be considered in our framework in the future. Automating the labeling of lineal and areal features in order to achieve legible labels that convey feature shape has received much less attention. An early, but comprehensive solution was demonstrated by Freeman and Ahn <ref type="bibr" target="#b7">[8]</ref>. Plumer, et al. <ref type="bibr" target="#b6">[7]</ref> consider several approaches for automatically placing labels in areal regions, and suggest the skeletonisation approach of Freeman and Ahn as the most effective at conveying shape. We employ this approach in §4. <ref type="bibr" target="#b3">4</ref></p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>.2.</head><p>Quantitative metrics for assessing labeling, such as <ref type="bibr" target="#b37">[38]</ref> and <ref type="bibr" target="#b19">[20]</ref>, have been proposed. However, these mainly consider interactions between labels, and the aesthetic issues particular to 2D maps.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">TEXT SCAFFOLDS</head><p>The key element of our approach is to create a scaffold surface specifically designed to accept labels. This surface is constructed such that labels applied anywhere on it will meet our goals for good labels. Conversely, the specific goals dictate the properties this surface must have:</p><p>• For the labels to be legible, the surface must be smooth (or developable) enough that text on it will not be distorted. • For the labels to be visible from a wide range of viewpoints, all points on the surface should be visible from a range of directions. Holes and divots should be eliminated to avoid highly-occluded regions. The scaffold must remain outside of the initial surface (otherwise the surface would occlude it).</p><p>• For the labels to be proximal, the scaffold must be close to the original surface. This is important to facilitate connection between the label and the feature it annotates. • For the labels to be shape conveying they should follow the basic shape of the original surface. Approximation partially implies shape conveyance. There is evidence that texture can help in shape perception (c.f. <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b25">26,</ref><ref type="bibr" target="#b10">11]</ref>), particularly when then object moves. Textures (particularly ones not specifically designed to convey shape) primarily convey low frequency shape information. This suggests the use of texture to convey low frequency shape by applying it to a smoothed version of the surface (i.e. one that only has the low frequencies).</p><p>These goals necessarily conflict when the surface has high frequency detail. The scaffolds, and therefore the labels applied to them, deviate from the original surface and do not convey its high frequency details. Control of this tradeoff is a key element in our design. To meet our goals, scaffold generation must create a smooth approximation to the input surface where all points on the scaffold are visible from a wide range of directions. The process of scaffold generation takes as input a description of the initial surface in a variety of forms (our implementation supports triangle meshes, constructive solid geometry and scalar fields). Triangle meshes are used as the output as they facilitate the application of text in later phases. <ref type="figure">Figure 3</ref> provides an overview of our process. The key idea in the method is to use a signed distance field to represent this surface. This representation simplifies the processing to create smooth, highlyvisible surfaces. In particular, it is able to fill holes and make other topological alterations more simply than can be achieved using methods such as <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b38">39]</ref>. Signed distance fields also facilitate our drastic contraction-proof smoothing. As a final step, the distance field is converted to a triangle mesh.</p><p>For our application, the drawbacks of distance fields are not important. In particular, distance fields have limited resolution, and therefore cannot provide perfect reconstructions of the source data. This problem does not affect us as we only seek approximations. However, our implementation uses sub-voxel precision throughout to allow for better representations and smoother surfaces.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Distance Fields</head><p>The first step of our approach converts the source data to a distance field. To do this, we first create an implicit representation of the source data, and then transform it to a distance field.</p><p>For data provided as a scalar field, conversion is straight-forward, requiring only resampling to the desired dimensions of a scaffold field. Specific iso-contours can be set as the surface by subtracting that value over the field. Constructive solid geometry is also straightforward to handle. Currently, we allow for union, subtraction, intersection of cylinders and spheres. These operations are achieved by first rasterizing each object into a separate distance field <ref type="bibr" target="#b8">[9]</ref>.  For triangle meshes, a scan-line conversion method similar to <ref type="bibr" target="#b5">[6]</ref> is used, where first triangles are scanned in raster order into the field to find intersections. Voxels that are determined to intersect with a triangle are given a value according to the signed distance from the center of that voxel to that triangle. For voxels containing multiple triangles, we take advantage of the fact that scaffolds must bound the surface itself. We also do not require strict fidelity, so so our system can simply find the minimum signed distance over all triangles, and assign that value to the voxel. This avoids costly inside/outside tests, at the expense of having a scaffold boundary that slightly deviates outward from the original surface.</p><p>Once the boundary is established, all other voxels are scan converted by casting rays along rows. Voxels are given values as in Eq. 2. Those encountered after passing an odd number of boundary points are given an initial value of -1 to mark them as inside the surface. Remaining voxels are given a value of 1 to mark them as outside. To be robust against meshes that do not form closed two-manifold surfaces, our system casts rays from multiple projections, as in <ref type="bibr" target="#b28">[29]</ref>, and assigns to each voxel the most probable value given by voting among the results of each projection.</p><p>After loading our source surface, the band of voxels closest to the surface are considered to contain a valid distance to the nearest point on that surface.</p><p>In our method, we will need to retain the original field as well as the field which will be operated on throughout the text scaffold generation process. These will be designated Forig and Fcur, respectively, in the following sections.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.1">Building the Distance Field</head><p>Once obtained, the scalar field must be converted to a distance field. In other words, for a given bounded solid S, we require each voxel to contain its distance to the boundary ∂S. We use the following form for the signed distance function <ref type="bibr" target="#b23">[24]</ref>:</p><formula xml:id="formula_0">d(p) = sgn(p) inf x∈∂S x − p (1) where sgn(p) = −1 if p ∈ S 1 otherwise<label>(2)</label></formula><p>During each pass of the algorithm, the distance field will need to be updated. Our system assumes that the narrow band around the zero isocontour, also known as the set of boundary cells, contains a valid distance value. Remaining cells are then filled in using the Vector-City Vector Distance Transform <ref type="bibr" target="#b32">[33]</ref>. In this scheme, a vector is maintained for each voxel which points to the nearest point on the surface. This allows for higher accuracy than Euclidean techniques (such as Chamfer distance <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b2">3]</ref>), which tend to amplify the discretization errors that arise as distance is propagated away from the surface boundary.</p><p>Our method initializes boundary-cell distance vectors to be the gradient vector for each cell, weighted by its field value. This gives a starting set of vectors, which are then propagated outward using a sweeping scheme. This is first done for interior voxels, then repeated for exterior voxels, producing a signed distance transform.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Scaffold Generation</head><p>Once a distance transform is generated, our algorithm constructs a final scaffold by performing the following sequence of steps, described in more detail below. First, Forig is copied into Fcur. Then, ambient visibility values are calculated on Fcur, which are used to expand the surface to close up regions of high occlusion. Fcur may be further dilated at this point, to close up any small topological holes.</p><p>Fcur is smoothed to remove creases and other artifacts that may have crept in, and then eroded back, contracting as far as possible while still remaining above the original surface. Finally, a scaffold is generated by first performing marching cubes <ref type="bibr" target="#b27">[28]</ref> on the field to <ref type="figure">Fig. 4</ref>. Holes in the source mesh, such as in the handle of this coffee cup, can be closed by either increasing the dilation constant or by increasing the ambient weight term. Depicted here are the results of increasing, from left to right, the ambient weight term. Note that in the figure on the right, the hole formed by the handle has completely closed up in the scaffold. In this example, w d = 0, while wa = 0, 1.0 and 3.0, from left to right.</p><p>produce an initial mesh, and then a final pass of Taubin smoothing <ref type="bibr" target="#b36">[37]</ref> is applied to produce a final, smooth mesh.</p><p>After every step above, Fcur likely no longer represents a valid distance transform. So its distance field is regenerated according to the scheme described in §3.1.1.</p><p>Another subtlety is that, especially when dilating, the surface may expand outside of the bounds of the field itself. Our system handles this problem by first computing how far the surface would leave the field during an operation. The boundaries of the field are then expanded (or padded) by adding new cells before actually performing that operation. This ensures that the zero surface is still contained within the field at all times.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.1">Dilate Surface and Weight by Ambient Visibility</head><p>Dilation of a surface in a distance transform can be accomplished by simply subtracting the desired expansion constant value w d from the scalar value in every voxel. This effectively moves the zero-surface of Fcur outward to lie on the surface cutting through w d . After recomputing the distance transform, small pockets and holes may disappear, and components separated by a distance less than w d will become joined.</p><p>Our algorithm further dilates Fcur to force it to avoid occlusion. To accomplish this, it first calculates ambient visibility for each voxel by traversing the grid in the direction of each of 26 neighbors. For each direction, if the edge of the field is reached before an interior voxel, then that voxel's ambient visibility value viscur(x, y, z) is incremented.</p><p>Once all ambient values are computed, ambient field values are combined with the dilation constant to produce a dilated surface in the following way:</p><formula xml:id="formula_1">amb(x, y, z) = max 0, vis thresh − viscur(x, y, z) 26 (3) Fcur(x, y, z) = Fcur(x, y, z) − wa * amb(x, y, z) − w d (4)</formula><p>Here, vis thresh corresponds to the minimum percentage of rays that must intersect the surface to consider the voxel to be occluded. Values for vis higher than this number are not considered to be in a pocket, and so will not contribute to the dilation of the field. In this paper, we set vis thresh = .5, which leaves voxels unaffected that are mostly outside the mesh, but dilates those voxels that are inside proportionally to their degree of occlusion.</p><p>Weights wa and w d can be adjusted to tune the desired degree of occlusion-avoidance and dilation, respectively. <ref type="figure">Figures 4 and 6</ref> show the effects of different parameters on a surface.</p><p>Using ambient occlusion allows our method to directly improve overall text visibility, as surface regions that are not visible will be pushed outward, while the outer boundary remains unaffected. In contrast to dilation, areas that are within significant pockets, but nevertheless far from any part of the surface, are still filled in by utilizing ambient occlusion.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Original Field</head><p>Occlusion Weight New Field <ref type="figure">Fig. 5</ref>. Shown here is a 2D representation of the results of adding ambient weight to the field surrounding a pocket. At left, the original field, with black depicting voxels interior to the mesh, and white depicting exterior voxels. Occlusion weight, shown at center is calculated for all voxels and subtracted from these values. External voxels close to the surface of the mesh may now be negative, causing them to become internal voxels. <ref type="figure">Fig. 6</ref>. Shown here is a cutaway view of a protein surface with multiple scaffolds, each with a different visibility weight. Note that the cleft, inside which voxels are highly occluded, is followed most closely by the orange surface, which has no ambient weight applied. Each successive surface is generated by an increasingly larger ambient weight (w d = 0 and wa = 0, 2, 4, 8 and 12, respectively), causing the surface to be pushed out of the cleft.</p><p>Fcur now no longer represents a valid distance field, so our method now follows the same steps as in §3.1.1 by throwing away all distances except those within the narrow band around the zero-surface and reinitializing the field.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.2">Smooth Field</head><p>By dilating Fcur, our method has now satisfied our visibility goal, but it still needs to ensure a smooth scaffold on which to place text. Though a separate mesh smoothing pass is applied later in §3.2.4, we desire to have our field as smooth as possible, as we find that this both improves field quality after erosion, as well as the quality of the mesh that we can extract from the field.</p><p>In this step, smoothing is a Gaussian filter of size σ b is convolved with the scalar field values of Fcur, which affects them in much the same way that it would affect an ordinary image: values blur with their neighbors, and sharp features tend to diffuse into surrounding areas.</p><p>σ b is another user-controllable parameter, and its effect is to smooth out peaks and fill in valleys. Larger values for σ b , then, reduce undulation in the scaffold, which contributes to the overall visibility of labels placed on that scaffold, at the expense of less fidelity: the scaffold will diverge from the original surface in high-frequency regions. All figures in this paper are generated with σ b = .8.</p><p>As is the case after §3.2.1, Fcur no longer represents a distance field after smoothing, so again the field is regenerated §3.1.1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.3">Erode Surface</head><p>The surface contained in Fcur now avoids pockets, and is smooth, but due to dilation, it no longer tightly bounds the original surface. The next step is to erode Fcur back as far as is possible without intersecting the surface contained in Forig.</p><p>In order to accomplish this, we want to find the isosurface contained within Fcur with the smallest value that is still completely contains Forig. This amounts to searching for the largest field value of Fcur over all positive boundary voxels in Forig. This value is subtracted from Fcur to produce a final bounding surface, and again the distance field is recomputed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.4">Create Scaffold Mesh</head><p>The final step in creation of a scaffold mesh is to convert the distance transform into a triangular mesh. Our algorithm uses marching cubes <ref type="bibr" target="#b27">[28]</ref> for this purpose. Since the field now defines a set of smooth isosurfaces, marching cubes will produce a mesh that is smooth at larger scales, but it still contains minor stair-step artifacts along each voxel boundary.</p><p>To remove these artifacts, Taubin smoothing <ref type="bibr" target="#b36">[37]</ref> is applied. We find that two iterations suffice, using λ = .8 and µ = .87, to flatten any residual stair steps. Care should be taken to avoid scaffold intersection with the underlying model, which would cause text to disappear under the surface. In practice, because these vertices are not moving far, we have not found this to be a problem, though the smoothing process can be halted if such a condition occurred.</p><p>One small issue with marching cubes is that the method often produces irregular surfaces. While our system could process the mesh to correct this, as in <ref type="bibr" target="#b39">[40]</ref>, we find that for the purposes of text layout, the irregularity of our scaffold meshes does not cause any issues.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>CARTOGRAPHIC LABELING</head><p>After creating the scaffold surface, the system must place the text on the surface. This task requires first choosing where the labels should be placed, and then drawing the letters on the surface. Our approach divides the task by having a first phase provide a smooth curve that the letters should follow to a second phase that constructs parameterizations along this curve that allow for texture mapping, and a display component that enhances the display of the textures. In keeping with cartographic terminology, We refer to the first task as labeling and the latter as lettering.</p><p>Cartographic labeling considers three types of features: point features, lineal features, and areal features. For each feature type, our approach generates a smooth path on the scaffold surface onto which lettering is applied. In our implementation, features can be either supplied manually, or taken from the data.</p><p>In traditional cartographic labeling, the preferred "up" direction of the map suggests that most labels are placed on straight horizontal lines, unless there is good reason to do otherwise <ref type="bibr" target="#b21">[22]</ref>. For surface labeling, there is often no "up" direction (as the object may be rotated), or even "straight horizontals." Additionally, there are often other concerns for directionality, such as conveying shape or maximizing visibility in non-flat regions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Smooth Paths</head><p>Because the scaffold surface was explicitly constructed to have necessary smoothness and visibility properties, labeling methods can place text anywhere on the surface. For this text to be legible, the path that it follows should be smooth. Because the mesh representing the scaffold surfaces may be coarsely and irregularly triangulated, paths limited to the vertices of the mesh are often not smooth enough, leading to lettering that looks irregular and jagged. Therefore, paths are represented as a series of nodes, each lying on a triangle face. Pairs are implicitly connected by a path running along the surface. This representation keeps nodes on the scaffold (necessary as it is this scaffold onto which labels are applied), while providing more flexibility for path placement.</p><p>To create a smooth path given a (potentially not-smooth) input path, our approach first adds additional nodes along the path by linear interpolation where necessary to insure sufficient sampling of the path. This path is then smoothed by first smoothing the curve in 3D, unconstrained by the mesh, and then projecting the points back onto the mesh. These smoothing steps are iterated a fixed number of times. While this procedure only approximates smooth curves on the surface, it is sufficient in practice.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Point Labels</head><p>When the feature to be labeled is a point on the surface, we create a path by fitting a path along the smallest axis of principle curvature. This corresponds to a vector pointing to the flattest local direction of travel from that point. That vector is expanded in both directions. Points are then sampled along the line segment, and projected back onto the surface, where they are iteratively smoothed using the method in §4.1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Labeling Lineal Features</head><p>Lineal features have two forms: "lines" connecting two endpoints, and strokes, where more detail about a lineal feature is given. Either type may be provided interactively (the former by specifying two vertices, the latter by sketching), or may come from an annotation in the data.</p><p>The connection between two points is not necessarily a line because the path must follow the surface. In principle, the straightest path would minimize text curving (which increases readability) and may appear to be the most direct. On a mesh, the straightest path is not necessarily the shortest path <ref type="bibr" target="#b29">[30]</ref>. In practice, shortest paths are easier to compute and seem close enough for our application. Our implementation uses the geodesic distance algorithm of Surazhsky, et al., <ref type="bibr" target="#b35">[36]</ref> to find the shortest path between the two vertices. This algorithm "cuts across" the faces of triangles, where necessary, to create paths. These paths require no further smoothing. For many lineal features, a more complete curve is provided. For example, there might be a lineal feature in the data (such as a ridge) or the user might sketch a curve to indicate a shape to convey with the label. These curves may not provide good paths for labels, as they may not be smooth enough which would lead to unattractive or illegible text. Therefore, our system smooths the provided curve (using the method described §4.1) to create the text paths.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Labeling Areal Features</head><p>Areal features (regions on the surface) are marked in our system as a collection of vertices on the initial mesh. Our system uses a variant of the method of Freeman and Ahn <ref type="bibr" target="#b7">[8]</ref> (detailed in Plumer, et al. <ref type="bibr" target="#b6">[7]</ref>) to convert an areal region into a path as described below.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4.1">Mapping Regions To Scaffolds</head><p>The first step in this process is to, for each annotated region, find an associated region on each scaffold. This is done by projecting each point in a region onto the nearest few vertices on the surface. The new scaffold region, then, is the union of these projections. Our system uses Approximate Nearest Neighbors <ref type="bibr" target="#b22">[23]</ref> to speed up this process.</p><p>After the region is created, it may contain small holes due to sampling artifacts. Their presence can foil the path-creation process, so a "close" morphological operator <ref type="bibr" target="#b9">[10]</ref> is applied, which first dilates the region two vertices outward along the mesh, and then erodes by two vertices.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4.2">Building The Path</head><p>Now that regions have been built on each scaffold, the next step is to construct a path that conforms to the contours of a region. We desire this path to take the form of the underlying region: if the region is long and thin, it should lie along the major axis. If the region is more circular, it should stay roughly in the center. In either case, the path should avoid boundaries whenever possible.</p><p>A well-known technique in automatic 2D map-labeling <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b7">8]</ref> is to construct such a path from the medial-axis transform. The idea is to first construct a distance transform of the region as a 2D texture. Then, a connected graph, or skeleton, is built by finding all maximal points in that transform. This skeleton can be noisy, but the longest path will approximate the "spine" of the region.</p><p>We adapt this technique for finding text paths on the surface, as depicted in <ref type="figure" target="#fig_4">Figure 8</ref>. First, a region is parameterized into a 2D texture. A spine is found, as described above. This spine is then placed back onto the surface, according to the same parameterization, and smoothed using the same method as described in §4.3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Applying letters</head><p>Regardless of which method is used to construct label paths on the surface, our system parameterizes each character individually. This choice, rather than parameterizing the label as a whole or even the entire surface, allows for flexibility over character placement, and ensures that even long strings of text are unlikely to suffer from a bad parameterization. We have found the Exponential Maps method <ref type="bibr" target="#b33">[34]</ref> to be well suited to the creation of small, local character parameterizations.</p><p>One downside of this decision, however, is that it becomes harder to choose a good relative orientation for letters, as parameterization of one letter cannot be used to inform the others. Our system orients letters by averaging over all piecewise-linear path segments that are contained within a given letter's parameterization.</p><p>As text may be displayed at any size, letters need to be legible at high magnification, with minimal pixelation or other artifacts. Since a surface labeling could contain an arbitrary number of labels, memory footprint was also a concern, so we wanted to keep texture usage to a minimum.</p><p>We chose to use Green's alpha-tested magnification <ref type="bibr" target="#b12">[13]</ref> method, which uses texture hardware to subsample the distance transform of the shape of a given character. Both character boundaries and stroke boundaries are established at specific isocontours of this distance transform. The primary advantage of this method is that it avoids the characteristic step-blurring effect that results from bilinear filtering of a hard boundary edge, and produces sharp boundaries from relatively small textures.</p><p>All characters are packed into one texture, which is 1024x1024 pixels in dimension. When rendering a character, our system adjusts the parameterization to sample the correct character from this texture. Screen space anti-aliasing, if available in hardware, is used to further smooth character edges.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RESULTS</head><p>We have implemented our text scaffolding techniques in a visualization testbed that runs under Windows. For all molecular examples in this paper, we use MSMS <ref type="bibr" target="#b31">[32]</ref> to generate an initial molecular surface as a triangle mesh, and some regions are identified using an implementation of Ligsite <ref type="bibr" target="#b20">[21]</ref> to identify putative binding pockets.</p><p>Figures throughout the paper show the effectiveness of our approach in legibly conveying annotations on a complex surface. <ref type="figure" target="#fig_3">Figure 7</ref> shows several problem cases for traditional surface text rendering, and how our solution handles them. <ref type="figure">Figure 9</ref> shows how our system can automatically construct a path to place an label for an annotated input region. <ref type="figure" target="#fig_0">Figures 10 and 11</ref> show more examples of how our system handles various types of input surfaces.</p><p>In all figures, the original model was inserted into 40x40x40 voxel field. We found that a field of this size results in good labels for a wide range of model sizes. Larger fields, in general, remain more faithful to the original surface, but at the cost of increased runtimes. All figures also used values of −1 for w d , and varying values for wa. In our experience, higher values for w d produce a smoother result, as isocontours tend to smooth out farther from the surface. This is not always desirable, as a smoother surface is necessarily a less-faithful surface, and further, its results are often not as intuitive as with other parameters. For this reason, we chose to fix this value.</p><p>We have found our scaffold-generation algorithm to take time roughly linear in the number of voxels in the distance field. Scan-line rasterization of a triangle mesh is also linear in the number of voxels and the number of triangles. In our un-optimized implementation, all figures in this paper took less than a five seconds to finish this step, most less than two. In practice, this is efficient enough that manual specification of the small number of parameters is feasible. However, our approach is not currently suitable for dynamic surface adjustment, such as changing transfer functions in a volumetric model.</p><p>Text path planning and smoothing also take a few seconds, though the geodesic algorithm may take as long as ten seconds to find the shortest path between two vertices that lie a long distance from one another along the surface. We implement the exact form of Hoppe's geodesics algorithm <ref type="bibr" target="#b35">[36]</ref>; the approximate form would reduce this time significantly.</p><p>All performance testing was done on a HP dv2500t laptop, with a Intel T7100 CPU and Nvidia 8400M graphics processor. Text rendering is implemented using pixel shaders in only a few dozen instructions, so on this machine, our implementation can render several hundred labels with no perceptible loss of performance over rendering without the labels.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">DISCUSSION</head><p>Our initial prototype shows that Text Scaffolds can provide for labels that give shape cues for curved surfaces, yet remain legible despite surface features.</p><p>Labeling by its nature involves tradeoffs. While the text scaffold approach provides some control over these tradeoffs through its parameters, other tradeoffs have been made explicitly in its design. For example, we have chosen to fix the labels on the surface rather than have them move as the viewpoint changes. This means that text may be presented at undesirable orientations, but also means it is better able to serve as a shape cue and positional landmark. The "correct" solution to these tradeoffs depends on the viewer's perception, their subjective preference, and the needs of the particular data. Therefore, true assessment of the effectiveness of the approach, in particular to guide the choice of when it is appropriate, will require user evaluation.</p><p>To date, we have not studied user reactions to text scaffold labeling. Anecdotally, domain collaborators (particularly structural biologists), have shown interest in better surface labeling and have reacted positively to our prototypes. However, user studies are required to confirm that Text Scaffolds provide for effective labeling. In particular, studies can provide better understanding of the readability of text on curved surfaces and how well it conveys shape. A better understanding of how proximity fosters mental connection will be useful not only in tuning our methods, but also in understanding where the method is more appropriate than disembodied billboards or direct surface labeling.</p><p>At present we have not explored automating the process of tuning the algorithm to control tradeoffs. In principle, smaller text and smaller features may suggest scaffolds that are closer approximations to the data. We find that tuning wa to produce text that either avoids or follows pockets seems to allow for enough flexibility to label a wide variety of scenarios, including all depicted in this paper.</p><p>Our current implementation contains limited methods for automatic label placement on the surfaces. Future work should extend this to better place labels in effective ways. Such an extension will require more consideration of how the rules of cartography extend to surfaces in 3D, as well as the development of algorithms that create labelings to follow these rules. In particular, our current approach considers each label separately. A more global approach could prevent overlapping labels, control label density, and provide consistency between labels. Cartographic aesthetic principles, such as constant-curvature areal labels could also be translated to 3D surfaces. We have not yet considered issues in the lettering itself, such as choosing text sizes, breaking long labels into multiple lines, or how to handle multi-line labels.</p><p>Our implementation strategy also introduces potential limitations. Because we divide the process into three independent steps, scaffold generation, path formation, and lettering, the steps have limited opportunity to influence each other. For example, the needs of a particular path might suggest places where surface should be altered, or the placement of letters may place additional restrictions on the smoothness of the path. Similarly, our consideration of letter positions in parametric space makes font hinting or precise control of kerning in 3D difficult. <ref type="figure">Fig. 9</ref>. A ligand shadow, with an automatically generated label. Its path, depicted here in green, is constructed by following the medial axis of the underlying region. Despite these limitations, text scaffolding does provide an alternative to existing labeling techniques for providing annotations on 3D models. The approach uniquely provides legibility, visibility and proximity to the feature, while conveying of shape cues across a variety of data sources and model types. The approach affords an efficient implementation. The results of an initial prototype show that the text scaffold provides a compelling method for surface labeling that complements existing approaches. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 .</head><label>1</label><figDesc>Examples illustrate Text Scaffold Labeling on a variety of data types and application domains. In all figures, wa = 1.0 and w d = 2.0.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head></head><label></label><figDesc>(a) Brain, with text rendered directly onto the surface.(b) Our approach, rendering text onto a scaffold.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 2 .Fig. 3 .</head><label>23</label><figDesc>Labeling the brain surface: labels placed directly on the surface (a) can be illegible as the surface details cause the text to be distorted and partially occluded. Text scaffolds (b) avoid these issues, while still conveying the overall shape. The text scaffold generation algorithm.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 7 .</head><label>7</label><figDesc>Problem cases for traditional text rendering: at left, a bumpy surface, with text placed directly over surface noise. At center, text is allowed to flow over the hole. At right, text is allowed to lift off a set of peaks. In these examples, w d = 1.0 and wa = 2.0.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 8 .</head><label>8</label><figDesc>(a) Region, in red, to be labeled (b) After distance transform (c) Path fit to longest medial axis (d) Resulting text Our automatic labeling algorithm first applies a distance transform to the 2D parameterization of a region. A path is then fit along the longest medial axis of that transform, smoothed, and text placed in the center of that path. The resulting label fits the contours of the region, while avoiding proximity to region boundaries.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 10 .</head><label>10</label><figDesc>An adenylate kinase cleft, with text avoiding regions of high occlusion. Here w d = 1.0, while wa = 5.0.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 11 .</head><label>11</label><figDesc>A set of example surfaces. In (a), labels track the contours of the armadillo's limbs. In (b), labels are allowed to float over empty space in the chair back. In (c), an annotating label is nestled within the protein's channel. In (a) and (c), wa = 1, in (b), wa = 10. In all images, w d = 2.</figDesc></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>We thank George Phillips Jr. and his lab for their feedback in this project. Cipriano was supported by NIH training grant NLM-5T15LM007359.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Label layout for interactive 3d illustrations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ali</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hartmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Strothotte</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">WSCG (Journal Papers)</title>
+		<imprint>
+			<biblScope unit="page" from="1" to="8" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Distance transformations in digital images</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Borgefors</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Vision Graph. Image Process</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="344" to="371" />
+			<date type="published" when="1986" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">On digital distance transforms in three dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Borgefors</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Vis. Image Underst</title>
+		<imprint>
+			<biblScope unit="volume">64</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="368" to="376" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">An empirical study of algorithms for point-feature label placement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Christensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Marks</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Shieber</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="286" to="309" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Effects of different texture cues on curved surfaces viewed stereoscopically</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">G</forename><surname>Cumming</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">B</forename><surname>Johnston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Parker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Vision research</title>
+		<imprint>
+			<biblScope unit="volume">33</biblScope>
+			<biblScope unit="issue">5-6</biblScope>
+			<biblScope unit="page" from="827" to="838" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Incremental triangle voxelization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Dachille</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface</title>
+		<imprint>
+			<date type="published" when="2000-05" />
+			<biblScope unit="page" from="205" to="212" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Placing objects automatically in areas of maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Dörschlag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Petzold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Plümer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 23rd Internat. Cartographic Conf. (ICC&apos;03)</title>
+		<meeting>23rd Internat. Cartographic Conf. (ICC&apos;03)</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="269" to="275" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">On the problem of placing names in a geographic map</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Freeman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Int. J. Pattern Recogn. Artif. Intell</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="121" to="140" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Designing with distance fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">F</forename><surname>Frisken</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">N</forename><surname>Perry</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIG-GRAPH &apos;06: ACM SIGGRAPH 2006 Courses</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="60" to="66" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">C</forename><surname>Gonzalez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">E</forename><surname>Woods</surname></persName>
+		</author>
+		<title level="m">Digital image processing</title>
+		<imprint>
+			<publisher>Prentice-Hall</publisher>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Texture synthesis for 3d shape representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Gorla</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Interrante</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Sapiro</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="512" to="524" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Agent-based annotation of interactive 3d visualizations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Götzelmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hartmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Strothotte</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">6th International Symposium on Smart Graphics 2006</title>
+		<editor>A. Butz, B. Fisher, A. Krüger, and P. Olivier</editor>
+		<imprint>
+			<publisher>Springer Verlag</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="volume">4073</biblScope>
+			<biblScope unit="page" from="24" to="35" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Improved alpha-tested magnification for vector textures and special effects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Green</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;07: ACM SIGGRAPH 2007 courses</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="9" to="18" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Topological noise removal</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Guskov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><forename type="middle">J</forename><surname>Wood</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">GRIN&apos;01: No description on Graphics interface</title>
+		<meeting><address><addrLine>Toronto, Ont., Canada, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>Canadian Information Processing Society</publisher>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="19" to="26" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Annotating Images through Adaptation: An Integrated Text Authoring and Illustration Framework</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Gtzelmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gtze</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ali</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hartmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Strothotte</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the WSCG</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Annotation of Animated 3D Objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Gtzelmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hartmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Strothotte</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Simulation and Visualization</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Tips for designing effective animated maps. Cartographic Perspectives</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Harrower</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">44</biblScope>
+			<biblScope unit="page" from="63" to="65" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Moving beyond novelty: creating effective 3-d fly-over maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Harrower</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Sheesley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">XXII International Cartographic Conference</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="40" to="47" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Utterly lost: Methods for reducing disorientation in 3-d fly-over maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Harrower</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Sheesley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cartography and Geographic Information Science</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="19" to="29" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Metrics for functional and aesthetic label layouts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hartmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Götzelmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>All</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Strothotte</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Smart Graphics: 5th International Symposium, SG 2005, Frauenwörth Cloister</title>
+		<meeting><address><addrLine>Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Proceedings</publisher>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">LIGSITE: automatic and efficient detection of potential small molecule-binding sites in proteins</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hendlich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Rippmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Barnickel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Molecular Graphics and Modelling</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="359" to="363" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Positioning names on maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Imhof</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The American Cartographer</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="128" to="144" />
+			<date type="published" when="1975" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Approximate nearest neighbors: towards removing the curse of dimensionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Indyk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Motwani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of 30th STOC</title>
+		<meeting>of 30th STOC</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="604" to="613" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">3d distance fields: a survey of techniques and applications. Visualization and Computer Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Baerentzen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sramek</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="581" to="599" />
+			<date type="published" when="2006-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">A unified approach to labeling graphical features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">G</forename><surname>Kakoulis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">G</forename><surname>Tollis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SCG &apos;98: Proceedings of the fourteenth annual symposium on Computational geometry</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="347" to="356" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Contour into texture: information content of surface contours and texture flow</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">C</forename><surname>Knill</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the Optical Society of America A</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="page" from="12" to="35" />
+			<date type="published" when="2001-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Interactive cutaway illustrations of complex 3d models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Ritter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Agrawala</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Curless</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Salesin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;07: ACM SIGGRAPH 2007 papers</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page">31</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Marching cubes: A high resolution 3d surface construction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIGGRAPH Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="163" to="169" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Simplification and repair of polygonal models using volumetric techniques</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Nooruddin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Turk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="191" to="205" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Straightest geodesics on polyhedral surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Polthier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schmies</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;06: ACM SIGGRAPH 2006 Courses</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="30" to="38" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Internal labels as shape cues for medical illustration</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ropinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-S</forename><surname>Prani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Roters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">H</forename><surname>Hinrichs</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 12th International Fall Workshop on Vision, Modeling, and Visualization (VMV07)</title>
+		<meeting>the 12th International Fall Workshop on Vision, Modeling, and Visualization (VMV07)</meeting>
+		<imprint>
+			<date type="published" when="2007-11" />
+			<biblScope unit="page" from="203" to="212" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Fast and robust computation of molecular surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">F</forename><surname>Sanner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Olson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-C</forename><surname>Spehner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SCG &apos;95: Proceedings of the eleventh annual symposium on Computational geometry</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="406" to="407" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Vector-city vector distance transform</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Satherley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">W</forename><surname>Jones</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Vision and Image Understanding</title>
+		<imprint>
+			<biblScope unit="volume">82</biblScope>
+			<biblScope unit="page" from="238" to="254" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Interactive decal compositing with discrete exponential maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Schmidt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Grimm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Wyvill</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="603" to="613" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title level="m" type="main">Thematic Cartography and Geographic Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">A</forename><surname>Slocum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">B</forename><surname>Mcmaster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">C</forename><surname>Kessler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">H</forename><surname>Howard</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<publisher>Prentice Hall</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Fast exact and approximate geodesics on meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Surazhsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Surazhsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kirsanov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">J</forename><surname>Gortler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="553" to="560" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">A signal processing approach to fair surface design</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Taubin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SIGGRAPH 95</title>
+		<meeting>SIGGRAPH 95</meeting>
+		<imprint>
+			<date type="published" when="1995-08" />
+			<biblScope unit="page" from="351" to="358" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Towards an evaluation of quality for names placement methods</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Van Dijk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Van Kreveld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Strijk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wolff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal of Geographical Information Systems</title>
+		<imprint>
+			<biblScope unit="page" from="641" to="661" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Removing excess topology from isosurfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Wood</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Desbrun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Schröder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="190" to="208" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Semi-regular mesh extraction from volumes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><forename type="middle">J</forename><surname>Wood</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Schröder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Breen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Desbrun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VIS &apos;00: Proceedings of the conference on Visualization &apos;00</title>
+		<meeting><address><addrLine>Los Alamitos, CA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="275" to="282" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

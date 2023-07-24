@@ -1,0 +1,1411 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Analyzing the Training Processes of Deep Generative Models</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mengchen</forename><surname>Liu</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jiaxin</forename><surname>Shi</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kelei</forename><surname>Cao</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jun</forename><surname>Zhu</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shixia</forename><surname>Liu</surname></persName>
+						</author>
+						<title level="a" type="main">Analyzing the Training Processes of Deep Generative Models</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<idno type="DOI">10.1109/TVCG.2017.2744938</idno>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:08+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>deep learning</term>
+					<term>deep generative models</term>
+					<term>blue noise sampling</term>
+					<term>credit assignment</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Among the many types of deep models, deep generative models (DGMs) provide a solution to the important problem of unsupervised and semi-supervised learning. However, training DGMs requires more skill, experience, and know-how because their training is more complex than other types of deep models such as convolutional neural networks (CNNs). We develop a visual analytics approach for better understanding and diagnosing the training process of a DGM. To help experts understand the overall training process, we first extract a large amount of time series data that represents training dynamics (e.g., activation changes over time). A blue-noise polyline sampling scheme is then introduced to select time series samples, which can both preserve outliers and reduce visual clutter. To further investigate the root cause of a failed training process, we propose a credit assignment algorithm that indicates how other neurons contribute to the output of the neuron causing the training failure. Two case studies are conducted with machine learning experts to demonstrate how our approach helps understand and diagnose the training processes of DGMs. We also show how our approach can be directly used to analyze other types of deep models, such as CNNs.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Deep generative models (DGMs) provide a powerful solution to unsupervised and semi-supervised learning, where the primary focus is to discover the hidden structure of data without resorting to external labels <ref type="bibr" target="#b27">[28]</ref> or with relatively small labeled datasets <ref type="bibr" target="#b21">[22]</ref>. They overcome the limitations of previous deep learning models for supervised</p><p>• M. <ref type="bibr">Liu</ref> learning (e.g., CNNs), which typically require a large set of labeled data. Accordingly, DGMs have a wide range of applications, including data clustering, image denoising, 3D scene construction, scene understanding, density estimation, data compression, representation learning, and semi-supervised classification <ref type="bibr" target="#b19">[20,</ref><ref type="bibr" target="#b26">27]</ref>. However, training DGMs often requires more skill, experience, and know-how than other kinds of deep models, such as CNNs <ref type="bibr" target="#b14">[15]</ref>, due to the following reasons. First, unlike CNNs, which only involve deterministic functions (e.g., convolution), DGMs often involve both deterministic functions and random variables (e.g., Gaussian random variables), which are typically more difficult to deal with in the training process. Second, a CNN involves a bottom-up process that takes an input (e.g., image) at the bottom layer and gradually produces highlevel features and outputs (e.g., categories), while a DGM typically involves a top-down generative process to describe low-level inputs (e.g., images) based on latent features. Therefore, a bottom-up Bayesian inference process is often needed in a DGM to reveal the latent features when an input (e.g., image) is provided. Though substantial progress has been made on large-scale Bayesian inference <ref type="bibr" target="#b54">[55]</ref>, it is still highly nontrivial to use it in practice.</p><p>For this reason, there is a growing interest in visually understanding and diagnosing the training process of a DGM, which is of theoretical and practical significance for deep learning experts. Visually analyzing the training process is technically demanding. There are two major challenges that we must address. The first challenge is to efficiently and effectively handle the large amount of time series data produced in the training process of a DGM. Typical time series data from the training process includes activation/gradient/weight changes over time (training dynamics). Since a DGM may consist of millions of activations/gradients/weights, the extracted time series dataset potentially comprises millions of time series. Directly visualizing all the time series with a line chart will induce excessive visual clutter. The second challenge is how to identify the root cause of a failed training process. In the training process of a DGM, the loss function is more likely to become NaN (not a number) or Inf (infinity), which leads to a training failure. Such errors are very hard to handle because they could arise from multiple possible sources. Potential causes include a bug or an error in the code, a lack of numerical stability in the computational environment (random variables, library versions, etc.), or an inappropriate network structure. Even when we can determine that the error is caused by the network structure, it is often difficult to locate the specific neurons because the neurons influence each other.</p><p>In an attempt to tackle these challenges, we have developed an interactive, visual analytics tool, DGMTracker, to better understand and diagnose the training process of a DGM. The key to analyzing the training process is to thoroughly examine training dynamics at different levels of granularities. To this end, we represent the change of each weight/activation/gradient as a time series and utilize a line chart to encode the time series data. A blue-noise polyline sampling algorithm is also developed to select polyline samples with blue-noise properties, which means the samples are located randomly and uniformly in the space. This algorithm can both preserve outliers and reduce visual clutter caused by a large number of time series. To help experts identify the root cause of a failed training process, we propose a credit assignment algorithm. For a neuron that leads to a training failure, the algorithm quickly discloses how other neurons contribute to the output of the neuron of interest.</p><p>The key technical contributions of this work are:</p><p>• A visual analytics tool that helps better understand the training process of a DGM and identify the root cause of a failed training. • A blue-noise polyline sampling scheme that selects polyline samples with blue-noise properties. • A credit assignment algorithm that explains how other neurons contribute to the output of the neuron causing a training problem. Because a DGM usually contains a CNN or a multilayer perceptron (MLP) as its base component <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b40">41]</ref>, DGMTracker can be directly used to analyze other types of deep models, such as CNNs and MLPs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>In the field of visual analytics and computer vision, a number of approaches have been developed to illustrate the working mechanisms of deep models <ref type="bibr" target="#b31">[32]</ref>. They can be categorized into two groups: singlesnapshot-based and multiple-snapshot-based.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Single-Snapshot-Based Approaches</head><p>The single-snapshot-based approaches focus on visualizing one representative snapshot of the training process (e.g., the last snapshot). In the field of computer vision, researchers mostly focus on disclosing the learned feature detected by each neuron <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b28">29,</ref><ref type="bibr" target="#b34">35,</ref><ref type="bibr" target="#b53">54]</ref>. This is achieved by finding the preferred inputs (e.g., images) that highly activate a specific neuron. Various approaches have been developed to generate such inputs. For example, Nguyen et al. <ref type="bibr" target="#b35">[36]</ref> employed a DGM to synthesize realistic images that highly activate a neuron. In the field of visual analytics, most researchers focus on presenting the whole network structure <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b29">30,</ref><ref type="bibr" target="#b48">49]</ref>. Pioneering research was done by Tzeng et al. <ref type="bibr" target="#b48">[49]</ref>. They represented a neural network as a directed acyclic graph (DAG), where each neuron was encoded by a node and each connection between neurons was encoded by an edge. Although their visualization is able to illustrate how data flows through a network, this method suffers from severe visual clutter when dealing with large networks. Recently, Liu et al. <ref type="bibr" target="#b29">[30]</ref> developed CNNVis to effectively illustrate a large deep CNN. In particular, they cluster the layers and neurons as well as the connections between neurons, which helps to reduce the visual clutter caused by a large number of neurons and the connections between them.</p><p>These single-snapshot-based methods can help experts better understand the inner workings of deep neural networks. However, they cannot reveal the evolution from an initial randomized network to an effectively trained one. In addition, they are not enough to help experts diagnose a failed training process because experts do not know which snapshot to examine in advance. Compared with the aforementioned approaches, our approach helps experts examine the entire training process, enabling them to quickly locate the problem causing a network failure.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Multi-Snapshot-Based Approaches</head><p>There are several recent attempts that aim to visually analyze the training dynamics in multiple snapshots. Such work falls into two major categories: projection-based and non-projection-based.</p><p>Projection-based approaches use dimension reduction techniques to project high-dimensional training dynamics to lower-dimensional (usually 2D) spaces. Rauber et al. <ref type="bibr" target="#b41">[42]</ref> proposed a compact visualization to reveal how the learned representations of training samples evolve during training. They projected the high-dimensional learned representations of each snapshot to a 2D space by t-SNE <ref type="bibr" target="#b33">[34]</ref>. They also used 2D trails to convey the evolution of the learned representations. The t-SNE-based visualization revealed that the network was able to distinguish images from different classes better over time in the training. Although the projection-based approaches do a good job of illustrating how the relationships between learned representations change over time in a training process, they do not provide an overview of training dynamics or the individual changes of activations, gradients, or weights, over time. Examining such dynamic information is crucial for locating the neuron that leads to a training failure <ref type="bibr" target="#b37">[38]</ref>.</p><p>Thus, a more effective way to visualize the training dynamics is using non-projection-based approaches such as line charts. There are several diagnostic tools that can show high-level training dynamics using non-projection approaches <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b36">37]</ref>. For example, the diagnosis tool provided in TensorFlow <ref type="bibr" target="#b15">[16]</ref> allows users to examine the change of the overall performance statistics, such as loss and the average weight in a layer, over time. These tools are able to provide experts with an overview of the training process. However, it is not enough to locate the neuron that leads to a failed training process. Compared to these tools, our approach not only provides overall performance change but also connects the overall statistics with more detailed information, training dynamics. In particular, we first extract a large amount of time series data that represent the training dynamics of a DGM. Then a blue-noise sampling scheme is developed to select time series samples, which both preserves outliers and reduces visual clutter. The sampling scheme enables experts to locate the neurons of interest. In addition, we develop a credit assignment algorithm to help further analyze the root cause of a failed training process.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">BACKGROUND</head><p>In this section, we briefly introduce the basic principles of a DGM <ref type="bibr" target="#b13">[14]</ref>, which will be useful for subsequent discussions.</p><p>Here we take a DGM designed for generating images as an example to illustrate how it works. Suppose we have a set of images X and the goal is to generate new images similar to those in X. Mathematically, the problem can be formulated as finding the true distribution P t (X), from which these images are sampled. Finding the exact P t (X) is intractable because we only know a finite set of images from P t (X). Thus, a DGM resorts to finding an approximate distribution P g (X) that can best match P t (X). In particular, P g (X) is described by taking points z from a simple distribution (e.g., standard Gaussian or uniform distributions) and mapping them to the generated images x through a deep neu- ral network f (z; w). This is based on the fact that any distribution in d dimensions can be generated by mapping d variables under a Gaussian distribution or a uniform distribution through a sufficiently complicated function (e.g., a deep neural network) <ref type="bibr" target="#b9">[10]</ref>. The above process is similar to a decoding process, where the generated images x can be seen as having been decoded from their representations z by a decoder f (z; w). The most famous DGMs are variational autoencoders (VAEs) <ref type="bibr" target="#b23">[24]</ref> and generative adversarial nets (GANs) <ref type="bibr" target="#b14">[15]</ref>, both of which have been extensively studied in unsupervised and semi-supervised learning. VAE. The architecture of a VAE resembles that of an autoencoder, which is a traditional model in unsupervised learning. Autoencoders aim to generate a reconstruction of their input with minimum information loss <ref type="bibr" target="#b13">[14]</ref>. An autoencoder contains two networks: an encoder network and a decoder network. The encoder maps input x to its representation z a . The decoder then maps z a to a reconstructed input x . While an autoencoder is deterministic, a VAE can be seen as a probabilistic version of an autoencoder. In particular, in an autoencoder, the representation z a is a real vector, while the representation z v in a VAE is a vector of random variables (e.g., a vector of Gaussian random variables). A VAE also contains two networks ( <ref type="figure" target="#fig_0">Fig. 1</ref>): a probabilistic encoder to approximate the true posterior distribution P(z v |x), and a generative decoder to reconstruct x from z v . Each of these networks consists of a set of standard CNN components, such as convolutional layers. GAN. As shown in <ref type="figure" target="#fig_1">Fig. 2</ref>, a GAN contains two networks: a generator and a discriminator. The generator generates images x from representations z and the discriminator tries to distinguish between the real images and the generated images. The discriminator is usually a CNN <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b40">41]</ref> and the generator is made up of a set of standard CNN components, such as fully connected layers. The training process of a GAN can be seen as a two-player game. In the game, the generator must compete against the discriminator. The competition in this game drives both networks to improve their performance until the generated images are indistinguishable from the real images. Compared with VAEs, training a GAN is more difficult because of its unstable training dynamics <ref type="bibr" target="#b40">[41]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">DGMTRACKER</head><p>The development of DGMTracker can be divided into three stages. In the first stage, we held three workshops to gather the initial requirements from three groups of machine learning experts. In the second stage, we iteratively refined the requirements and the prototype by repeatedly consulting with the first group of experts and inviting them to try the prototype. For simplicity's sake, we denote these experts as E i</p><formula xml:id="formula_0">(i = 1, 2, ••• , 7)</formula><p>. In the third stage, we worked with the experts to use the prototype to solve the issues encountered in their deep model training process. Because the outcomes of the third stage are reported in Sec. 7, we will briefly introduce only the first two stages here. Workshops. To identify the initial requirements, we held three workshops, involving twenty machine learning experts and practitioners in total. We intend to invite experts who use different types of deep models such as DGMs and CNNs, so that the tool developed is more generic and can be applied to a wide range of deep models.  <ref type="bibr" target="#b19">20)</ref>. They perform pedestrian detection and image segmentation using R-CNNs. In the workshops, we mainly probed these experts about their debugging procedures and the difficulties/inconveniences of the existing diagnosis tools that they are using. Based on the aforementioned workshops, we identified a set of requirements and started to develop DGMTracker. Development. In this stage, we collaborated with the machine learning experts in the first group to develop DGMTracker over the course of six months. Two co-authors of this paper were also from this group. We held biweekly discussions with the experts, during which we demonstrated the prototype to them and gathered their feedback to iteratively refine the prototype.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Requirement Analysis</head><p>We have identified the following high-level requirements based on the analysis of the workshop discussions. R1 -Connecting the overall statistics with detailed training dynamics. All the experts expressed the need for the overall statistics of the training, such as loss and accuracy, which serves as an entry point for analyzing a training failure. They also need to examine the overall pattern of the training dynamics, such as the activation changes, to discover the potential reason for a failed training process. Moreover, the experts said that they wanted to link the summary statistics with the detailed training dynamics in the analysis process. This linkage could enable them to efficiently locate the neurons that caused a failed training process. However, this function is poorly supported by current tools <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b36">37]</ref> because visualizing all the training dynamics will result in severe visual clutter. Thus, the core problem is to bridge the gap between the overall statistics and detailed training dynamics by providing a level-of-detail visualization. For example, E 1 said, "What I really want is a multi-scale visualization, in which I can see both high-level statistics and zoom in to the details. For example, I often need to check how the activations of neurons change in the iterative training process." R2 -Examining how data flows through the network. One major difference between a deep model and a shallow model is that a deep model is composed of many layers. These layers have different roles and are combined to approximate the target function. Thus, understanding how data flows through the layers of a network is crucial to understanding the different roles of layers <ref type="bibr" target="#b41">[42]</ref>. In addition, a failed training process is often caused by a specific layer. For example, expert E 3 commented, "As the layers provided by the deep learning framework (e.g., TensorFlow) are usually very robust, a failed training process is usually caused by the layers constructed by me." As a result, examining the data flow among these layers, especially the layers constructed by the experts, helps them locate the exact layer that may lead to the failed training process. However, directly visualizing the data flow will result in severe visual clutter because there may be dozens or even hundreds of layers and thousands of neurons in each layer. Thus, we need an effective visualization tool to illustrate the overall pattern of how data flows through the network <ref type="bibr" target="#b41">[42]</ref>. R3 -Facilitating the detection of outliers. Outlier (anomaly) detection aims to find data objects that behave very differently than expected <ref type="bibr" target="#b16">[17]</ref>. Experts E 1 , E 3 − E 5 , E 10 , and E 15 commented that an outlier in the training process is a potential reason for a failed training process. For example, expert E 2 said, "In my experience, the hardest error to debug is the one caused by only one or a few neurons and the error is propagated to the whole network. In this scenario, I need to use the debug mode in Theano <ref type="bibr" target="#b4">[5]</ref> or numerical checks in TensorFlow <ref type="bibr" target="#b15">[16]</ref> to search for the neurons at fault. It is a very long, complicated searching process." As a result, detecting outliers in the training process is crucial for diagnosing a failed training process. However, it is still very challenging to automatically and accurately identify outliers in the field of machine learning <ref type="bibr" target="#b46">[47]</ref>. Thus, the experts desired an effective way to identify outliers in training. Previous research <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b32">33,</ref><ref type="bibr" target="#b52">53]</ref> also indicates that visualizations can help experts better detect outliers. R4 -Examining how neurons interact with each other. Currently there is a poor understanding of how neurons interact with each other in a DGM. As a result, even when experts can find the neuron that leads to a failed training process, it is hard for them to identify the root cause of a network failure. E 2 said, "Even if I find an activation (of a neuron) is abnormal, it's usually hard for me to figure out what has led to this problem." Without a comprehensive understanding of how neurons interact with each other, an exhaustive manual trial-anderror solution is infeasible. For example, E 2 commented, "I often encounter the error of infinitive weights in the trial process. I usually clip the gradients or the weights to make the model work. However, the clipping will slow down the training process or even does not work at all." Experts E 3 and E 7 also commented that sometimes an error in one layer is caused by an abnormal phenomenon in another layer and the abnormality propagates to this layer. As a result, all the experts expressed the need to understand how neurons interact with each other. In particular, they are interested in how other neurons contribute to the output of the neuron being studied. This has also been confirmed by previous research <ref type="bibr" target="#b25">[26]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">System Overview</head><p>The collected requirements motivated us to develop DGMTracker, which consists of the following modules:</p><p>• A data flow visualization module that visualizes how data flows through a DGM (R2) and discloses how other neurons influence the output of the neuron of interest (R4); • A training dynamics analysis module that samples the time series to preserve outliers and reduce visual clutter caused by a large amount of time series data (R1, R3). These two modules are well aligned with the tasks in an expert's typical debugging process <ref type="figure" target="#fig_3">(Fig. 4)</ref>. Generally, an expert starts his or her analysis by examining the loss changes to identify the abnormal snapshots. In DGMTracker, we allow an expert to explore the loss changes with different time granularities by employing the focus+context timeline <ref type="bibr" target="#b49">[50]</ref>  <ref type="figure" target="#fig_0">(Fig. 1 (a)</ref>). The expert can click on the loss curve to select the snapshot of interest. Once the snapshot of interest has been identified, the expert usually prints out some high-level statistics for each layer (e.g., averaged activations) to identify the layer of interest (snapshotlevel analysis). To support such analysis, the data flow visualization provides a hybrid visualization to illustrate how data flows through the network at the snapshot level ( <ref type="figure" target="#fig_0">Fig. 1 (b)</ref>). Then, to locate the neuron that leads to the network failure, the expert usually prints out the training dynamics of the layer of interest, such as how the activations change in several snapshots (layer-level analysis). To help an expert with this task, the time series analysis module selects time series samples that can both preserve outliers and reduce visual clutter ( <ref type="figure" target="#fig_0">Fig. 1 (c)</ref>). After detecting the abnormal neurons, the expert usually uses his or her prior knowledge to analyze the root cause of a failed training process (neuron-level analysis). This step heavily depends on the expertise of the expert. To ease this step, we allow the expert to interactively select a set of neurons ( <ref type="figure" target="#fig_0">Fig. 1G</ref>) and explore how other neurons contribute to the output of these neurons by the data flow visualization <ref type="figure" target="#fig_0">(Fig. 1L</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">DATA FLOW VISUALIZATION</head><p>The data flow visualization aims to illustrate how data flows through a network (snapshot-level analysis, R2) and how other neurons contribute to the output of the neuron of interest (neuron-level analysis, R4).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Snapshot Level Visualization</head><p>At the snapshot level, we focus on analyzing how data flows through a network (R2). Recently, Rauber et al. <ref type="bibr" target="#b41">[42]</ref> developed a t-SNE-based method to show how the data flows through the network layers. However, this method can only handle a network with a chain structure because it utilizes a trail to illustrate the flow of each input data point through the layers. To handle networks with a more complicated structures where the layers can split and merge (e.g., VAE), we have designed a hybrid visualization that combines a directed acyclic graph (DAG) visualization (illustrating how layers are connected) with a set of line charts (presenting the data flow in each layer). DAG visualization. We represent the structure of a DGM as a DAG, where each layer is a node and their connections are edges ( <ref type="figure" target="#fig_3">Fig. 4(a)</ref>). The layout algorithm in TextFlow <ref type="bibr" target="#b8">[9]</ref> is employed to calculate the position of each node. To handle large DGMs with dozens or even hundreds of layers, we employ the method used in TensorFlow <ref type="bibr" target="#b15">[16]</ref> to hierarchically organize the layers. In the hierarchy, each leaf node is a layer and each non-leaf node represents a layer group. For large DGMs, only the top-level nodes of this hierarchy are shown by default and experts can expand a layer group to examine the individual layers. Line charts for representing data flow. The data flow is represented by a set of line charts. To provide the experts with the context of the training dynamics, a line chart is placed within each node <ref type="figure" target="#fig_3">(Fig. 4(b)</ref>). In a line chart, the central vertical line represents the focus snapshot. Each curve represents the training dynamics around the focus snapshot S t , such as the averaged activations in the snapshots from S t−k to S t+k . We set k = 10 in DGMTracker and allow experts to interactively change this value. During development, we found several interesting patterns and present several examples that correspond to activations. <ref type="figure" target="#fig_4">Fig. 5(a)</ref> indicates that many activations change abruptly at the focus snapshot. <ref type="figure" target="#fig_4">Fig. 5(b)</ref> shows that most activations remain stable but a few activations change abruptly at the focus snapshot. The above two patterns indicate that there are probably errors in the corresponding layer. These two patterns may cause other layers to behave like the one shown in <ref type="figure" target="#fig_4">Fig. 5(c)</ref>, where the activations are stable before the focus snapshot and become unstable after the focus snapshot. The pattern in <ref type="figure" target="#fig_4">Fig. 5(c)</ref> implies that there are probably errors in other layers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Neuron Level Visualization</head><p>At the neural level, we focus on computing and presenting how other neurons contribute to the output of the neuron being explored <ref type="figure" target="#fig_3">(R4)</ref>. This helps experts analyze the root cause of a network failure (neuronlevel analysis). To this end, we borrow the idea of credit assignment from machine learning <ref type="bibr" target="#b42">[43]</ref>. Credit assignment determines which components (e.g., neurons) in the network are responsible for an error if the output of the network differs from the target.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.1">Computation of Credit Assignment</head><p>As shown in <ref type="figure" target="#fig_5">Fig. 6</ref>, the output of a neuron n l j in layer l is not only influenced by the neurons in layer l − 1 (forward contribution) but is also influenced by the neurons in layer l + 1 (backward contribution). These two types of contributions together determine the output of n l j . The forward contribution has been studied in the field of machine learning <ref type="bibr" target="#b25">[26,</ref><ref type="bibr" target="#b53">54]</ref>. We adopt the state-of-the-art Layer-wise Relevance Propagation (LRP) algorithm <ref type="bibr" target="#b25">[26]</ref>, to compute the forward contribution. For the backward contribution, we leverage the backpropagation algorithm <ref type="bibr" target="#b5">[6]</ref>, which clearly discloses how the outputs of neurons in layer l + 1 indirectly influence the outputs of the neurons in layer l. Next, we introduce how to compute the forward and backward contributions. Forward contribution. As shown in <ref type="figure" target="#fig_5">Fig. 6</ref>, a neuron n l j in layer l receives the outputs of neurons in layer l − 1. The output a l j of n l j can be computed as:</p><formula xml:id="formula_1">a l j = σ (∑ i w i j a l−1 i )</formula><p>, where σ () is the activation function and w i j is the weight connecting n l j and n l−1 i . In the LRP, the contribution</p><formula xml:id="formula_2">C(a l−1 i → a l j ) of n l−1 i</formula><p>on n l j is computed as:</p><formula xml:id="formula_3">C(a l−1 i → a l j ) = w i j a l−1 i /Z,<label>(1)</label></formula><p>where Z = ∑ h w h j a l−1 h is a normalization factor. Backward contribution. According to the backpropagation algorithm <ref type="bibr" target="#b5">[6]</ref>, the output a l+1 k of the neuron n l+1 k in layer l + 1 has a backward contribution on the gradient g i j of weight w i j . After w i j is updated according to its gradient, the weight will contributes to the output a l i of the neuron n l j . The analysis above can be summarized as:</p><formula xml:id="formula_4">a l+1 k ⇒ g i j ⇒ w i j ⇒ a l i ,<label>(2)</label></formula><p>where A ⇒ B means A has a contribution on B. In this way, the outputs of neurons in layer l + 1 indirectly contribute to the outputs of neurons in layer l. To compute the backward contribution, we aggregate the contribution of each step in Eq. 2, and obtain:</p><formula xml:id="formula_5">C(a l+1 k → a l j ) = w k j a l+1 k /Y,<label>(3)</label></formula><p>where Y = ∑ h w jh a l+1 h is a normalization factor. The detailed deduction can be found in the supplemental material.</p><formula xml:id="formula_6">... ... 1 l − l 1 l + ij w 1 l k n + 1 l i n − l j n jk w Layer:</formula><p>Forward contribution Backward contribution  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.2">Credit Visualization</head><p>Based on the forward and backward contribution, an expert can select a set of neurons and analyze the forward or backward contribution at a specific time point. Here, we take the forward contribution as an example to illustrate the basic idea of the visualization design. As shown in <ref type="figure" target="#fig_6">Fig. 7(a)</ref>, each neuron is represented by a rectangle and colored by its activation value (red: negative activation; green: positive activation). The contribution of one neuron to another is encoded by an edge <ref type="figure" target="#fig_6">(Fig. 7(a)</ref>).</p><p>We also use the same color-coding to encode the contribution value (green: a positive contribution; red: a negative contribution).</p><p>Directly visualizing all the neurons and the contributions in a layer will cause severe visual clutter. To address this issue, we first tried to cluster the neurons using the popular K-Means clustering algorithm <ref type="bibr" target="#b5">[6]</ref> and only show the clusters whose neurons highly contribute to the output of the selected neurons ( <ref type="figure" target="#fig_6">Fig. 7(b)</ref>). To save screen space, we represent the neurons in a cluster as a grid. In addition, by default, we only present the averaged contribution between two neuron clusters. The expert can hover over one neuron to examine the detailed contributions of other neurons to that neuron ( <ref type="figure" target="#fig_6">Fig. 7(d)</ref>). To provide the analysis context for the expert, we combine the credit visualization with the snapshot-level visualization <ref type="figure" target="#fig_0">(Fig. 1)</ref> in a focus+context manner.</p><p>After we presented this visualization to the experts, they commented that this design was suitable for fully-connected layers but not for convolutional and deconvolutional layers. For these types of layers, they want to examine the relative position of the image patch that each neuron is influenced by. This is very useful for identifying which part of the input image might lead to the current situation if the neuron causes an inputimage-related failure. Accordingly, a better solution is to represent the neurons using feature maps <ref type="bibr" target="#b26">[27]</ref>. In a convolutional/deconvolutional layer, a feature map consists of a set of neurons that share the same weights <ref type="bibr" target="#b26">[27]</ref>. The position of a neuron is determined by the position of the image patch that influences the output of this neuron. Each neuron in a feature map of layer l is connected to a local patch (a subset of neurons) in the feature maps of layer l − 1. As a result, organizing neurons as feature maps can disclose which patch in the feature maps of layer l − 1 contributes to the output of a neuron in layer l. By tracing back to layer 0 (input image), we then connect the neuron with the corresponding image patch.</p><p>Thus, for convolutional/deconvolutional layers, we organize the neurons as feature maps and use a matrix to illustrate the activation distribution of the neurons in a feature map <ref type="figure" target="#fig_6">(Fig. 7(c)</ref>). This change can help experts better identify the connection patterns between neurons in adjacent layers. For example, <ref type="figure" target="#fig_6">Fig. 7</ref>(e) indicates that the larger activation of the neuron is mostly caused by neurons in the left corner of the second feature map in the previous layer. This phenomenon cannot be identified when using K-Means clustering ( <ref type="figure" target="#fig_6">Fig. 7(d)</ref>) because the neurons are placed randomly.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">TRAINING DYNAMICS ANALYSIS</head><p>When an expert selects a layer, we aim to present the corresponding training dynamics to facilitate him or her in finding the neuron of interest. To enable the expert to focus on analysis, we employ a familiar visual metaphor, a line chart, to visually convey the training dynamics (a set of time series data). However, directly using a line chart to visualize a large amount of time series data will cause severe visual clutter <ref type="bibr" target="#b30">[31]</ref>.</p><p>To solve this problem, we propose a blue-noise polyline sampling algorithm to select time series samples with blue noise properties, which can both preserve outliers and reduce visual clutter (R1, R3).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Motivation</head><p>The use of blue-noise sampling is triggered by its wide usage in a variety of computer graphics applications, such as image reconstruction and color stippling <ref type="bibr" target="#b3">[4]</ref>. Here blue-noise sampling means that the selected samples have blue-noise properties, i.e., the selected samples are located randomly and uniformly in the space <ref type="bibr" target="#b44">[45]</ref>. This uniformity is very important in visualization <ref type="bibr" target="#b6">[7]</ref>, which is able to make the highdensity regions of the candidate set less sampled and the low-density regions more sampled than random sampling. As a result, the bluenoise sampling can better reduce visual clutter and preserve outliers. Accordingly, we propose to use blue-noise sampling to select a set of appropriate time series. The state-of-the-art method for blue-noise sampling is the line segment sampling algorithm <ref type="bibr" target="#b44">[45]</ref>. A line segment is "a part of a line that is bounded by two distinct end points, and contains every point on the line between its end points" <ref type="bibr" target="#b51">[52]</ref>. This algorithm first evenly groups the lines segments into N G groups according to their angles with the x-axis. The angle of a line segment s can be computed by: arctan( y 2 −y 1</p><p>x 2 −x 1 ), where p 1 = (x 1 , y 1 ) and p 2 = (x 2 , y 2 ) are the end points of s. Then, a set of line segments are selected by the multi-class blue-noise sampling <ref type="bibr" target="#b50">[51]</ref>. In particular, in each iteration, a new line segment is drawn from the most under-filled group to ensure each group of line segments are well sampled. The fill rate is defined as the number of existing samples for a group over the target number of samples for that group. The new line segment will be added to the sample set if its minimum distance from other existing line segment samples is larger than a predefined threshold <ref type="bibr" target="#b50">[51]</ref>. The distance between two line segments are defined as the distance between their middle points. This process is repeated until the required amount of line segments are selected. Although this algorithm works well for line segments, it cannot be directly used to sample the time series data, each of which is a polyline (a connected sequence of line segments). As a result, we have developed a blue-noise polyline sampling algorithm.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Blue-Noise Polyline Sampling</head><p>As a polyline is a connected sequence of line segments, an intuitive method for sampling polyline samples with blue-noise properties is: 1) selecting line segment samples with blue-noise properties by using the blue-noise line segment sampling; 2) selecting polylines that contain the selected line segments as samples. However, this approach cannot guarantee that the selected polylines have blue-noise properties. To address this issue, we need to simultaneously select all the line segments in one polyline and maintain blue-noise properties of the selected polylines.</p><p>As stated above, the core process of blue-noise line segment sampling is selecting a line segment from the most under-filled group and computing the distance between the new samples and existing samples to determine whether to accept the new sample. Accordingly, if we want to adapt the blue-noise line segment sampling to polyline sampling, we need to solve two problems: P 1 : how to select a polyline from the most under-filled group; P 2 : how to compute the distance between two polylines. Solution to P 1 . An intuitive method for solving P 1 is randomly selecting a line segment from the most under-filled group and selecting the corresponding polyline. This method is fast but may select many line segments in other over-filled groups. A better solution is to directly select the best polyline that makes the fill rates the most balanced. In particular, we compute a score s L for each non-selected polyline L:</p><formula xml:id="formula_7">s L = ∑ N G i=1 | f r new i − 1|, where f r new i</formula><p>is the new fill rate of group i, if L is selected. A major issue with this solution is its expensive computational cost. To solve this problem, we employ the property that the calculation of each score is independent and use parallel computing to accelerate it. Solution to P 2 . As the distance between two segments is computed by the distance between their middle points <ref type="bibr" target="#b44">[45]</ref>, a natural approach to computing the distance</p><formula xml:id="formula_8">d(L 1 , L 2 ) between two polylines L 1 and L 2 is: d(L 1 , L 2 ) = 1 N S N S ∑ i=1 d C (s i 1 , s i 2 ),<label>(4)</label></formula><p>where N S is the number of line segments in L 1 and L 2 , d C (, ) is the distance between the middle points of two line segments, and</p><formula xml:id="formula_9">s i 1 , s i 2</formula><p>are two line segments of the same snapshot belonging to L 1 and L 2 . The advantage of this approach is it can preserve as many outliers as possible <ref type="figure" target="#fig_8">(Fig. 8(c)</ref>). If two segments are far apart, the distance between the corresponding polylines will mainly be determined by the distance between these two line segments. Result. <ref type="figure" target="#fig_8">Fig. 8</ref> compares the visualizations generated without sampling ( <ref type="figure" target="#fig_8">Fig. 8(a)</ref>), with random sampling <ref type="figure" target="#fig_8">(Fig. 8(b)</ref>), and with blue-noise polyline sampling <ref type="figure" target="#fig_8">(Fig. 8(c)</ref>). The time series data we use is comprised of the changes in weights in the first layer of the VAE used in the second case study. There were originally 1,728 (3*3*3*64) time series. We sampled 5% of the time series from the data by random sampling and blue-noise polyline sampling. Without sampling, the high-density region in <ref type="figure" target="#fig_8">Fig. 8</ref>(a) suffers severe visual clutter (the red rectangle). Compared with random sampling <ref type="figure" target="#fig_8">(Fig. 8(b)</ref>), our method better reduces visual clutter caused by a large amount of time series data (the red rectangle in <ref type="figure" target="#fig_8">Fig. 8(b)</ref> and (c)). From the visualization with no sampling, we find some time series outliers that shift away from the main trend (green rectangle in <ref type="figure" target="#fig_8">Fig. 8(a)</ref>). Comparing <ref type="figure" target="#fig_8">Fig. 8(b)</ref> and (c) indicates that, our method better preserves these time series outliers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Interaction</head><p>We provide the following interactions to facilitate experts in examining the time series data at different time granularities. We provide a pop-up menu to show the options for analyzing the data of interest <ref type="figure" target="#fig_9">(Fig. 9)</ref>. Dimension aggregation. The activations/gradients/weights in a layer can be modeled as a tensor. For example, the activations produced by a specific image in a convolutional layer can be modeled as a three dimensional tensor T ∈ R H×W ×C , where H, W , and C are its height, width, and number of channels, respectively. Aggregating some dimensions can greatly reduce the number of time series to be visualized. Thus, we allow experts to interactively aggregate some dimensions of the training dynamics and decide how to aggregate these dimensions before conducting time series sampling <ref type="figure" target="#fig_9">(Fig. 9 (a)</ref>  Focus+context timeline. As there may be hundreds of thousands of snapshots in a training process, presenting all the snapshots will cause severe visual clutter. To solve this problem, we adopt the focus+context timeline technique <ref type="bibr" target="#b49">[50]</ref> to allow experts to zoom into the snapshots of interest. This helps experts effectively explore the training dynamics at multiple levels of time granularity. Experts can also select the time range to explore <ref type="figure" target="#fig_9">(Fig. 9 (b)</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">APPLICATION</head><p>We conducted two case studies to demonstrate the effectiveness of DGMTracker in helping the expert understand and diagnose DGMs. In the first case study, we collaborated with expert E 1 to achieve a better understanding of the training processes of GANs. In the second case study, we collaborated with expert E 2 to diagnose a failed training process of a VAE.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">Understanding the Training Process of a GAN</head><p>This case study aims to better understand the working mechanisms of a GAN, which is one of the state-of-the-art DGMs. One major problem in training a GAN is the instability of its training process. Recently, Arjovsky et al. <ref type="bibr" target="#b1">[2]</ref> developed the Wasserstein GAN (WGAN) to address this problem. They found that the original metric used by GAN may induce gradient vanishing. To solve this problem, they proposed a new metric, i.e., the Wasserstein distance <ref type="bibr" target="#b1">[2]</ref>, which is continuous and differentiable almost everywhere, thus provides more reliable gradients. During his investigation, E 1 got confused by two phenomena that were introduced but not fully explained in these two papers <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b14">15]</ref>. Inappropriate loss function. In the original paper of GAN, Goodfellow et al. <ref type="bibr" target="#b14">[15]</ref> claimed that a two-player-minimax-game-based loss was inappropriate in practice because it would make the training process stuck. However, E 1 did not quite understand why this loss function makes the training process stuck. Instability of momentum-based optimizers. Momentum is a widely used technique in the optimization methods of deep learning <ref type="bibr" target="#b45">[46]</ref>. However, in the training of WGAN, it is reported that the training process is unstable if a momentum-based optimizer is used <ref type="bibr" target="#b1">[2]</ref>. Although the momentum is identified as a potential cause, why the momentum leads to an unstable training process is not fully explained.</p><p>As a result, the expert wanted to use DGMTracker to address these two issues.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1.1">Influence of an Inappropriate Loss Function</head><p>Goodfellow et al. <ref type="bibr" target="#b14">[15]</ref> introduced a two-player minimax game <ref type="bibr" target="#b38">[39]</ref> loss for training a GAN:</p><formula xml:id="formula_10">min G max D E x∼p data (x) log D(x) + E z∼p(z) log(1 − D(G(z))), (5)</formula><p>where the generator is denoted by G, and the discriminator is denoted by D. Goodfellow et al. <ref type="bibr" target="#b14">[15]</ref> claimed that using the above loss in practice was inappropriate because it would make the training process stuck, but E 1 did not understand why. To this end, he built a GAN whose structure is shown in <ref type="figure" target="#fig_0">Fig. 10</ref>. It contains 5.48 millions of weights. He trained the network using the loss on a benchmark dataset, CIFAR10 <ref type="bibr" target="#b24">[25]</ref>. The training of this model and other models in our case studies was performed using the ZhuSuan <ref type="figure" target="#fig_0">Fig. 11</ref>. The discriminator loss quickly stops changing after a few iterations which indicates the training process gets stuck.</p><p>framework <ref type="bibr" target="#b47">[48]</ref>. From the loss curve, E 1 found the discriminator loss quickly stopped changing after a few iterations <ref type="figure" target="#fig_0">(Fig. 11)</ref>. It indicated that the training process quickly got stuck.</p><p>To understand why this happened, E 1 clicked on the loss curve at iteration 8 where the training had been stuck and checked the data flow of gradients at the snapshot level. He found that the gradients were non-zero at the very beginning of the training process, but they all vanished after a few iterations <ref type="figure" target="#fig_0">(Fig. 12)</ref>. To identify from which layer the gradients started vanishing, E 1 carefully examined the data flow and found the gradients vanished even in the last fully connected layer <ref type="figure" target="#fig_0">(Fig. 12A)</ref>. In a deep model, the gradients are backpropagated from the last layer to the first layer. As a result, he suspected that the fully connected layer caused the training process being stuck. This triggered E 1 to check the outputs of the layer. He found an abnormal phenomenon that the outputs invoked by the generated images decreased close to 0 after a few iterations <ref type="figure" target="#fig_0">(Fig. 13A</ref>) and the outputs invoked by real images increased close to 1 after a few iterations <ref type="figure" target="#fig_0">(Fig. 13B</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>conv1 conv2 conv3 fc</head><p>A <ref type="figure" target="#fig_0">Fig. 12</ref>. The gradients vanish when using an inappropriate loss.</p><p>By looking at the generated images, E 1 understood why such phenomenon happened. At the beginning of training, the generator was not good enough to produce realistic images. In this case, the discriminator was easily trained to distinguish them from real images. Because the output of the discriminator is the probability that an image looks realistic, the outputs invoked by the generated images were close to 0 after several iterations.</p><p>After understanding why such phenomenon happened, the expert continued to analyze its influence on the training. This abnormal phenomenon drove E 1 to check the derivatives of the loss with respect to the outputs of the fully connected layer. The expert found when such phenomenon occurred, the derivatives were almost zero. According to the backpropagation algorithm, this makes the gradients of weights in all layers very small, which in turn induces the training process to be stuck.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1.2">Instability of Momentum-Based Optimizers</head><p>To analyze why a momentum-based optimizer made the training process of a WGAN unstable, E 1 built a WGAN whose major structure was the same as that of the GAN used above. E 1 trained the network using a momentum-based optimizer, Adam <ref type="bibr" target="#b20">[21]</ref>, on the CIFAR10 dataset. E 1 started his analysis by examining the discriminator loss. He immediately identified two sudden increases ( <ref type="figure" target="#fig_0">Fig. 14A and B</ref>). To identify the influence of such sudden increases, E 1 first studied how the weights are updated in Adam. Traditional stochastic gradient descent optimizer (SGD) directly updates the weight w i by the product of its gradient g i and the learning rate α (α &gt; 0):</p><formula xml:id="formula_11">w t+1 i = w t i − αg t i .</formula><p>(6) While Adam first adaptively estimates the mean and the variance of each gradient, and then updates the weight by the estimated mean and variance. Based on this observation, he chose to examine the means and variances of the gradients of the weights in the first convolutional layer in the discriminator because this layer is prone to training errors, such as gradient vanishing <ref type="bibr" target="#b13">[14]</ref>  <ref type="figure" target="#fig_0">(Fig. 15)</ref>. He noticed that the signs of the gradients had sudden changes at iteration 4,441 ( <ref type="figure" target="#fig_0">Fig. 15B</ref>), but the signs of the means maintained unchanged <ref type="figure" target="#fig_0">(Fig. 15A</ref>). This key observation explains why momentum-based optimizers make the training process unstable. E 1 further explained, "When the signs of gradients changed, their means do not immediately reflect this change because they are determined by all the gradients before that time point <ref type="figure" target="#fig_0">(Fig. 16)</ref>. As a result, the training process chooses a wrong direction and is more unstable than the one that uses a non-momentumbased optimizer (RMSprop)."</p><p>To further verify this analysis, E 1 additionally examined the changes of (w t+1 i − w t i )g t i for each weight w i . This analysis is triggered by Eq. 6, which indicates that (w t+1 i −w t i )g t i = −α(g t i ) 2 ≤ 0. Thus, if this value is positive, the sign of the weight change is not consistent with its gradient; As shown in <ref type="figure" target="#fig_0">Fig. 17</ref>, there are some positive values in the training process that uses Adam <ref type="figure" target="#fig_0">(Fig. 17A)</ref>. When using a non-momentumbased optimizer (RMSprop, as recommended by <ref type="bibr" target="#b1">[2]</ref>), almost no such positive values appeared in the training process <ref type="figure" target="#fig_0">(Fig. 17B</ref>). This further verified the analysis of the expert. This phenomenon was also observed but not explained by Arjovsky et al. <ref type="bibr" target="#b1">[2]</ref>. The expert commented, "Now t-1 t t+1 Weight</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Gradient</head><p>According to the gradient Adam 0 <ref type="figure" target="#fig_0">Fig. 16</ref>. Illustration of weight changes when the signs of the gradient changes in a training process using Adam. I understand why the performance of the momentum-based optimizer is unsatisfactory in this case. The major reason is that there will be sudden changes in the gradients, which makes the momentum-based optimizer less effective. While in other types of deep models, such as CNNs, such phenomenon occurs less often. In that case, a momentum-based optimizer usually works well."</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">Diagnosing a Failed Training Process of a VAE</head><p>This case study demonstrates how DGMTracker helps an expert (E 2 ) diagnose the failed training process of a VAE. E 2 is a deep learning researcher from the first group. He has been working on VAEs for unsupervised learning, which is an important research topic in the field of deep learning <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b22">23,</ref><ref type="bibr" target="#b43">44]</ref>. Recently, E 2 designed a baseline network for his research, shown in <ref type="figure" target="#fig_0">Fig. 1</ref>. The network is composed of two parts: a probabilistic encoder and a probabilistic decoder. Both consist of alternating convolutional/deconvolutional layers and Gaussian sampling layers. The network contains about 0.22 millions of weights. He trained the network on the CIFAR10 dataset <ref type="bibr" target="#b24">[25]</ref>. However, the training of this network failed. The loss became NaN in the iterations between 10,000 and 30,000 (depending on the random seed used for network initialization).</p><p>To help the expert probe the possible reason, we presented E 2 with the visualization of a failed training process. E 2 first looked at the loss of the model, which is the primary criterion for evaluating the training performance. It got to NaN at iteration 24,397 <ref type="figure" target="#fig_0">(Fig. 1A)</ref>. It is notable that there was a large loss appearing at iteration 24,384 ( <ref type="figure" target="#fig_0">Fig. 1B)</ref>, after which quickly followed the NaN. So E 2 clicked this point on the loss curve and looked into the snapshot to examine the snapshot-level data flow. In particular, E 2 checked the maximum/average/minimum activation in each layer. E 2 quickly found that the source of this abnormal behavior was in the activation of the second Gaussian sampling layer <ref type="figure" target="#fig_0">(Fig. 1C)</ref>, whose activations had a sudden increase at iteration 24,384. By tracing back the data flow, he found there was also a sudden increase of activations in the convolutional layer that outputs the logarithmic variance of the Gaussian sampling layer <ref type="figure" target="#fig_0">(Fig. 1D</ref>). This indicates that the change in this convolutional layer led to the sudden increase of the Gaussian sampling layer.</p><p>To examine why the logarithmic variance had such a sudden increase, E 2 further examined the activation changes in this convolutional layer. Because there were too many activations (about 2 million) in this layer, E 2 chose to aggregate the height and weight dimensions of the activations and got a time series for each channel in an image. As shown in <ref type="figure" target="#fig_0">Fig. 1E</ref>, most of the activations of this layer remained stable. However, some of them showed the unusual behavior of going down from the beginning of training <ref type="figure" target="#fig_0">(Fig. 1F)</ref>. E 2 was drawn to these curves in purple. In addition, he found that some of the time series data had a sudden increase at iteration 24,384 <ref type="figure" target="#fig_0">(Fig. 1G)</ref>. He hovered over them and found an interesting fact that all the sudden changes in activations were invoked by the 10-th image <ref type="figure" target="#fig_0">(Fig. 1G)</ref>. So E 2 loaded the image to check the potential difference. This image had a very green background <ref type="figure" target="#fig_0">(Fig. 1H)</ref>. As the images in CIFAR10 were RGB-formatted images, the pixel values of the green channel in the background would be very large. Having so many pixels with such extreme values in a single image is not common in a natural image dataset like CIFAR10 ( <ref type="figure" target="#fig_0">Fig. 1J and K)</ref>. were large. After hovering over the neuron with the largest activation, the expert found that some neurons from the green background had a large contribution on the output of the neuron with the largest activation <ref type="figure" target="#fig_0">(Fig. 1L</ref>). This further verified his assumption.</p><p>Having analyzed the root cause of the failure, E 2 proposed a direct solution for this. He replaced the abnormal image with another normal image (the first image) in the dataset and retrained the network. However, the network failed again with a similar behavior at a later iteration (around 300,000). This indicates that this abnormal image was only part of the reason that led to the failure. After the same analysis, he found the failure was caused by a similar image, which was a plane with a blue sky background <ref type="figure" target="#fig_0">(Fig.1I)</ref>. After rethinking these discoveries and attempts, E 2 gave up solving the problem by replacing the abnormal images because there might be many other abnormal images.</p><p>Thus, E 2 decided to theoretically analyze why the network was so sensitive to the extreme values of input images. Aided by the discoveries from DGMTracker, he quickly concluded the sensitivity was caused by the transformation from logarithmic variance to variance. In particular, as shown in <ref type="figure" target="#fig_0">Fig. 18(a)</ref>, if the result of the convolution operation y increased a little, the variance of the Gaussian sampler would increase a lot (when y &gt; 0). Under this situation, the Gaussian sampler may generate very large samples because of the large variance. If such large samples are generated, the loss would have a sudden increase and make the training process fail. To solve this problem, E 2 proposed directly generating variance for the Gaussian sampler instead of using logarithmic variance. As the variance should be larger than zero, E 2 replaced the current identity activation function (y = x) with the softplus activation function f (x) = log(1 + e x ) <ref type="figure" target="#fig_0">(Fig. 18(b)</ref>).</p><p>After the replacement, the training process no longer encountered such a problem. The final loss was about 4.9, which was measured by the number of bits <ref type="bibr" target="#b13">[14]</ref>. E 2 was quite satisfied with the result and commented, "Using a logarithmic variance is a common practice in constructing VAEs. I have noticed for a long time that the training processes of such networks are prone to the NaN error. To avoid such an error, I often try to clip the gradients or the weights to make the model work. Sometimes it works but sometimes it does not. Even if it works, the training is greatly slowed down because the clipped gradients are smaller than usual. Now I know the root cause of the error is the logarithmic variance. The result of this visual debugging process not only makes this VAE work, but also teaches me to be careful using logarithmic variance in my future research."</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">DISCUSSION</head><p>Our case studies demonstrate the effectiveness of DGMTracker. Nevertheless, there are several opportunities for improvements. Generalization. While the case studies focus on understanding and diagnosing DGMs, DGMTracker can be directly used to analyze a wider range of deep models, such as CNNs and MLPs. For example, we have shown in the first case study that DGM Tracker can be used to analyze CNNs. In particular, the discriminator network in the GAN is a CNN and we have analyzed why its training process is different, with different optimization approaches.</p><p>More precisely, DGMTracker can analyze the training process of a deep model in which connections between neurons do not form a cycle. Such models are called deep feedforward networks <ref type="bibr" target="#b13">[14]</ref>. These models are the quintessential deep learning models and form the basis of many important commercial applications <ref type="bibr" target="#b13">[14]</ref>. For example, a CNN is one kind of deep feedforward network and widely used in face recognition systems. The factor that constrains the generalization of DGMTracker is the data flow visualization. We can easily extend it to other kinds of deep models, such as recurrent neural networks (RNNs), which has cyclic connections between neurons. Specifically, we can unfold an RNN to a deep feedforward network <ref type="bibr" target="#b26">[27]</ref> and use DGMTracker to analyze its training process. Disk storage. A large amount of training dynamics is produced in a training process. For example, the training process of the VAE we used generates more than 5TB data (250MB per snapshot and more than 20,000 snapshots). Storing all this data to the hard disk is prohibitive for users without a powerful computer. Currently, we solve this problem by two strategies. The first strategy is saving the recent snapshots (e.g., 1,000) and a fixed number of important snapshots in the history (e.g., 2,000). We compute the importance of each snapshot by the PIP method <ref type="bibr" target="#b11">[12]</ref> because of its efficiency and capability of giving high scores to perceptually important points. The second strategy is only saving the loss, weights, and random seeds in each saved snapshot. The activations and gradients are computed on demand using the training set, weights, and random seeds. By these two strategies, we reduced the amount of data that was saved in the VAE case study from 5TB to 6.25GB, which is not demanding for a personal computer. To further reduce the disk storage space, it is desirable to employ information theory <ref type="bibr" target="#b7">[8]</ref> to detect more informative training dynamics. Online analysis. Currently, in DGMTracker, all the training dynamics are collected offline and then fed into the tool for further analysis. This offline analysis already helps experts in diagnosing a failed training process to a large extent. In addition, in the back-and-forth communication with the experts, they expressed the need to analyze the online training process because training a DGM could take several days <ref type="bibr" target="#b39">[40]</ref>. With online analysis, experts can monitor the real-time running results and stop the training process if necessary. The key to addressing this need is to design a set of visualizations that can effectively convey streaming training dynamics and to develop several data mining algorithms that can detect outliers (anomalies) from the continuously incoming training dynamics (e.g., online blue-noise polyline sampling).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">CONCLUSION</head><p>In this paper, we have developed a visual analytics tool, DGMTracker, to facilitate machine learning experts in better understanding and diagnosing DGMs. DGMTracker is well aligned with the three-level analytical process of analyzing DGMs (snapshot-, layer-, and neuronlevel analysis). In particular, we have designed a data flow visualization to illustrate how data flows through a DGM (snapshot level) and to disclose how other neurons contribute to the neuron of interest (neuron level). A blue-noise polyline sampling algorithm has been developed to select time series samples to preserve outliers and reduce visual clutter (layer level). We conducted two case studies to demonstrate the effectiveness and usefulness of our tool in analyzing the training process of DGMs.</p><p>Future research will focus on the following three aspects. The first task is to extend DGMTracker from offline analysis to online analysis. To this end, we plan to develop an online blue-noise polyline sampling algorithm and an online data flow visualization. Another interesting venue for future work is better easing the debugging process by employing pattern mining techniques to disclose interesting patterns in the training dynamics. The major bottleneck is the large size of the training dynamics prohibits many high-cost pattern mining techniques. Last but not least, we plan to further reduce the amount of data needed for analyzing a training process. In particular, we will leverage information theory to select the most informative training dynamics.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 .</head><label>1</label><figDesc>DGMTracker, a visual analytics tool that helps experts understand and diagnose the training processes of deep generative models (DGMs): (a) the loss changes; (b) the data flow visualization to illustrate how data flows through a DGM and disclose how other neurons influence the output of the neuron of interest; (c) visualization of the training dynamics (e.g., activation changes).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 .</head><label>2</label><figDesc>An example architecture of a GAN.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 3 .</head><label>3</label><figDesc>DGMTracker consists of two modules: a data flow visualization and a training dynamics analysis. These modules are well aligned with the typical analytical process of an expert.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 .</head><label>4</label><figDesc>A hybrid visualization to illustrate the data flow at the snapshot level: (a) a DAG layout to visualize the structure of a DGM; (b) line charts to represent the data flow.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 .</head><label>5</label><figDesc>Example patterns of data flow within each node: (a) abrupt changes of many activations; (b) abrupt changes of a few activations; (c) activations that become unstable after the focus snapshot.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 .</head><label>6</label><figDesc>Illustration of the forward and backward contribution. The forward (backward) contribution discloses how neurons are influenced by the neurons in the previous (next) layer.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 7 .</head><label>7</label><figDesc>Credit visualization: (a) before clustering; (b) after K-Means clustering; (c) after organizing neurons as feature maps; (d) and (e) detail contribution when mouse hovers.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 8 .</head><label>8</label><figDesc>Comparison of different sampling methods: (a) without sampling; (b) random sampling; (c) blue-noise polyline sampling. The blue-noise polyline sampling algorithm can better reduce visual clutter (the red rectangle) and preserve outliers (the green rectangle).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 9 .</head><label>9</label><figDesc>The pop-up menu for the training dynamics visualization.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 10 .</head><label>10</label><figDesc>The network structure of the GAN used in the case study.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Fig. 13 .</head><label>13</label><figDesc>The output changes of the discriminator: (a) the outputs invoked by generated images become close to 0; and (b) the outputs invoked by real images become close to 1.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Fig. 14 .Fig. 15 .</head><label>1415</label><figDesc>Two sudden increases in the discriminator loss, which cause the training process to be unstable. The signs of the gradients have sudden changes but the signs of the means remain unchanged in a training process using Adam: (a) changes of the means; (b) changes of the gradients.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head>Fig. 17 .</head><label>17</label><figDesc>The changes of (w t+1 i − w t i )g t i in the training processes: (a) using Adam; (b) using RMSprop.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_14"><head>Fig. 18 .</head><label>18</label><figDesc>E 2 then assumed this image led to the failed training process. To verify his assumption, E 2 selected the neurons with the largest activations and examined the forward contribution to analyze why the activations Comparison between using logarithmic variance and variance in Gaussian sampling: (a) logarithmic variance; (b) variance.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>, K. Cao, and S. Liu are with Tsinghua University and National Engineering Lab for Big Data Software. Email: {liumc13,ckl13}@mails.tsinghua.edu.cn; shixia@tsinghua.edu.cn. S. Liu is the corresponding author.</figDesc><table /><note>• J. Shi and J. Zhu are with Tsinghua University. Email: shijx15@mails.tsinghua.edu.cn; dcszj@tsinghua.edu.cn.</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head></head><label></label><figDesc>).</figDesc><table><row><cell></cell><cell cols="2">O ptions</cell><cell></cell><cell></cell></row><row><cell cols="3">Aggregate Dimensions:</cell><cell></cell><cell></cell></row><row><cell>N</cell><cell>S</cell><cell>H</cell><cell>W</cell><cell>C</cell></row><row><cell cols="3">How to Aggregate:</cell><cell>Max</cell><cell></cell></row><row><cell cols="2">Start Snapshot:</cell><cell></cell><cell>1</cell><cell></cell></row><row><cell cols="2">End Snapshot:</cell><cell></cell><cell>24384</cell><cell></cell></row><row><cell></cell><cell>O K</cell><cell></cell><cell>Cancel</cell><cell></cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0" />
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Powerset: A comprehensive visualization of set intersections</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Alsallakh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Ren</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="361" to="370" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Arjovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chintala</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Bottou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gan</forename><surname>Wasserstein</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1701.07875</idno>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">An architecture for deep, hierarchical generative models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Bachman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="4826" to="4834" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Capacity-constrained point distributions: A variant of Lloyd&apos;s method</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Balzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schlömer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Deussen</surname></persName>
+		</author>
+		<idno>86:1-86:8</idno>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Theano: a CPU and GPU math expression compiler</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bergstra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Breuleux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Bastien</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lamblin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pascanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Desjardins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Turian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Warde-Farley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Python in Science Conference</title>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="3" to="10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Bishop</surname></persName>
+		</author>
+		<title level="m">Pattern Recognition and Machine Learning</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Visual abstraction and exploration of multi-class scatterplots</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Mei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Gu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="1683" to="1692" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">An information-theoretic framework for visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Jaenicke</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1206" to="1215" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Textflow: towards better understanding of evolving topics in text</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Cui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Tan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Shi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><forename type="middle">J</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Qu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Tong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2412" to="2421" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Sample-based non-uniform random variate generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Devroye</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Conference on Winter Simulation</title>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1986" />
+			<biblScope unit="page" from="260" to="265" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Inverting visual representations with convolutional networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dosovitskiy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Brox</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference on Computer Vision and Pattern Recognition</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="4829" to="4837" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Representing financial time series based on data point importance</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Chung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Luk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Ng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Engineering Applications of Artificial Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="277" to="300" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Rich feature hierarchies for accurate object detection and semantic segmentation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Girshick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Donahue</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Darrell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Malik</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference on Computer Vision and Pattern Recognition</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="580" to="587" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Deep Learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Courville</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2016" />
+			<publisher>MIT Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Generative adversarial nets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Pouget-Abadie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mirza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Warde-Farley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ozair</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Courville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="2672" to="2680" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Google</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tensorflow</surname></persName>
+		</author>
+		<ptr target="https://www.tensorflow.org" />
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="2017" to="2023" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Pei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kamber</surname></persName>
+		</author>
+		<title level="m">Data Mining: Concepts and Techniques</title>
+		<imprint>
+			<publisher>Elsevier</publisher>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">An interactive node-link visualization of convolutional neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">W</forename><surname>Harley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Symposium on Visual Computing</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="867" to="877" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Deep residual learning for image recognition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference on Computer Vision and Pattern Recognition</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="770" to="778" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Reducing the dimensionality of data with neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Science</title>
+		<imprint>
+			<biblScope unit="volume">313</biblScope>
+			<biblScope unit="issue">5786</biblScope>
+			<biblScope unit="page" from="504" to="507" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kinga</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">B</forename><surname>Adam</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Learning Representations</title>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Semisupervised learning with deep generative models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">P</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Mohamed</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Rezende</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Welling</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="3581" to="3589" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">P</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Salimans</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Welling</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.04934</idno>
+		<title level="m">Improving variational inference with inverse autoregressive flow</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">P</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Welling</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1312.6114</idno>
+		<title level="m">Auto-encoding variational Bayes</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Learning multiple layers of features from tiny images</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Krizhevsky</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+		<respStmt>
+			<orgName>University of Montreal</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">The LRP toolbox for artificial neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lapuschkin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Binder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Montavon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-R</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Samek</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">114</biblScope>
+			<biblScope unit="page" from="1" to="5" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Deep learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lecun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Bengio</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Nature</title>
+		<imprint>
+			<biblScope unit="volume">521</biblScope>
+			<biblScope unit="issue">7553</biblScope>
+			<biblScope unit="page" from="436" to="444" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Learning to generate with memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="1177" to="1186" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Visualizing and understanding deep texture representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T.-Y</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Maji</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference on Computer Vision and Pattern Recognition</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2791" to="2799" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Towards better analysis of deep convolutional neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Shi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="91" to="100" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">A survey on information visualization: recent advances and challenges. The Visual Computer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Cui</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Liu</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="page" from="1373" to="1393" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Towards better analysis of machine learning models: A visual analytics perspective</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Zhu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Visual Informatics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="48" to="56" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Patterns and sequences: Interactive exploration of clickstreams to understand common visitor paths</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Dontcheva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hoffman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Walker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wilson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="321" to="330" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Visualizing data using t-SNE</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">V D</forename><surname>Maaten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="2579" to="2605" />
+			<date type="published" when="2008-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Understanding deep image representations by inverting them</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mahendran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Vedaldi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference on Computer Vision and Pattern Recognition</title>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="5188" to="5196" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Synthesizing the preferred inputs for neurons in neural networks via deep generator networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dosovitskiy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Yosinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Brox</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Clune</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="3387" to="3395" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">Interactive deep learning GPU training system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nvidia</forename><surname>Digits</surname></persName>
+		</author>
+		<ptr target="https://developer.nvidia.com/digits" />
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="2017" to="2023" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">Neural networks: tricks of the trade</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">B</forename><surname>Orr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-R</forename><surname>Müller</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+			<publisher>Springer</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+		<title level="m" type="main">An Introduction to Game Theory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">J</forename><surname>Osborne</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002" />
+			<pubPlace>New York</pubPlace>
+		</imprint>
+		<respStmt>
+			<orgName>Oxford University Pres.</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Variational autoencoder for deep learning of images, labels and captions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Pu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Gan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Henao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Yuan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Stevens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Carin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2352" to="2360" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<monogr>
+		<title level="m" type="main">Unsupervised representation learning with deep convolutional generative adversarial networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Radford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Metz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Chintala</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1511.06434</idno>
+		<imprint>
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Visualizing the hidden activity of artificial neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">E</forename><surname>Rauber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">G</forename><surname>Fadel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">X</forename><surname>Falco</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">C</forename><surname>Telea</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="101" to="110" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">The basic ideas in neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">E</forename><surname>Rumelhart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Widrow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Lehr</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="87" to="93" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Ladder variational autoencoders</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">K</forename><surname>Sønderby</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Raiko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Maaløe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Sønderby</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Winther</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="3738" to="3746" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Line segment sampling with blue-noise properties</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Xie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Pan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Guo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">32</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="127" to="128" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">On the importance of initialization and momentum in deep learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Martens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Dahl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1139" to="1147" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">An analysis of machine-and human-analytics in classification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">K L</forename><surname>Tam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Kothari</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="71" to="80" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title/>
+		<ptr target="https://github.com/thu-ml/zhusuan" />
+	</analytic>
+	<monogr>
+		<title level="j">Tsinghua Machine Learning Group. ZhuSuan</title>
+		<imprint>
+			<biblScope unit="page" from="2017" to="2023" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">Opening the black box -data driven visualization of neural networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">Y</forename><surname>Tzeng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="383" to="390" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">How ideas flow across multiple social groups</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T.-Q</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Su</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Guo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visual Analytics Science and Technology</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="770" to="778" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Multi-class blue noise sampling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L.-Y.</forename><surname>Wei</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page">79</biblScope>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<monogr>
+		<title level="m" type="main">Line segment definition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Wikipedia</surname></persName>
+		</author>
+		<ptr target="https://en.wikipedia.org/wiki/Line_segment,2017" />
+		<imprint>
+			<biblScope unit="page" from="2017" to="2023" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<analytic>
+		<title level="a" type="main">Vidx: Visual diagnostics of assembly line performance in smart factories</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Mei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="291" to="300" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<analytic>
+		<title level="a" type="main">Visualizing and understanding convolutional networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">D</forename><surname>Zeiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Fergus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">European Conference on Computer Vision</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="818" to="833" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<analytic>
+		<title level="a" type="main">Big learning with Bayesian methods</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">National Science Review</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1" to="25" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

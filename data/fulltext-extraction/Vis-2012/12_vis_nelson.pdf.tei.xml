@@ -1,0 +1,1395 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<encodingDesc>
+			<appInfo>
+				<application version="0.4.1" ident="GROBID" when="2016-09-09T15:02+0000">
+					<ref target="https://github.com/kermitt2/grobid">GROBID - A machine learning software for extracting information from scholarly documents</ref>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">ElVis: A System for the Accurate and Interactive Visualization of High-Order Finite Element Solutions</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName>
+								<forename type="first">Blake</forename>
+								<surname>Nelson</surname>
+							</persName>
+						</author>
+						<author>
+							<persName>
+								<forename type="first">Eric</forename>
+								<surname>Liu</surname>
+							</persName>
+						</author>
+						<author>
+							<persName>
+								<forename type="first">Robert</forename>
+								<surname>Haimes</surname>
+							</persName>
+						</author>
+						<author>
+							<persName>
+								<forename type="first">Robert</forename>
+								<forename type="middle">M</forename>
+								<surname>Kirby</surname>
+								<roleName>Member, Ieee</roleName>
+							</persName>
+						</author>
+						<title level="a" type="main">ElVis: A System for the Accurate and Interactive Visualization of High-Order Finite Element Solutions</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Index Terms—High-order finite elements</term>
+					<term>spectral/hp elements</term>
+					<term>discontinuous Galerkin</term>
+					<term>fluid flow simulation</term>
+					<term>cut surface extraction</term>
+					<term>contours</term>
+					<term>isosurfaces</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1. Pressure field on the ONERA M6 Wing (Section 5.1.2), rendered using ElVis and illustrating the application of color maps and contour lines on curved and planar surfaces. Abstract—This paper presents the Element Visualizer (ElVis), a new, open-source scientific visualization system for use with high-order finite element solutions to PDEs in three dimensions. This system is designed to minimize visualization errors of these types of fields by querying the underlying finite element basis functions (e.g., high-order polynomials) directly, leading to pixel-exact representations of solutions and geometry. The system interacts with simulation data through runtime plugins, which only require users to implement a handful of operations fundamental to finite element solvers. The data in turn can be visualized through the use of cut surfaces, contours, isosurfaces, and volume rendering. These visualization algorithms are implemented using NVIDIA&apos;s OptiX GPU-based ray-tracing engine, which provides accelerated ray traversal of the high-order geometry, and CUDA, which allows for effective parallel evaluation of the visualization algorithms. The direct interface between ElVis and the underlying data differentiates it from existing visualization tools. Current tools assume the underlying data is composed of linear primitives; high-order data must be interpolated with linear functions as a result. In this work, examples drawn from aerodynamic simulations–high-order discontinuous Galerkin finite element solutions of aerodynamic flows in particular–will demonstrate the superiority of ElVis&apos; pixel-exact approach when compared with traditional linear-interpolation methods. Such methods can introduce a number of inaccuracies in the resulting visualization, making it unclear if visual artifacts are genuine to the solution data or if these artifacts are the result of interpolation errors. Linear methods additionally cannot properly visualize curved geometries (elements or boundaries) which can greatly inhibit developers&apos; debugging efforts. As we will show, pixel-exact visualization exhibits none of these issues, removing the visualization scheme as a source of uncertainty for engineers using ElVis.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>High-order finite element methods (a variant of which are the spectral/hp element methods considered in this work <ref type="bibr" coords="1,229.56,552.57,14.34,10.80" target="#b11">[12]</ref> ) have advanced to the point that they are now commonly applied to many realworld engineering problems, such as those found in fluid mechanics, solid mechanics and electromagnetics <ref type="bibr" coords="1,171.73,582.46,14.19,10.80" target="#b24">[25,</ref><ref type="bibr" coords="1,188.74,582.46,10.65,10.80" target="#b10"> 11]</ref>. An attractive feature of these methods is that convergence can be obtained by reducing the size of an element (h adaptivity), by increasing the polynomial order within an element (p adaptivity), or by combining these two proaches. Meshes built with high-order solutions in mind can obtain the same level of accuracy with far fewer degrees of freedom than their linear counterparts <ref type="bibr" coords="1,363.34,560.45,13.74,10.80" target="#b34">[36]</ref>. Engineers working with high-order simulation data encounter significant obstacles when attempting to generate accurate visualizations. The underlying finite element basis functions are represented in terms of nonlinear functions (e.g., the high-order polynomials considered in this work), yet most visualization methods assume that the basis functions are linear. Therefore, to generate a visualization, the simulation data must first be converted into a linear format. While linear interpolation enables the engineer to produce the desired image, it introduces error into the visualization. This leads to the common question: are the features and artifacts seen in the visualization part of the highorder data, or are they errors introduced through the visualization process? Unfortunately, visualization errors arising from linear interpolation look the same as genuine solution artifacts arising from problems such as insufficient mesh resolution. With traditional interpolationbased rendering techniques, engineers are hard-pressed to differentiate between the numerous potential causes of visual artifacts. The severity of these visualization errors can be mitigated by refining the linear approximations, but this approach does not scale well, requiring too much computational time and storage to be practical <ref type="bibr" coords="2,212.76,61.14,13.74,10.80" target="#b26">[27]</ref>. A variety of visualization algorithms developed in recent years address interpolation-based errors by using the high-order data directly . However, these techniques are scattered across multiple software packages and tools; as a result, the barrier to entry is high for users. Additionally, existing methods assume knowledge of the underlying basis functions used, requiring that the data first be converted into the appropriate format for each tool used. To address these issues, we need an integrated visualization system that is designed specifically for high-order finite element solutions. Specifically, such a system must have the following features: @BULLET Extensible Architecture: To support data originating from any high-order simulation, the system's visualization algorithms should be decoupled from the data representation, allowing them to change independently of each other. The advantage of this approach is that the visualization algorithms can be improved as new techniques and algorithms are developed, while engineers are free to choose whatever basis functions are most appropriate for the scenarios under investigation. This architecture enables the system to support methods currently in use, as well as methods that have not yet been developed. </p><p> @BULLET Accurate Visualization: To avoid introducing error into the visualization , the high-order system must work with the high-order data directly. Specifically, the system must be able to evaluate the solution at arbitrary locations in the domain to machine precision. The system must also support visualization methods that have been developed based on the a priori knowledge that the data was produced by a high-order finite element simulation. These methods will ideally make use of the smoothness properties of the high-order field on the interior of each elements, while respecting the breaks in continuity that may occur at element boundaries. </p><p>@BULLET Interactive Performance: In terms of computational resources required, using the high-order data directly carries significantly higher costs than using simpler linear approximations. While a high-order system is not expected to provide the same level of performance as its linear counterparts, it should provide an interactive experience on a standard desktop workstation (i.e., it should not require expensive, special purpose hardware). </p><p>In this paper we describe the Element Visualizer (ElVis), a new high-order finite element visualization system that meets the requirements listed above. We demonstrate ElVis' utility by using it to visualize finite element simulations produced by ProjectX, which is a general-purpose PDE solver with an emphasis on aerospace applica- tions <ref type="bibr" coords="2,41.75,542.46,9.71,10.80" target="#b6">[7,</ref><ref type="bibr" coords="2,53.27,542.46,11.21,10.80" target="#b20"> 21,</ref><ref type="bibr" coords="2,66.29,542.46,6.72,10.80" target="#b5"> 6,</ref><ref type="bibr" coords="2,74.83,542.46,11.21,10.80" target="#b34"> 36,</ref><ref type="bibr" coords="2,87.85,542.46,10.65,10.80" target="#b33"> 35]</ref>. Specifically, we will consider the visualizations necessary during the debugging and verification processes of model generation. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>In recent years, there has been a growing awareness of the errors caused by using linear methods to visualize high-order data. This has lead to the development of many new algorithms that have been designed to accurately render high-order fields. In this section, we provide a brief overview of these algorithms. A popular visualization technique is the use of color maps and contours on surfaces (element and geometry boundaries) and cut-surfaces. These techniques allow the engineer to gain detailed information about specific locations in the data set. There are several schemes that apply color maps to planar data. In one approach, the color map is generated by what is called a polynomial basis texture <ref type="bibr" coords="2,185.09,694.37,9.52,10.80" target="#b7">[8]</ref>. Each basis function used in the high-order field is sampled onto a triangular texture map. The colors in the triangle are not generated by linear interpolation, but instead by the linear combination of the appropriate textures, based on the triangle's order. In this way, a set of basis textures can be generated in a pre-processing step, and then, assuming there is sufficient resolution in the texture, accurate images can be generated for all high-order triangles. Another method uses an OpenGL fragment shader to calculate the field's value at each fragment's location, resulting in more accurate lookup into the color map <ref type="bibr" coords="2,414.51,91.03,9.52,10.80" target="#b3">[4]</ref> . Finally, another method analytically calculates the intersection of a plane and quadratic tetrahedra, then uses a ray tracer to apply the color map to the new primitive <ref type="bibr" coords="2,518.32,110.95,13.74,10.80" target="#b30">[32]</ref>. Most of the work dealing with the generation of contour lines deals only with 2D high-order elements. A common theme is to generate the contours in an element's reference space (which we will define in Section 3) and then transform them into global (world) space for display. One approach <ref type="bibr" coords="2,369.90,161.26,14.94,10.80" target="#b14">[15] </ref> creates contour lines in an element's reference space by subdividing the domain and using linear interpolation within these sub-domains to create a piecewise linear contour. Another approach steps along a direction orthogonal to the field's gradient <ref type="bibr" coords="2,522.80,191.15,9.52,10.80" target="#b2">[3]</ref>, where each step is controlled by a user-defined step size. A method for generating contour lines over quadrilateral elements by determining the shape of the contour in reference space and then generating a polyline to approximate it was developed in <ref type="bibr" coords="2,443.80,231.00,14.94,10.80" target="#b27">[28] </ref>and later extended to linear and quadratic triangles in <ref type="bibr" coords="2,400.91,240.96,13.74,10.80" target="#b28">[29]</ref>. The only 3D contouring algorithm <ref type="bibr" coords="2,422.85,251.42,14.94,10.80" target="#b12">[13] </ref>generates contour lines on cut-planes through finite element volumes. The procedure first locates a seed point for the contour line along the element's boundary. It then steps in a direction orthogonal to the field's gradient, using a usercontrolled step size, to generate a polyline representing the contour. It differs from the previously described methods in that the plane is a three-dimensional entity. At each step, the contour can, and often does, move off of the cut-surface. The method introduces a correction term to fix this problem and keep the contour on the cut-plane. As with the other object-space contour methods described, the step size is useful to determine how accurately the polyline represents the contour in world space, but is not as useful in expressing how accurate the final image is, as it can be accurate from one view but have large error in another. Several approaches have been developed for volume rendering high-order fields. An analytic solution to the volume rendering integral was developed in <ref type="bibr" coords="2,349.72,411.31,14.94,10.80" target="#b32">[34] </ref>for linear and quadratic tetrahedra. Numerical, point-based solutions for high-order tetrahedra were presented in <ref type="bibr" coords="2,518.32,421.28,13.74,10.80" target="#b35">[37]</ref>, and solutions for arbitrary elements and order have been developed as well <ref type="bibr" coords="2,303.34,441.20,13.74,10.80">[30]</ref>. Approaches for isosurface rendering have been developed for quadratic tetrahedra using analytical calculation of the isosurface in reference space <ref type="bibr" coords="2,343.98,461.13,14.94,10.80" target="#b31">[33] </ref>and through ray-tracing approaches <ref type="bibr" coords="2,493.45,461.13,13.74,10.80" target="#b30">[32]</ref>. Other approaches include using a ray tracer for arbitrary elements of arbitrary order <ref type="bibr" coords="2,324.54,481.05,13.74,10.80" target="#b18">[19]</ref>, a point-based approach that uses particles that actively seek and distribute themselves on the isosurface <ref type="bibr" coords="2,457.74,491.02,14.94,10.80" target="#b15">[16] </ref> and a hybrid system that combines isosurface-seeking particles and ray-tracing <ref type="bibr" coords="2,518.32,500.98,13.74,10.80" target="#b22">[23]</ref>. Finally, new approaches for creating line-type features in scalar and vector fields <ref type="bibr" coords="2,331.65,520.90,14.94,10.80" target="#b21">[22] </ref>have recently been developed that are optimized for high-order fields. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">High-Order Finite Element Methods</head><p>A finite element volume is represented by the triangulation T H of an open, bounded domain Ω into a mesh of N e non-overlapping elements κ i . Ω exists in what is called the world space. The elements κ i are such that Ω = i≤N e κ i and κ i κ j = / 0, ∀i = j. The four basic element shapes for 3D finite elements are the tetrahedron, hexahedron, (triangular) prism, and (square-base) pyramid. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Element Reference Spaces</head><p>The elements of the triangulation can come in a multitude of sizes and shapes in the world space; treating each as its own unique entity is cumbersome. Thus, it is common practice to standardize a reference space for each element shape. For example, one choice for the reference space of a tetrahedron is the tetrahedron with corners at (0, 0, 0), </p><formula>(1, 0, 0), (0, 1</formula><p>, 0), and (0, 0, 1). Then a function (or composition of functions) Φ : R 3 → R 3 provides the continuous, bijective mapping from the reference space to the world space. Additionally, the Jacobian determinant (henceforth simply called the Jacobian) of this transformation must be positive to guarantee that the inverse exists and that </p><formula>x = Φ(η) </formula><p>u(x,y) x y T H <ref type="figure" coords="3,31.50,128.27,19.13,7.37" target="#fig_3">Fig. 2</ref>. (Left) -Illustration of the mapping between reference and world space for a tetrahedron. Reference points are denoted by η, and world space points by x. (Right) -Degree p polynomials interpolate the solution within elements, but discontinuities are allowed at element boundaries ; 2D example. the desired orientation is maintained. In the linear case, this mapping can be conceptualized as a combination of translation, rotation, and scaling operations. In the high-order setting, the mapping is nonlinear. A diagrammatic example of these mappings for a tetrahedron is shown in <ref type="figure" coords="3,40.72,226.15,29.02,10.80" target="#fig_3">Figure 2</ref>. Since Φ is a bijection with positive Jacobian, it can be inverted to compute the reference point corresponding to a particular world point. Unfortunately, Φ −1 generally does not have a closed-form. As a result, a more general root-finding scheme must be used. For high-order elements , Φ −1 is also nonlinear and a scheme like the Newton-Raphson Method is required. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Basis Functions</head><p>A standard finite element practice is to describe the function Φ in terms of element-wise basis functions defined on the reference space. The space spanned by these functions is finite dimensional. In this work, examples will apply a basis that is polynomial in the reference coordinates, but other choices (e.g., Fourier basis) are possible as well. For example, consider a function F(ξ ) ∈ P p 1 ,p 2 ,p 3 with respect to the reference element, where p 1 , p 2 , p 3 denote (possibly) different polynomial orders in the three principle directions and ξ is a reference coordinate. This basis choice is associated with at most </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head> 3.3 Solution Representation under Continuous and Discontinuous Finite Elements </head><p>Similar to the geometry, the solution representation is also commonly written in terms of basis functions. The solution basis can be different than the geometry basis; in this work, polynomials are used again. In visualization applications, it is important to distinguish between continuous and discontinuous finite elements. In continuous finite elements , the solution is defined to be continuous across element boundaries . As a result, the value of the solution at every point in the domain is uniquely defined. With discontinuous elements, this is not the case: discontinuities can exist at element boundaries and in general, solutions are multi-valued along such boundaries; see <ref type="figure" coords="3,210.83,533.49,29.02,10.80" target="#fig_3">Figure 2</ref>. The discontinuous setting raises some challenges for visualization. For example, contour " lines " may have discontinuities at element boundaries since the underlying solution value could " jump. " Similarly , isosurfaces may have holes in them. Any derived, continuous solution representation used within the visualization system is only guaranteed to be valid within individual elements. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">The Element Visualizer (ELVIS)</head><p> ElVis is a system that has been developed to implement the features necessary for high-order visualization, as described in Section 1: namely, visualization accuracy, interactive performance, and extensible support for arbitrary high-order finite element systems. ElVis is designed to provide visualization tools that are broadly applicable to any high-order finite element solution. ElVis' implementation is generic and aims to decouple the implementation of the visualization from the implementation of the high-order basis functions. ElVis achieves this goal through the use of plugins, which provide a simplified interface to the high-order data by exposing the minimal amount of functionality required to generate a visualization. In this way, it is broadly applicable to a wide variety of simulation products, and gives each product wide latitude on how it behaves behind the scenes. We discuss plugins in more detail in Section 4.1. Once the data is accessible to ElVis through a plugin, ElVis can perform the required visualizations without knowledge of the details of the underlying simulation. ElVis' visualization algorithms focus particular attention on the two often competing goals of image accuracy and interactive performance. Image accuracy is obtained by devising high-order specific versions of common visualization strategies (cutsurfaces , isosurfaces, and volume rendering). Performance is achieved by careful implementation of these algorithms as parallel algorithms on a NVIDIA GPU, using the OptiX <ref type="bibr" coords="3,426.25,151.71,14.94,10.80" target="#b23">[24] </ref>ray-tracing engine and Cuda <ref type="bibr" coords="3,294.12,161.67,10.45,10.80" target="#b0">[1] </ref> as the framework. We present more details about ElVis' visualization capabilities in Section 4.2. quires significantly more code than the data conversion approach, and it also requires a working knowledge of both OptiX and Cuda. All of ElVis' visualization algorithms are implemented on the GPU; therefore , all runtime plugins must provide a means to access data fields on the GPU. A runtime plugin consists of three components: </p><p> @BULLET Volume Representation Component: This component is responsible for reading a volume on the CPU and then transferring it to the GPU. ElVis imposes only one restriction on the way in which the volume's data is represented and accessed on the GPU, leaving the choice of optimal implementation to the extension . The sole requirement is that the data be accessible to the OptiX-based ray-tracer through a specially named node in the ray-tracer's scene graph. </p><p> @BULLET Volume Evaluation Component: All of the visualization methods described in the next section require the ability to evaluate a high-order field and its gradient at arbitrary locations within an element. These functions must be implemented on a GPU and will be called a large number of times for each of the visualization methods discussed in the next section, so extra care must be taken to ensure that they are as efficient as possible. </p><p>@BULLET Ray-Tracing Component: Finally, the ray-tracing component connects the OptiX portion of ElVis to the simulation data. This component is not responsible for handling the high-level mechanics of the ray-tracer; however, it is responsible for providing some of the primitives used by ElVis to perform the ray-tracing. Examples include providing ray-element intersection tests, element and element face bounding box procedures, and tests for whether a point is located in an element. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Visualization</head><p>In this section, we discuss the visualization methods for scalar fields that are currently available in ElVis; namely, color maps and contours on cut-surfaces <ref type="bibr" coords="4,82.69,406.63,13.74,10.80" target="#b19">[20]</ref>, isosurfaces <ref type="bibr" coords="4,148.06,406.63,13.74,10.80" target="#b18">[19]</ref>, and volume rendering <ref type="bibr" coords="4,255.70,406.63,13.74,10.80" target="#b17">[18]</ref>. Each of these visualization methods is discussed in greater detail in the references provided. The scalar field restriction is not a fundamental limitation of the ElVis framework; rather, it is a reflection of the algorithms that have been developed for the initial release. Future releases will support visualization of high-order vector fields. The visualization algorithms discussed below all require quick and efficient point location queries. ElVis uses a bounding volume hierarchy , which is supplied by OptiX, to accelerate all point location queries. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">Surface Visualization</head><p>A surface visualization is where the scalar field is plotted on a surface using color maps, isocontours or both <ref type="bibr" coords="4,161.67,534.90,13.74,10.80" target="#b19">[20]</ref> . These types of visualizations , while conceptually simple, are very useful for the engineer when studying the simulation. Much of the interesting behavior occurs on or near certain domain boundaries (e.g., a wing), and it makes sense to be able to plot the behavior of the field on these surfaces accurately. An overview of the surface rendering algorithm is presented in Algorithm 1, with details in Nelson et al. <ref type="bibr" coords="4,132.37,594.68,13.74,10.80" target="#b19">[20]</ref>. ElVis supports the rendering of an arbitrary number of cut-planes and surfaces, of which the curved faces lying on domain boundaries are common choices. In <ref type="figure" coords="4,110.25,624.60,28.81,10.80" target="#fig_1">Figure 1</ref>, we show an example of the pressure field on an ONERA M6 wing (see Section 5.1.2 for details) and on a plane cutting through the wing. A color map is applied and contour lines are plotted on the wing's curved surface and on the cut-plane's flat surface. ElVis also has the ability to plot the intersection of the 3D mesh and a surface through an extension of the contouring algorithm discussed above. It is often useful to see the mesh on a surface to verify that the mesh has been generated correctly, as well as to aid in debugging. Oftentimes features may appear in the visualization that appear out of place, but turn out to be reasonable if they occur next to a mesh boundary. An example of such a feature is a discontinuous contour Step 2 -Visualize the scalar samples. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>if Rendering Color Maps then </head><p>Use the scalar value as a lookup into a color table. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>else if Rendering Contours then </head><p>Use the scalar value to determine if the contour crosses the pixel, using the crossing tests from <ref type="bibr" coords="4,329.91,167.78,10.69,8.40" target="#b19">[20]</ref>. end line in a DG field. In this scenario, a break in the contour is expected at element boundaries, but not in the interior of the element. Further examples that apply the meshing tool can be found in Section 5. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">Isosurfaces</head><p>Isosurfaces in ElVis <ref type="bibr" coords="4,360.16,439.65,14.19,10.80" target="#b15">[16,</ref><ref type="bibr" coords="4,377.01,439.65,11.95,10.80" target="#b18"> 19] </ref> take advantage of the smoothness properties of high-order finite element solutions to project the field along a ray onto a polynomial. Once the polynomial is created, accurately finding the location of an isosurface is a root-finding problem <ref type="bibr" coords="4,503.94,469.53,13.74,10.80" target="#b18">[19]</ref>. We give an overview of this procedure in Algorithm 2. We note that this procedure is only valid on the interior of elements, where the solution is guaranteed to be smooth, so our isosurface algorithm operates on element-partitioned segments along the ray. An advantage this method has over existing object-space methods is that it respects the features of the high-order data. In particular, unless care is taken, object-space isosurfacing methods such as marching cubes can miss valid features of DG simulations, such as discontinuities across element boundaries that can cause cracks in the isosurface, and isosurfaces that exist entirely within an element. An example of this can be seen in <ref type="figure" coords="4,353.87,580.16,29.18,10.80" target="#fig_2">Figure 3</ref>, where we plot an isosurface of the Mach number for the delta-wing simulation described in Section 5.1.1. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.3">Volume Rendering</head><p>In some scenarios, isosurfaces can be noisy and difficult to interpret. In these cases, it can be useful to use volume rendering to represent the isosurface. When applied to high-order solutions, ElVis uses an algorithm that takes advantage of the structure of the field to provide better convergence properties than those available through existing methods <ref type="bibr" coords="5,31.50,115.62,13.74,10.80" target="#b17">[18]</ref>. By doing this, ElVis is able to display more accurate images for a given amount of time. Volume rendering proceeds in a manner similar to isosurface generation . The ray traverses the volume and as it encounters each element, it categorizes the field along the ray in the element, then applies an optimized volume rendering algorithm. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.4">Combining Visualizations</head><p>A constant challenge for high-order visualization is the computational cost of each of the algorithms described above. This comes from the cost of sampling a high-order field (primarily the cost of converting world points to reference points and evaluating the field) and the cost of traversing the volume with a ray (where ray-element intersections can be of high-order and require expensive, iterative root finding procedures ). Several of the visualization algorithms above have been shown to be interactive while maintaining accuracy when applied in isolation; but combining these visualization methods into a single image without taking into account their interactions leads to slow perfor- mance. Instead, when multiple visualization methods are used in a single image, we create a system of communication and sharing between modules to minimize the cost. The first optimization is sample sharing , where samples taken for one module can be reused in another. For example, when a surface color map is generated, the samples can also be used to generate the contours. The second optimization is occlusion sharing. We render the surface modules first, since they are the cheapest, and use the depth information obtained by those modules to terminate the mesh traversal portion of the isosurface and volume rendering algorithms once the occluding structure has been reached. Finally, the isosurface and volume rendering modules share the mesh traversal algorithm, reducing the number of ray-element intersection tests that are performed. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Results</head><p>This section demonstrates the capabilities and advantages of ElVis through several examples. We focus our attention on cut-surface and isosurface visualizations, as ProjectX users do not currently use volume rendering in their engineering analysis. Our examples are taken largely from engineering problems solved or being worked on with ProjectX; some examples were synthetic problems designed to demonstrate specific capabilities. The following subsection describes the sources of our examples, enumerated as series of cases. Then we show results and comparisons with current visualization " best-practices " used by ProjectX developers. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Simulation Examples</head><p>We preface this subsection by noting that the upcoming cases are all characterized by quadratic geometry representations and cubic solution representations. These are not limitations of ProjectX nor ElVis; rather, both pieces of software can handle different order geometry and solution representations in different elements. However, they are representative of cases being examined by ProjectX engineers at present. Additionally, these relatively low polynomial orders present a " best case " for Visual3 in the comparisons to ElVis presented in this section . The differences that exist could only become more pronounced at higher polynomial orders. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.1">Case 1</head><p>Case 1 is an isolated half delta-wing geometry with a symmetry plane running down the center chord-line of the wing. The case was originally proposed by <ref type="bibr" coords="5,103.70,714.29,14.94,10.80" target="#b13">[14] </ref> to demonstrate the efficacy of their adaptation strategy. Delta-wings are common geometries for CFD testing due to their relatively simple geometry and the complexities involved in the vortex formation along the leading edge of the wing and the subsequent roll-up of those vortices. The equations being solved are the compressible Navier-Stokes equations. The flow conditions are M ∞ = 0.3, Re c = 4000, and α = 12.5. The solution was obtained through ProjectX, using an output-adaptive automated solution strat- egy <ref type="bibr" coords="5,309.18,100.99,13.74,10.80" target="#b33">[35]</ref>. The delta-wing geometry is linear. The computational mesh consists of 5032 linear, tetrahedral elements with 10434 total faces (linear triangles). The solution was computed with cubic polynomials. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.2">Case 2</head><p>Case 2 is an isolated ONERA M6 wing again with a symmetry plane running down the center chord-line <ref type="bibr" coords="5,420.12,169.90,13.74,10.80" target="#b25">[26]</ref>. We are presenting a subsonic, turbulent flow over the same geometry (transonic was not available). The flow conditions are Re c = 11.72 × 10 6 , M ∞ = 0.3, and α = 3.06. The flow is fully turbulent; the RANS equations are being solved with the Spalart-Allmaras model for closure. As before, the solution was obtained using ProjectX. The computational mesh consists of 70631 quadratic elements with 146221 faces (quadratic triangles); meshing limitations restrict us to a quadratic geometry representation. The solution polynomials are cubic. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.3">Case 3</head><p>Case 3 is synthetic example meant to demonstrate the mesh-plotting capability of ElVis. The geometry is a hemisphere. The mesh is composed of 443 quadratic tetrahedra with 1037 faces (quadratic triangles ). Case 2 also uses curved elements, but the curvature is almost unnoticeable except on boundary faces. This mesh has noticeably curved elements away from the geometry as well. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.4">Case 4</head><p>Case 4 is another synthetic example designed to show how ElVis can display negative Jacobians naturally. " Real " computational meshes with negative Jacobians are not usable; as a result these are discarded. Thus it was simpler to create a one element mesh with very obvious negative Jacobian issues. The mesh consists of one quadratic tetrahedron with four faces (quadratic triangles). The tetrahedron has corners at (0,0,0), (1,0,0), (0,1,0), and (0,0,1). The mesh was created by first placing quadratic nodes at their locations on the linear element. Then the quadratic node at (0.5,0,0) was moved to (0.5,0,0.6), causing the element to intersect itself and leading to negative Jacobians. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">ProjectX</head><p> As mentioned above, all results generated in this section are from solutions produced by the ProjectX software. The results considered in this paper arise from solutions of the compressible Navier-Stokes and RANS equations. ProjectX implements a high-order Discontinuous Galerkin (DG) finite element method; DG features relevant to visualization were discussed in Section 3. It also strives to increase the level of solution automation in modern CFD by taking the engineer " out of the loop " through estimation and control of errors in outputs of interest (e.g., lift, drag) <ref type="bibr" coords="5,351.26,565.68,9.71,10.80" target="#b6">[7,</ref><ref type="bibr" coords="5,363.39,565.68,10.65,10.80" target="#b34"> 36]</ref>. Solution automation is accomplished through an iterative mesh optimization process, which is driven by error estimates based on the adjoints of outputs of interest <ref type="bibr" coords="5,471.69,585.61,13.74,10.80" target="#b33">[35]</ref>. We have worked closely with ProjectX engineers to endow ElVis with visualization and interface features that they would find useful. Visualization has great potential to aid ProjectX developers' ability to understand and analyze their solutions. It has perhaps even greater application in the realm of software debugging, where visual accuracy is of the utmost importance since it is often difficult to discern visual artifacts from genuine or erroneous (i.e., a result of a software bug) solution features. As we will discuss below, to date, visual inaccuracies in their current software have often inhibited ProjectX engineers' analysis and debugging efforts. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Comparison Visualization Software</head><p>ProjectX developers currently use Visual3 <ref type="bibr" coords="5,449.69,714.29,14.19,10.80" target="#b9">[10,</ref><ref type="bibr" coords="5,466.58,714.29,7.47,10.80" target="#b8"> 9] </ref> to examine and attempt to understand their solution data. The reasons are simple: Vi- sual3 is freely available, can deal with general (linear) element types, is extendable and there is local knowledge of this software. Visual3 supports a number of usage modes; e.g., cut-planes, surface rendering, surface contours, isosurfaces and streamlines/streaklines. ProjectX developers use Visual3 to explore their solution data and to support debugging of all aspects of their solver. At present, Visual3 is rather dated and more modern methods (e.g., those discussed in Section 2) exist. Visual3 is a complete, well-tested, and thoroughly-documented application with a functional GUI and a clearly-specified API. Cutting-edge visualization software often lack these features. Moreover, until recently, native high-order visualization on commodity hardware was not possible. Ultimately, ProjectX developers are not members of the visualization community; they do not have the time or expertise to dedicate towards turning prototype software and technology demonstrators into full-fledged visualization systems. As a result, ProjectX developers continue to use Visual3 since it is a robust and familiar tool. Visual3 operates on a set of linear shape primitives (tetrahedron, hexahedron, pyramid, and prism). The solution data and computational mesh must be transferred onto these linear primitives (via interpolation ) for visualization to occur. Since ProjectX produces highorder solutions on curved meshes, some error is introduced through the linear interpolation. To decrease visualization error, each individual element of the visualization mesh can be uniformly refined (in the reference space) a user-specified number of times. Due to compute time and memory constraints, ProjectX developers typically use 0 or 1 level of refinement. In this paper, 2 levels of refinement are performed in some cases for the sake of comparison. However there is usually insufficient memory for 3 levels of refinement on our typical workstations ; additionally in the ever-larger simulations run by ProjectX developers and users, 2 levels of refinement is often infeasible as well. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Visualization Accuracy</head><p>As discussed above, the primary motivation behind this work is the ability to achieve accurate visualizations of high-order data. In this section, we demonstrate ElVis' accuracy, and describe how this enables ProjectX engineers to interpret and debug their simulation data more effectively. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4.1">Surface Rendering</head><p>We begin with visualizations of the leading edge of the delta wing (Section 5.1.1) at the symmetry plane, which we show in <ref type="figure" coords="6,239.46,664.06,30.06,10.80" target="#fig_5">Figure 4</ref>. The black region is the airfoil at mid-span; the wing is not plotted so that it does not occlude any of the details of the boundary layer. This set of figures compares the pixel-exact rendering of ElVis to linearlyinterpolated results from Visual3. For comparison, Visual3 results are posted with 0, 1, and 2 levels of uniform refinement. As rendered by Visual3 with 0 refinements (<ref type="figure" coords="6,197.50,724.25,32.78,10.80" target="#fig_5">Figure 4b</ref> ), the characteristics of the solution are entirely unclear. The boundary layer appears wholly unresolved and severe mesh imprinting can be seen. It is not clear whether the apparent lack of resolution is due to a poor quality solution, bugs in the solver, or visualization errors. Even at one level of refinement (<ref type="figure" coords="6,359.11,222.90,31.91,10.80" target="#fig_5">Figure 4c</ref>), the Visual3 results are still marred by visual errors. Again, mesh imprinting is substantial and the thickness of the boundary layer is not intelligible. The Visual3 results continue to improve at 2 levels of refinement (<ref type="figure" coords="6,288.89,263.23,33.39,10.80" target="#fig_5">Figure 4d</ref> ) with the rough location of the boundary layer finally becoming apparent. But mesh imprinting is still a problem, and engineers could easily interpret this image as the result of a poor quality solution. Only the ElVis result (<ref type="figure" coords="6,406.37,293.12,32.56,10.80" target="#fig_5">Figure 4a</ref> ), clearly indicates the location of the boundary layer and clearly demonstrates where solution quality is locally poor due to insufficient mesh resolution. Although not shown here, distinct differences similar to the effects at the leading edge on the symmetry plane are also observed at the delta wing's trailing edge and along its entire leading edge. ProjectX developers were genuinely surprised at the difference between between Figures 4d and 4a. In fact, since users had only generated and viewed Figures 4b and 4c previously, the common misconception was that resolution at the leading edge (and indeed in many other regions around the wing) was severely lacking. However, had the ProjectX solver been subject to a software bug, engineers expressed that they would have been hard pressed to interpret Visual3 results to aid these efforts. Specifically, at 0 or 1 level of refinement, the visualization quality is so poor that developers are often unable to discern the precise source of solution artifacts. Unfortunately , a misdiagnosis can lead to a great deal of time wasted on a " wild goose chase. " As a result, visualization has not played as large a role as it could in debugging practices. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4.2">Contour Lines</head><p>For our next example, we illustrate the generation of contour lines. Contours are useful visualization primitives since they, unlike color plots, limit the amount of information being conveyed and allow for more detailed and targeted images. In particular, it can be difficult to interpret the magnitude and shape of a field's gradient through color maps; this is much easier with contours. In <ref type="figure" coords="6,305.19,563.90,29.41,10.80" target="#fig_8">Figure 6</ref> , we show a comparison of contours on a cut-plane behind the trailing edge of the delta wing (Section 5.1.1). The images were generated using ElVis and Visual3, once again using 0, 1, and 2 levels of refinement for the latter. <ref type="figure" coords="6,418.96,593.79,30.71,10.80" target="#fig_6">Figure 5</ref>provides a zoomed out view, showing the location of the cut-plane relative to the wing. The images in <ref type="figure" coords="6,349.50,614.19,30.59,10.80" target="#fig_8">Figure 6</ref> reiterate the observations from the discussion of surface rendering. With 0 and 1 level of refinement (<ref type="figure" coords="6,501.64,624.15,33.86,10.80" target="#fig_8">Figure 6b</ref> and c), most of the contour lines produced by Visual3 are extremely inaccurate . These images do little to illuminate the vortex structure they are trying to show. The situation improves somewhat with 2 levels of refinement in Visual3 (<ref type="figure" coords="6,368.30,664.00,31.96,10.80" target="#fig_8">Figure 6d</ref>), but substantial errors remain. As before with surface rendering, the errors present in the Visual3 outputs at all tested levels of refinement are too great to properly support visualization as a debugging tool. The resolution of vortex structures like the one shown in <ref type="figure" coords="6,387.55,704.33,34.31,10.80" target="#fig_6">Figures 5</ref>and 6 is a prime candidate for the application of high-order methods, because vortexes are smooth flow features. They are also extremely common, arising as important features for lift and drag calculations in any 3D lifting flow, amongst ). An overview of this scenario is shown in <ref type="figure" coords="7,233.22,334.11,28.49,7.37" target="#fig_6">Figure 5</ref>, with a detailed view of the contours on the trailing cut-plane generated by ElVis (a) and Visual3 using 0 (b), 1 (c), and 2 (d) levels of refinement. For visual clarity, we have modified the contour lines produced by both systems so they are thicker than the default one pixel width. </p><p> other things. Here, we are only showing a solution with cubic polynomials ; with the even higher polynomial orders that could be applied to vortex flows, linear interpolation-based visualization methods will be even more inadequate. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">Curved Mesh Visualization</head><p>Following on the footsteps of the previous section on accuracy, it is impossible to accurately visualize curved geometries with only linear interpolation techniques. Here we will examine a mesh where highly curved elements can be seen clearly: the hemisphere from Case 3. With 0 levels of refinement (<ref type="figure" coords="7,134.22,493.61,31.83,10.80" target="#fig_10">Figure 7b</ref> ), the Visual3 results are not obviously hemispherical at all. Figures 7c and 7d, showing 1 and 2 levels of refinement respectively, provide successively greater indication that the underlying geometry is in fact curved. However, without the color scheme which helps outline true element boundaries (as opposed to boundaries generated through refinement), typical Visual3 displays can make it difficult to discern which computational element contains to a particular point on the screen. This issue is further compounded by the fact that curved elements are linearized. <ref type="figure" coords="7,41.46,583.89,35.00,10.80" target="#fig_10">Figure 7a</ref>does not have any of these issues. Produced by ElVis, this representation accurately represents the curved surface. Engineers would be readily able to localize particular flow features or artifacts to specific elements for further investigation during debugging or analysis . ProjectX developers and users are given easy and direct access to curved geometries and curved elements, capabilities that were impossible using Visual3. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.6">Negative Jacobian Visualization</head><p>Negative Jacobians can be extremely difficult to detect. In general, negative Jacobians manifest in elements whose reference to world space mapping is not invertible since it becomes multi-valued. As a result, their presence can lead to severe stability and convergence issues . In general, detecting negative Jacobians amounts to a multivariate root-finding problem of high-order polynomials. This procedure is very costly and it is not practical to search every element. Instead, to 0.0. Left is a view of the x + y + z = 1 face being intersected by the x − y face. Right is a view of the x − z face, where the self-intersection effect of the quadratic node at (0.5,0,0.6) is apparent. finite element practitioners typically check for negative Jacobians at a specific set of sample points (usually related to the integration rules used); unfortunately sampling is not a sufficient condition for detec- tion. If negative Jacobians are suspected (e.g., through convergence failure of the solver), visualization of problematic elements is a potential path for deciding whether Jacobian issues played a role. At present, ProjectX developers have no way of directly visualizing negative Jacobians . Linear tetrahedral elements have constant Jacobians; thus the linear visualization mesh produced for Visual3 is of little use when it is used to visualize inverted elements. However, ElVis is not subject to such constraints since it handles curved elements naturally. Case 4 demonstrates our ability to directly visualize negative Jacobians as shown in <ref type="figure" coords="7,328.77,620.09,29.02,10.80" target="#fig_12">Figure 8</ref>. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.7">Distance Function Visualization</head><p>A distance function is a scalar field defined by </p><formula>d( x) = in f {| x − p| : S( p) = 0} (1) </formula><p>where S is an implicit definition of a surface. In regard to ProjectX, the distance function is an important part of the Spalart-Allmaras turbulence model, which is used in Case 2. In fact, wall-distances are needed by most turbulence models. In aerospace applications, turbulent effects typically first arise due to very near-wall viscous interactions . The consequences of incorrect distance computations can vary widely, from having no effect, to producing incorrect results, to reducing solver robustness or even preventing convergence all together. Visualization has the potential to be a valuable first attempt at diagnosing distance calculation errors. Developers can inspect the distance field for smoothness and make other qualitative judgments on the quality of the computation. Although visualization cannot guarantee that distance computations are correct, they can provide confidence and more importantly one would hope that visualization would make substantial errors in distance computations apparent. Existing visualization packages introduce error into this visualization because they must interpolate high-order surfaces and interpolate the distance data, the latter of which is not even a polynomial field. Linear interpolation introduces a number of problems. It is impossible to judge the quality of distance calculations without at least being able to see the true shape of the underlying geometry. As a result, ProjectX developers typically find themselves unable to use visualization to aid in debugging distance computations; let us see why. <ref type="figure" coords="8,32.46,222.99,30.15,10.80">Figure 9</ref> is meant to demonstrate the difficulty experienced by ProjectX developers when using Visual3 to help diagnose problems with distance function computations. In the 0 refinement case (<ref type="figure" coords="8,233.58,242.91,32.20,10.80">Figure 9b</ref>), the visualization mesh is so coarse that almost nothing can be learned from this image, except possibly that the distance computation is not producing completely random numbers. The 1 refinement case <ref type="figure" coords="8,257.93,272.80,14.95,10.80;8,22.50,282.77,22.11,10.80">Fig- ure 9c</ref>) does little to improve the situation. Here, a large protrusion is visible on the right and a large recess is visible near the top of the isosurface. Other confusing-looking regions are also present. After 2 levels of refinement (<ref type="figure" coords="8,100.42,312.65,32.31,10.80">Figure 9d</ref>), Visual3 gives strong evidence that a bug is present in the distance computation, but the linear interpolation is still preventing rendering of the expected smooth surface. On the other hand, ElVis renders (<ref type="figure" coords="8,155.70,343.36,32.46,10.80">Figure 9a</ref>) a smooth surface with one substantial protrusion (corresponding to the protruded region seen in Figures 9c and 9d). From the ElVis result, the fact that the distance computation is wrong is obvious. Additionally, the ElVis result was obtained in seconds, in stark contrast to performing 2 uniform refinements in Visual3. <ref type="figure" coords="8,32.46,403.95,34.92,10.80" target="#fig_1">Figure 10</ref> shows the result from plotting the correct distance function in Visual3 and in ElVis. The effect of the bug was very local (manifested in the large protrusion on the right side). The images from <ref type="figure" coords="8,257.93,423.87,11.21,10.80">Fig</ref><ref type="figure" coords="8,38.19,715.73,3.32,7.37">9</ref>. Plotting the isosurface for a distance of 6.2886 to the surface of the ONERA wing (Case 2) with ElVis (a) and Visual3 using 0 (b), 1 (c), and 2 (d) levels of refinement. Here, the underlying distance computation has a bug. </p><p>(a) ElVis (b) Visual3 2 Refinements this level of Visual3 resolution useless for debugging. At 1 level of refinement, the right-side bump is gone, but there are so many other recesses and protrusions that ProjectX developers indicate they would have little confidence that the distance evaluation is correct. After 2 levels of refinement (<ref type="figure" coords="8,364.97,236.50,32.95,10.80">Figure 9d</ref>), the Visual3 results look believable for a linear interpolation of the distance field. Nonetheless, ProjectX developers indicated that they would much rather have debugged the distance function with ElVis, even if Visual3 could perform more refinements without additional compute and storage overhead. In fact, ProjectX developers used the distance computations shown in <ref type="figure" coords="8,294.71,296.39,30.50,10.80">Figure 9</ref>for a period of months before finding the bug that caused the large protrusion shown in the isosurfaces. They had checked the distance function using views similar to those shown in Figures 9b and 9c. However, due to the lack of clarity in those images and since the solver appeared to be performing reasonably, no issues were sus- pected. When presented with the before and after views from Figures 9a and 10a, one ProjectX developer expressed great frustration that ElVis was not available during the development of the distance function. It would have saved him many hours of confusion, greatly accelerating the debugging process by providing clear and direct access to the underlying data. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.8">Performance</head><p>For ElVis to be useful, it must be able to provide images that are both accurate and interactive. To examine performance, we tested three different scenarios in both the delta and ONERA wing data sets. For test 1, we rendered a color map and ten contour lines on a cut-plane through each wing (similar to the view shown in <ref type="figure" coords="8,470.44,474.85,29.96,10.80" target="#fig_6">Figure 5</ref>). Test 2 measures the performance of rendering color maps and ten contour lines on the element surfaces directly (as shown in <ref type="figure" coords="8,465.77,494.78,28.67,10.80" target="#fig_1">Figure 1</ref>). The final test consists of an isosurface rendering in each data set. The results of these performance tests, along with the amount of memory used by the GPU during rendering, is shown in <ref type="figure" coords="8,425.86,524.67,33.12,10.80" target="#fig_1">Figure 11</ref>. We found that visualizations of regions with highly anisotropic elements performed worse than regions without. The root cause of this behavior is that these types of elements often produce bounding boxes that significantly overestimate the element's footprint, which reduces the effectiveness of ElVis' acceleration structures. To illustrate the practical impact, we rendered views with many anisotropic elements (denoted as " detail " in <ref type="figure" coords="8,373.25,594.52,34.98,10.80" target="#fig_1">Figure 11</ref>) and views with few (denoted as " overview " ). For all test cases, we measured performance and memory usage as the image size increases and as the number of elements in the data set increases. To create the data sets, the implied metric fields from Case 1 and Case 2 were scaled and new meshes were generated <ref type="bibr" coords="8,496.83,644.44,13.74,10.80" target="#b16">[17]</ref>. Tests were run on a desktop workstation equipped with an NVIDIA Tesla C2050 GPU and Intel Xeon W3520 quad-core processor running at 2.6 GHz. The Cuda and OptiX kernels were executed using double precision floating point numbers. <ref type="figure" coords="8,295.08,694.37,26.90,10.80">Figures</ref>Delta wing cut-plane (detail). Delta wing cut-plane (overview). Delta wing surfaces (detail). Delta wing surfaces (overview). ONERA wing cut-plane (detail). ONERA wing cut-plane (overview). ONERA wing surfaces (detail). ONERA wing surfaces (overview). </p><p>(Delta wing isosurface (detail). Delta wing isosurface (overview). ONERA wing isosurface (detail). ONERA wing isosurface (overview). rarely consist of volumes with as much as a million elements. In fact, the only real constraint on volume size is the memory required, shown in <ref type="figure" coords="9,40.87,439.23,32.53,10.80" target="#fig_1">Figure 11</ref>(f), which limits the size of the volume that can be stored on the Tesla 2050 to approximately 1.5 million elements. The isosurface algorithm we are currently using is an adapted version of the algorithm shown by Nelson et al. <ref type="bibr" coords="9,152.73,469.12,14.94,10.80" target="#b18">[19] </ref>that has not yet been optimized for GPU execution, which results in the relatively poor performance of isosurfaces when compared to cut-surfaces. We plan on developing new, GPU-specific algorithms for isosurface generation to address this issue. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusion</head><p> This paper presents ElVis, a new high-order finite element visualization system. ElVis was designed with an extensible architecture; it provides interactive performance; and it produces accurate, pixelexact visualizations. The final point deserves further emphasis: ElVis makes few assumptions about the underlying data, nor does it use approximations when evaluating the solution. This degree of accuracy is a substantial step beyond what is possible in contemporary, linear interpolation-based methods. ElVis provides users with direct access to their finite element solution data either through conversion to known storage formats or by querying user-provided code directly. Direct data access is a capability previously unavailable to most finite element practitioners, and judging from the reactions of ProjectX developers, this capability is immensely valuable. We show that the software design elements behind ElVis reduce barriers to entry (in terms of coding effort) for new users. ElVis is also readily available as a full-fledged, ready-to-use application, making it a good choice for finite element practitioners seeking a native high-order visualization system. The capabilities demonstrated here are the components of ElVis' initial release, which has been focused on scalar field visualization. This is not a fundamental limitation of the software; future releases will address additional visualization capabilities to address additional user requests. In particular, our next release will address vector fields. While techniques exist for generating streamlines in high-order fields <ref type="bibr" coords="9,294.12,449.19,14.19,10.80" target="#b29">[31,</ref><ref type="bibr" coords="9,310.89,449.19,6.47,10.80" target="#b4"> 5]</ref>, it is not immediately apparent how this will extend to a GPU implementation; additional capabilities will need to be developed for ElVis to support these features. Additionally, the direct-access to solution data will allow ElVis to naturally handle solutions involving cut cells <ref type="bibr" coords="9,312.58,489.05,9.52,10.80" target="#b6">[7]</ref>, a capability not available in any current visualization system. Even as it stands now, every ProjectX developer wanted to know how to " get <ref type="bibr" coords="9,343.24,508.97,25.86,10.80">[ElVis] </ref>on my computer " or " when can I start using <ref type="bibr" coords="9,294.12,518.93,20.02,10.80">[ElVis]</ref> . " ElVis fills a major gap that has existed in scientific visualization . While solvers are moving toward high-order methods, visualization systems continue to apply linear interpolations. ProjectX developers and users were hard-pressed to debug their solver and analyze the results it produced. High levels of visualization errors caused developers to misdiagnose bugs and arrive at erroneous conclusions about mesh resolution, amongst other issues. These problems could have been avoided with ElVis. Ultimately, everyone involved agrees that ElVis would be a welcome and valuable addition to their kit of development, debugging, and analysis tools. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1" coords="4,285.12,53.64,114.48,8.40;4,285.12,63.31,111.30,8.40;4,285.12,72.27,79.03,8.33;4,300.46,79.72,191.29,8.40;4,285.12,90.32,10.84,6.27;4,300.46,96.13,141.97,8.40;4,300.46,105.10,164.07,8.40;4,285.12,115.51,10.85,6.27"><head>ALGORITHM 1: </head><figDesc>Surface Visualization Step 1 -Sample the field on the surface. if Surface is a cell face then Sample the scalar field using the basis functions defined for the face. else Cast a secondary ray to find the enclosing element. Sample the scalar field using the element's basis functions. end </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2" coords="4,285.12,327.42,250.38,9.60;4,285.12,338.57,250.38,7.37;4,285.12,348.04,250.38,7.37;4,285.12,357.50,250.38,7.37;4,285.12,366.96,49.61,7.37"><head>Fig. 3. </head><figDesc> Fig. 3. Isosurface of Mach number 0.1919 for the delta wing simulation (Section 5.1.1), showing the development and roll up of the vortex structures along the leading edge and downstream of the wing. Note the crack in the surface arises because the underlying solution is from a DG method. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3" coords="4,285.12,626.48,114.13,8.40;4,285.12,638.00,250.37,8.40;4,305.89,646.37,90.90,9.09;4,285.12,659.07,54.15,8.83;4,341.32,660.11,4.65,12.10;4,347.51,659.07,15.62,8.33;4,300.46,668.04,145.68,8.83;4,300.46,680.14,231.21,8.83;4,300.46,689.11,53.30,8.83;4,300.46,700.61,9.83,9.09;4,312.42,702.25,4.65,12.10;4,318.62,701.21,44.59,8.83;4,315.81,708.66,202.14,8.40;4,300.46,719.26,10.85,6.27;4,285.12,729.22,10.85,6.27"><head>ALGORITHM 2: </head><figDesc>Isosurface Algorithm Input: A ray R(t) and a list of all elements E traversed by the ray, ordered by intersection distance, and desired isovalue ρ. foreach Element E i ∈ E do Determine ray entrance t a and exit t b for element E i . Evaluate the field on the ray segment [t a ,t b ] using interval arithmetic to obtain field bounds [ f min , f max ]. if ρ ∈ [ f min , f max ] then Perform root-finding procedure to identify the location of the isosurface. end end </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5" coords="6,22.50,224.70,250.38,7.37;6,22.50,234.16,250.38,7.37;6,22.50,243.62,125.36,7.37"><head>Fig. 4. </head><figDesc>Fig. 4. Plotting Mach Number at the leading edge of the delta wing (Case 1) at the symmetry plane with ElVis (a) and Visual3 using 0 (b), 1 (c), and 2 (d) levels of refinement. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6" coords="6,285.12,153.16,250.38,7.37;6,285.12,162.62,250.38,7.37;6,285.12,172.09,201.05,7.37"><head>Fig. 5. </head><figDesc>Fig. 5. A zoomed out ElVis generated image of the delta wing from Case 1 showing the location of the cut-plane used in Figure 6. The cut plane is located 0.2 chords behind the trailing edge of the wing. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8" coords="7,31.50,324.64,250.38,7.37;7,31.50,334.11,250.38,7.37;7,31.50,343.57,250.38,7.37;7,31.50,353.04,250.38,7.37;7,31.50,362.50,250.38,7.37;7,31.50,371.96,209.91,7.37"><head>Fig. 6. </head><figDesc>Fig. 6. Plotting Mach number contours at the trailing edge of the delta wing (Case 1). An overview of this scenario is shown in Figure 5, with a detailed view of the contours on the trailing cut-plane generated by ElVis (a) and Visual3 using 0 (b), 1 (c), and 2 (d) levels of refinement. For visual clarity, we have modified the contour lines produced by both systems so they are thicker than the default one pixel width. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10" coords="7,294.12,328.95,250.38,7.37;7,294.12,338.41,164.20,7.37"><head>Fig. 7. </head><figDesc>Fig. 7. A top-down view of the hemisphere from Case 3. The mesh plotting tools of Visual3 and ElVis are enabled. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12" coords="7,294.12,432.92,250.38,7.37;7,294.12,442.38,250.38,7.37;7,294.12,450.16,217.68,9.60;7,513.25,451.34,6.20,13.83;7,520.87,450.16,23.63,9.52;7,294.12,459.62,79.87,9.52;7,375.16,460.81,6.20,13.83;7,382.50,459.62,162.00,9.52;7,294.12,470.77,143.91,7.37"><head>Fig. 8. </head><figDesc>Fig. 8. Views of Case 4 (negative Jacobians in a single tetrahedron) rendered with ElVis. Colors show Jacobian values from -0.5 to 0.0. Left is a view of the x + y + z = 1 face being intersected by the x − y face. Right is a view of the x − z face, where the self-intersection effect of the quadratic node at (0.5,0,0.6) is apparent. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13" coords="8,269.14,423.87,3.74,10.80;8,22.50,433.84,250.38,10.80;8,22.50,443.80,250.38,10.80;8,22.50,453.76,250.38,10.80;8,73.09,578.33,29.81,9.60;8,165.03,578.33,84.71,9.60;8,47.41,690.86,81.17,9.60;8,165.03,690.86,84.71,9.60"><head></head><figDesc>ure 9 are largely unchanged, hence only the highest resolution Visual3 image was replicated. Indeed, the 0 refinement results from Visual3 with the bug fixed appears indistinguishable from Figure 9b, making (a) ElVis (b) Visual3 0 Refinements (c) Visual3 1 Refinement (d) Visual3 2 Refinements </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_14" coords="8,22.50,715.73,250.38,7.37;8,22.50,725.19,250.38,7.37;8,22.50,734.66,250.38,7.37;8,22.50,744.12,52.12,7.37"><head>Fig. </head><figDesc>Fig. 9. Plotting the isosurface for a distance of 6.2886 to the surface of the ONERA wing (Case 2) with ElVis (a) and Visual3 using 0 (b), 1 (c), and 2 (d) levels of refinement. Here, the underlying distance computation has a bug. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_15" coords="8,285.12,167.09,250.38,7.37;8,285.12,176.56,96.33,7.37"><head>Fig. 10. </head><figDesc>Fig. 10. The same view as shown in Figure 9 but with the underlying distance computation fixed. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_16" coords="9,230.41,354.67,150.11,9.60;9,230.41,364.13,84.99,9.60;9,316.51,365.32,6.20,13.83;9,323.81,364.13,37.41,9.60;9,434.33,340.17,7.47,6.11;9,483.35,340.22,7.47,6.11;9,532.38,340.22,7.47,6.11;9,412.33,335.76,8.07,5.40;9,412.33,323.87,8.07,5.40;9,412.33,311.58,8.07,5.40;9,409.64,300.10,10.76,5.40;9,409.64,288.62,10.76,5.40;9,409.64,275.92,10.76,5.40;9,409.64,264.44,10.76,5.40;9,409.64,255.06,10.76,5.40;9,453.10,306.36,14.04,5.40;9,459.46,346.38,44.82,5.40;9,398.95,295.87,6.48,15.44;9,398.95,284.79,6.48,9.96;9,474.65,228.94,23.76,5.40;9,474.65,234.66,25.25,5.40;9,393.97,354.67,150.22,9.60;9,393.97,364.13,50.24,9.60"><head></head><figDesc> memory usage as the number of elements increases </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_17" coords="9,31.50,399.33,446.76,7.37"><head>Fig. 11. </head><figDesc>Fig. 11. Performance and memory usage for the delta and ONERA wing when varying the image size and number of elements. </figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1" validated="false" coords="8,285.12,694.37,250.38,50.65"><figDesc coords="8,324.86,694.37,210.64,10.80;8,285.12,704.33,250.38,10.80;8,285.12,714.29,250.38,10.80;8,285.12,724.25,250.38,10.80;8,285.12,734.22,250.38,10.80">11(a) and 11(b) indicate that our method scales well with increasing image size. Figures 11(d) and 11(e) show that it also scales better than linear as the number of elements in the volume increases. This is important since, compared to traditional finite element methods which routinely use 100s of millions of elements, high-order solutions</figDesc><table coords="9,41.39,50.51,502.20,301.28">600 × 600 1000 × 1000 1800 × 1800 
+10 −2 
+
+10 −1 
+
+10 0 
+
+10 1 
+
+10 2 
+Linear 
+
+Image Size 
+
+Time (s) 
+
+Delta wing cut-plane (detail). 
+Delta wing cut-plane (overview). 
+Delta wing surfaces (detail). 
+Delta wing surfaces (overview). 
+ONERA wing cut-plane (detail). 
+ONERA wing cut-plane (overview). 
+ONERA wing surfaces (detail). 
+ONERA wing surfaces (overview). 
+
+(a) Cut-surface performance as image size increases 
+
+600 × 600 1000 × 1000 1800 × 1800 
+10 −2 
+
+10 −1 
+
+10 0 
+
+10 1 
+
+10 2 
+
+Linear 
+
+Image Size 
+
+Time (s) 
+
+Delta wing isosurface (detail). 
+Delta wing isosurface (overview). 
+ONERA wing isosurface (detail). 
+ONERA wing isosurface (overview). 
+
+(b) Isosurface performance as image size in-
+creases 
+
+600 × 600 1000 × 1000 1800 × 1800 
+300 
+
+400 
+
+500 
+
+630 
+
+800 
+
+1000 
+
+1250 
+
+1600 
+
+Linear 
+
+Image Size 
+
+Memory (MB) 
+
+Delta wing 
+Onera wing 
+
+(c) GPU memory usage as the image size in-
+creases 
+
+10 4 
+10 5 
+10 6 
+
+10 −1 
+
+10 0 
+
+10 1 
+
+Linear 
+
+Number of Elements 
+
+Time (s) 
+
+</table></figure>
+
+			<note place="foot" n="4">.1 Extensibility Module One of the fundamental challenges of creating a general-purpose visualization system for high-order finite element simulations is that there is no single set of basis functions that is appropriate in all simulation settings. Therefore, each simulation system chooses the basis that is most suited for the problems at hand. This means that ElVis cannot be implemented in terms of any specific basis and expect to be used with arbitrary simulation systems. The Extensibility Module addresses this issue by providing a plugin interface that acts as a bridge between the visualization system and the simulation package. The module accepts plugins written in one of two ways, each providing different trade-offs as described below. The first type of plugin is the data conversion plugin , which is used to convert a data set from the format used by the simulation package to the format used by ElVis&apos; default plugin, the Nektar++ extension [2]. The second plugin type is the runtime plugin , which provides an interface for ElVis to interactively query the simulation data on both the CPU and GPU. The purpose of the data conversion plugin is to convert fields and geometry from the format used by the simulation package into the native Nektar++ format used by ElVis. The Nektar++ data format is supported through a default runtime plugin (described below) that is distributed with ElVis as a reference implementation for the development of plugins for other simulation systems. Nektar++ uses a polynomial basis to represent its data, and the data conversion plugin is responsible for projecting the field from the simulation package onto the polynomial basis used by Nektar++. Projection of the data then occurs as follows . First, ElVis queries the plugin to obtain information about each element&apos;s type (e.g., hexahedron, tetrahedron) and the desired polynomial order of the converted data set. For simulations already using a polynomial basis, this can be chosen so that the projection introduces no error beyond floating-point rounding errors. For other bases, it can be set to the level needed to meet the desired accuracy requirements. ElVis then queries the plugin to determine if the resulting projection should be represented using functions that are continuous or discontinuous at element boundaries. Finally, ElVis samples the field at a collection of points determined by the choices made in the previous steps and creates the projected data set. The advantages of this approach when compared to runtime plugins (described below) are that they will generally require less coding and, once the conversion is done, ElVis will have no runtime dependencies on the simulation package. Another advantage is that ElVis handles all of the details about file formats and data storage—the plugin is only responsible for sampling the solution. The downside is that the native internal format represents fields and geometry as the tensor product of one-dimensional polynomials [12]. Therefore, data sets from simulation packages where fields are represented by non-polynomial basis functions cannot be represented exactly, so this approach will introduce projection error into the visualization. Another disadvantage is that simulations using non-standard elements do not fit the input requirements described above and cannot be converted. Runtime plugins are loaded into ElVis each time it is run; they provide access to a simulation&apos;s data during the rendering process. The data can be accessed directly in the format used by the simulation (e.g., polynomial or Fourier basis functions) without the need to convert formats first. However, implementing a runtime plugin</note>
+
+			<note place="foot">NELSON ET AL: ELVIS: A SYSTEM FOR THE ACCURATE AND INTERACTIVE VISUALIZATION OF HIGH-ORDER FINITE…</note>
+
+			<note place="foot">IEEE TRANSACTIONS ON VISUALIZATION AND COMPUTER GRAPHICS, VOL. 18, NO. 12, DECEMBER 2012</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments </head><p>The authors would like to thank the entire ProjectX team for their many contributions, including the solutions used in our examples and many insightful discussions over the course of this work. This work is supported under ARO W911NF-08-1-0517 (Program Manager Dr. </p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct coords="10,40.76,72.62,190.70,9.60"  xml:id="b0">
+	<analytic>
+		<title/>
+	</analytic>
+	<monogr>
+		<title level="j">Cuda. developer.nvidia.com</title>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,82.08,129.55,9.60"  xml:id="b1">
+	<monogr>
+		<title/>
+		<author>
+			<persName>
+				<surname>Nektar++</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,91.55,232.12,9.60;10,40.76,101.01,129.30,9.60"  xml:id="b2">
+	<analytic>
+		<title/>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Akin</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">W</forename>
+				<surname>Gray</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">Q</forename>
+				<surname>Zhang</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Colouring isoparametric contours. Engineering Computations</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="36" to="41" />
+			<date type="published" when="1984" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,110.48,232.12,9.60;10,40.76,119.94,232.12,9.60;10,40.76,129.41,232.12,9.60;10,40.76,138.87,43.76,9.60"  xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Rendering planar cuts through quadratic and cubic finite elements</title>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Brasher</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Haimes</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on Visualization &apos;04, VIS &apos;04</title>
+		<meeting>the conference on Visualization &apos;04, VIS &apos;04<address><addrLine>Washington, DC, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="409" to="416" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,148.34,232.12,9.60;10,40.76,157.80,226.92,9.60"  xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Nonlinear particle tracking for high-order elements</title>
+		<author>
+			<persName>
+				<forename type="first">G</forename>
+				<surname>Coppola</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<forename type="middle">J</forename>
+				<surname>Sherwin</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Peiró</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Comput. Phys</title>
+		<imprint>
+			<biblScope unit="volume">172</biblScope>
+			<biblScope unit="page" from="356" to="386" />
+			<date type="published" when="2001-09" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,167.27,232.12,9.60;10,40.76,176.73,232.12,9.60;10,40.76,186.20,232.12,9.60;10,40.76,195.66,34.32,9.60"  xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Massively parallel solution techniques for higher-order finite-element discretizations in CFD</title>
+		<author>
+			<persName>
+				<forename type="first">L</forename>
+				<forename type="middle">T</forename>
+				<surname>Diosady</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<forename type="middle">L</forename>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Adaptive High-Order Methods in Computational Fluid Dynamics. World Scientific</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,205.12,232.12,9.60;10,40.76,214.59,232.12,9.60;10,40.76,224.05,188.56,9.60"  xml:id="b6">
+	<analytic>
+		<title level="a" type="main">A triangular cut-cell adaptive method for higher-order discretizations of the compressible Navier- Stokes equations</title>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<forename type="middle">J</forename>
+				<surname>Fidkowski</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<forename type="middle">L</forename>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Comput. Phys</title>
+		<imprint>
+			<biblScope unit="volume">225</biblScope>
+			<biblScope unit="page" from="1653" to="1672" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,233.52,232.12,9.60;10,40.76,242.98,232.12,9.60;10,40.76,252.45,144.79,9.60"  xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Multiresolution visualization of higher order adaptive finite element simulations</title>
+		<author>
+			<persName>
+				<forename type="first">B</forename>
+				<surname>Haasdonk</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Ohlberger</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Rumpf</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">A</forename>
+				<surname>Schmidt</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<forename type="middle">G</forename>
+				<surname>Siebert</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computing</title>
+		<imprint>
+			<biblScope unit="volume">70</biblScope>
+			<biblScope unit="page" from="181" to="204" />
+			<date type="published" when="2003-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,261.91,232.12,9.60;10,40.76,271.38,232.12,9.60;10,40.76,280.84,149.65,9.60"  xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Visualization in computational fluid dynamics: A case study</title>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Haimes</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Darmofal</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Computer Society, Visualization</title>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="392" to="397" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,290.30,232.12,9.60;10,40.76,299.77,115.99,9.60"  xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Visual3: Interactive unsteady unstructured 3d visualization</title>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Haimes</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Giles</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,309.23,232.12,9.60;10,40.76,318.70,232.12,9.60;10,40.76,328.16,232.12,9.60;10,40.76,337.63,75.63,9.60"  xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A spectral element method for solution of two-and three-dimensional time dependent Navier-Stokes equations</title>
+		<author>
+			<persName>
+				<forename type="first">G</forename>
+				<surname>Karniadakis</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">E</forename>
+				<surname>Bullister</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">A</forename>
+				<surname>Patera</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Finite Element Methods for Nonlinear Problems</title>
+		<imprint>
+			<publisher>Springer- Verlag</publisher>
+			<date type="published" when="1985" />
+			<biblScope unit="page">803</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,347.09,232.12,9.60;10,40.76,356.56,191.26,9.60"  xml:id="b11">
+	<monogr>
+		<title level="m" type="main">Spectral/hp element methods for CFD</title>
+		<author>
+			<persName>
+				<forename type="first">G</forename>
+				<forename type="middle">E</forename>
+				<surname>Karniadakis</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<forename type="middle">J</forename>
+				<surname>Sherwin</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+			<publisher>Oxford University Press</publisher>
+			<pubPlace>New-York, NY, USA</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,366.02,232.12,9.60;10,40.76,375.49,232.12,9.60;10,40.76,384.95,180.64,9.60"  xml:id="b12">
+	<analytic>
+		<title level="a" type="main">A predictor-corrector contouring algorithm for isoparametric 3d elements</title>
+		<author>
+			<persName>
+				<forename type="first">G</forename>
+				<forename type="middle">D</forename>
+				<surname>Kontopidis</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<forename type="middle">E</forename>
+				<surname>Limbert</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal for Numerical Methods in Engineering</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">7</biblScope>
+			<biblScope unit="page" from="995" to="1004" />
+			<date type="published" when="1983" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,394.41,232.12,9.60;10,40.76,403.88,232.12,9.60;10,40.76,413.34,71.95,9.60"  xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Error estimation and anisotropic mesh refinement for 3d laminar aerodynamic flow simulations</title>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Leicht</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Hartmann</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Comput. Phys</title>
+		<imprint>
+			<biblScope unit="volume">229</biblScope>
+			<biblScope unit="page" from="7344" to="7360" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,422.81,232.12,9.60;10,40.76,432.27,232.12,9.60;10,40.76,441.74,112.68,9.60"  xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Contour plotting of data using isoparametric element representation</title>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<forename type="middle">L</forename>
+				<surname>Meek</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">G</forename>
+				<surname>Beer</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal for Numerical Methods in Engineering</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="954" to="957" />
+			<date type="published" when="1976" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,451.20,232.12,9.60;10,40.76,460.67,232.12,9.60;10,40.76,470.13,227.78,9.60"  xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Particle systems for efficient and accurate high-order finite element visualization</title>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Meyer</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">B</forename>
+				<surname>Nelson</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Kirby</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Whitaker</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page" from="1015" to="1026" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,479.59,232.12,9.60;10,40.76,489.06,128.29,9.60"  xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Anisotropic mesh adaptation through edge primitive operations</title>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Michal</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Krakos</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,498.52,232.12,9.60;10,40.76,507.99,172.21,9.60"  xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Accurate and Interactive Visualization of High-Order Finite Element Fields</title>
+		<author>
+			<persName>
+				<forename type="first">B</forename>
+				<surname>Nelson</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,517.45,232.12,9.60;10,40.76,526.92,232.12,9.60;10,40.76,536.38,191.82,9.60"  xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Ray-tracing polymorphic multidomain spectral/hp elements for isosurface rendering</title>
+		<author>
+			<persName>
+				<forename type="first">B</forename>
+				<surname>Nelson</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<forename type="middle">M</forename>
+				<surname>Kirby</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="114" to="125" />
+			<date type="published" when="2006-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,545.85,232.12,9.60;10,40.76,555.31,232.12,9.60;10,40.76,564.78,232.12,9.60;10,40.76,574.24,17.93,9.60"  xml:id="b19">
+	<analytic>
+		<title level="a" type="main">GPU-based interactive cutsurface extraction from high-order finite element fields</title>
+		<author>
+			<persName>
+				<forename type="first">B</forename>
+				<surname>Nelson</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<forename type="middle">M</forename>
+				<surname>Kirby</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Haimes</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="1803" to="1811" />
+			<date type="published" when="2011-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,583.70,232.12,9.60;10,40.76,593.17,160.92,9.60"  xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Impact of turbulence model irregularity on high-order discretizations</title>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Oliver</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Darmofal</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,602.63,232.12,9.60;10,40.76,612.10,232.12,9.60;10,40.76,621.56,125.67,9.60"  xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Efficient parallel vectors feature extraction from higher-order data</title>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Pagot</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Osmari</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">F</forename>
+				<surname>Sadlo</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Weiskopf</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Ertl</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Comba</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="751" to="760" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,631.03,232.12,9.60;10,40.76,640.49,232.12,9.60;10,40.76,649.96,232.12,9.60;10,40.76,659.42,232.12,9.60;10,40.76,668.88,193.04,9.60"  xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Interactive Isocontouring of High-Order Surfaces</title>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Pagot</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Vollrath</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">F</forename>
+				<surname>Sadlo</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Weiskopf</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Ertl</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Comba</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Scientific Visualization: Interactions, Features, Metaphors, volume 2 of Dagstuhl Follow-Ups Schloss Dagstuhl– Leibniz-Zentrum fuer Informatik</title>
+		<editor>H. Hagen</editor>
+		<meeting><address><addrLine>Dagstuhl, Germany</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="276" to="291" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,678.35,232.12,9.60;10,40.76,687.81,232.12,9.60;10,40.76,697.28,232.12,9.60;10,40.76,706.74,42.95,9.60"  xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Optix: A general purpose ray tracing engine</title>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<forename type="middle">G</forename>
+				<surname>Parker</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Bigler</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">A</forename>
+				<surname>Dietrich</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">H</forename>
+				<surname>Friedrich</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Hoberock</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Luebke</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Mcallister</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Mcguire</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<surname>Morley</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">A</forename>
+				<surname>Robison</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Stich</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<date type="published" when="2010-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,716.21,232.12,9.60;10,40.76,725.67,144.67,9.60"  xml:id="b24">
+	<analytic>
+		<title level="a" type="main">A spectral method for fluid dynamics: Laminar flow in a channel expansion</title>
+		<author>
+			<persName>
+				<forename type="first">A</forename>
+				<surname>Patera</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Comp. Phys</title>
+		<imprint>
+			<biblScope unit="volume">54</biblScope>
+			<biblScope unit="page">468</biblScope>
+			<date type="published" when="1984" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,40.76,735.14,232.12,9.60;10,303.38,52.10,167.47,9.60"  xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Pressure distributions on the onera-m6-wing at transonic mach numbers</title>
+		<author>
+			<persName>
+				<forename type="first">V</forename>
+				<surname>Schmitt</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">F</forename>
+				<surname>Charpin</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">AGARD AR</title>
+		<imprint>
+			<biblScope unit="volume">138</biblScope>
+			<date type="published" when="1979" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,61.56,232.12,9.60;10,303.38,71.03,232.12,9.60;10,303.38,80.49,232.12,9.60;10,303.38,89.96,17.93,9.60"  xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Framework for visualizing higher-order basis functions</title>
+		<author>
+			<persName>
+				<forename type="first">W</forename>
+				<surname>Schroeder</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">F</forename>
+				<surname>Bertel</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Malaterre</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Thompson</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">P</forename>
+				<surname>Pebay</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<forename type="middle">O</forename>
+				<surname>Barall</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<surname>Tendulkar</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization, 2005. VIS 05. IEEE</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="43" to="50" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,99.42,232.12,9.60;10,303.38,108.89,232.12,9.60;10,303.38,118.35,52.67,9.60"  xml:id="b27">
+	<analytic>
+		<title level="a" type="main">A simple and fast algorithm for the plotting of contours using quadrilateral meshes</title>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Singh</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Sarkar</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Finite Elem. Anal. Des</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="page" from="217" to="228" />
+			<date type="published" when="1990-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,127.82,232.12,9.60;10,303.38,137.28,208.61,9.60;10,285.12,145.01,33.49,11.34;10,314.41,146.74,221.09,9.60;10,303.38,156.21,232.12,9.60;10,303.38,165.67,17.93,9.60"  xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Accurate contour plotting using 6-node triangular elements in 2d Interactive high-quality visualization of higher-order finite elements</title>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<surname>Singh</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<surname>Singh</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<forename type="middle">¨</forename>
+				<surname>Uffinger</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">S</forename>
+				<surname>Frey</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">T</forename>
+				<surname>Ertl</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Finite Elem. Anal. Des. Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">45</biblScope>
+			<biblScope unit="issue">292</biblScope>
+			<biblScope unit="page" from="81" to="93337" />
+			<date type="published" when="2009-01-30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,175.14,232.12,9.60;10,303.38,184.60,232.12,9.60;10,303.38,194.07,232.12,9.60;10,303.38,203.53,84.91,9.60"  xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Onesided smoothness-increasing accuracy-conserving filtering for enhanced streamline integration through discontinuous fields</title>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Walfisch</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<forename type="middle">K</forename>
+				<surname>Ryan</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<forename type="middle">M</forename>
+				<surname>Kirby</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">R</forename>
+				<surname>Haimes</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Sci. Comput</title>
+		<imprint>
+			<biblScope unit="volume">38</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="164" to="184" />
+			<date type="published" when="2009-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,213.00,232.12,9.60;10,303.38,222.46,232.12,9.60;10,303.38,231.92,232.12,9.60;10,303.38,241.39,96.09,9.60"  xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Ray casting curvedquadratic elements</title>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<forename type="middle">F</forename>
+				<surname>Wiley</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">H</forename>
+				<surname>Childs</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">B</forename>
+				<surname>Hamann</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<surname>Joy</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics/IEEE TCVG, ACM Siggraph</title>
+		<editor>O. Deussen, C. D. Hansen, D. Keim, and D. Saupe</editor>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="201" to="209" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,250.85,232.12,9.60;10,303.38,260.32,232.12,9.60;10,303.38,269.78,232.12,9.60;10,303.38,279.25,188.16,9.60"  xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Contouring curved quadratic elements</title>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<forename type="middle">F</forename>
+				<surname>Wiley</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">H</forename>
+				<forename type="middle">R</forename>
+				<surname>Childs</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">B</forename>
+				<forename type="middle">F</forename>
+				<surname>Gregorski</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">B</forename>
+				<surname>Hamann</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">K</forename>
+				<forename type="middle">I</forename>
+				<surname>Joy</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the symposium on Data visualisation 2003, VISSYM &apos;03</title>
+		<meeting>the symposium on Data visualisation 2003, VISSYM &apos;03<address><addrLine>Aire-la-Ville, Switzerland, Switzerland</addrLine></address></meeting>
+		<imprint>
+			<publisher>Eurographics Association</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="167" to="176" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,288.71,232.12,9.60;10,303.38,298.18,232.12,9.60;10,303.38,307.64,142.23,9.60"  xml:id="b32">
+	<analytic>
+		<title level="a" type="main">A high accuracy volume renderer for unstructured data</title>
+		<author>
+			<persName>
+				<forename type="first">P</forename>
+				<forename type="middle">L</forename>
+				<surname>Williams</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">N</forename>
+				<forename type="middle">L</forename>
+				<surname>Max</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">C</forename>
+				<forename type="middle">M</forename>
+				<surname>Stein</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="page" from="37" to="54" />
+			<date type="published" when="1998-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,317.11,232.12,9.60;10,303.38,326.57,232.12,9.60;10,303.38,336.03,72.39,9.60"  xml:id="b33">
+	<monogr>
+		<title level="m" type="main">An optimization framework for anisotropic simplex mesh adaptation: application to aerodynamic flows</title>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Yano</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Darmofal</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,345.50,232.12,9.60;10,303.38,354.96,232.12,9.60;10,303.38,364.43,74.38,9.60"  xml:id="b34">
+	<monogr>
+		<title level="m" type="main">The importance of mesh adaptation for higher-order discretizations of aerodynamic flows</title>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Yano</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">J</forename>
+				<forename type="middle">M</forename>
+				<surname>Modisette</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">D</forename>
+				<surname>Darmofal</surname>
+			</persName>
+		</author>
+		<imprint>
+			<date type="published" when="2011-06" />
+			<publisher>AIAA</publisher>
+			<biblScope unit="page" from="2011" to="3852" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct coords="10,303.38,373.89,232.12,9.60;10,303.38,383.36,232.12,9.60;10,303.38,392.82,90.87,9.60"  xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Interactive point-based rendering of higherorder tetrahedral data</title>
+		<author>
+			<persName>
+				<forename type="first">Y</forename>
+				<surname>Zhou</surname>
+			</persName>
+		</author>
+		<author>
+			<persName>
+				<forename type="first">M</forename>
+				<surname>Garland</surname>
+			</persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page">2006</biblScope>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

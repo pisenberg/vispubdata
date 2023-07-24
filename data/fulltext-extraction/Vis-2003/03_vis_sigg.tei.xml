@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Signed Distance Transform Using Graphics Hardware</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Sigg</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Markus Gross ETH Zürich</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronald</forename><surname>Peikert</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">Markus Gross ETH Zürich</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Signed Distance Transform Using Graphics Hardware</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:52+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>I.3.3 [Computer Graphics]: Picture/Image Generation -Bitmap and framebuffer operations; I.3.5 [Computer Graphics]: Computational Geometry and Object Modeling -Curve</term>
+					<term>surface</term>
+					<term>solid</term>
+					<term>and object representations Distance field</term>
+					<term>distance transform</term>
+					<term>Voronoi diagram</term>
+					<term>fragment program</term>
+					<term>scan conversion</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>This paper presents a signed distance transform algorithm using graphics hardware, which computes the scalar valued function of the Euclidean distance to a given manifold of co-dimension one. If this manifold is closed and orientable, the distance has a negative sign on one side of the manifold and a positive sign on the other. Triangle meshes are considered for the representation of a twodimensional manifold and the distance function is sampled on a regular Cartesian grid. In order to achieve linear complexity in the number of grid points, to each primitive we assign a simple polyhedron enclosing its Voronoi cell. Voronoi cells are known to contain exactly all points that lay closest to its corresponding primitive. Thus, the distance to the primitive only has to be computed for grid points inside its polyhedron. Although Voronoi cells partition space, the polyhedrons enclosing these cells do overlap. In regions where these overlaps occur, the minimum of all computed distances is assigned to a grid point. In order to speed up computations, points inside each polyhedron are determined by scan conversion of grid slices using graphics hardware. For this task, a fragment program is used to perform the nonlinear interpolation and minimization of distance values.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.">Introduction</head><p>Given a set of geometry objects in 2-or 3-space, a distance field is defined at each point by the smallest Euclidean distance to a point on one of the objects. Objects can be curves in 2-space and surfaces in 3-space or, more generally, any compact subset. If an orientable and closed n-1 dimensional manifold is chosen, the distance field can be given a sign.</p><p>Signed or unsigned distance fields have many applications in computer graphics, scientific visualization and related areas, such as implicit surface representation <ref type="bibr" target="#b4">[Frisken et al. 2000</ref><ref type="bibr">, Gibson 1988</ref>], object metamorphosis <ref type="bibr" target="#b1">[Cohen-Or et al. 1998</ref>], collision detection and robotics <ref type="bibr" target="#b4">[Frisken et al. 2000]</ref>, skeletonization <ref type="bibr" target="#b15">[Wan et al. 2001]</ref>, accelerated volume raytracing <ref type="bibr" target="#b13">[Sramek and Kaufman 2000]</ref>, camera path planning and image registration <ref type="bibr" target="#b2">[Cuisenaire 1999]</ref>. Depending on the application, the distance field is required on a full pixel or voxel grid or only within a band of width d around the objects.</p><p>The problem of computing a 3D Euclidean distance transform exists in two varieties, distinguished by the type of object representation. The object can either be given as data on a voxel grid or in vector representation, typically a triangle mesh in the case where the object is a surface. Both problems have been studied extensively and fast methods have been developed for both of them. It is reasonable to treat the two problems separately. If the goal is to sample the exact distance to a triangle mesh, the problem cannot be stated in voxel space. Likewise, there is usually no advantage to transform the problem from voxel representation to vector representation. For triangle meshes, time complexity must depend on the number M of surface primitives (faces, edges, and vertices). Therefore, algorithms for the two different problem settings cannot be directly compared.</p><p>A method <ref type="bibr">[Maruer et al. 2003</ref>] which has been recently presented, finds the distance transform in voxel data in O(N) time, where N is the number of voxels. In the same paper, a good overview of earlier methods is given. Essentially, methods fall into two categories, propagation methods and methods based on Voronoi diagrams.</p><p>In propagation methods, the distance information is carried over to neighbor voxels, either by sweeping in all grid dimensions, or by propagating a contour. A well-known example of the latter is the Fast Marching Method (FMM) <ref type="bibr" target="#b12">[Sethian 1996]</ref>, an upwind scheme which can solve the Eikonal Equation in a single iteration and in O(N logN) operations. A signed distance field is obtained by using a constant propagation function f. However, due to the finite difference scheme, FMM is not an exact method.</p><p>Besides the distance, additional information can be stored in the distance field. Such information can be the vector pointing to the nearest object point, known as the vector distance transform <ref type="bibr" target="#b10">[Mullikin 1992]</ref>. Alternatively, the index of the nearest surface primitive can be attributed to each point, the resulting field is called a complete distance field representation <ref type="bibr" target="#b7">[Huang et al. 2001]</ref>.</p><p>By propagating this type of additional information, FMM and similar propagation methods can be turned into exact distance transform algorithms <ref type="bibr" target="#b0">[Breen et al. 2000</ref><ref type="bibr" target="#b3">, Eggers 1998</ref><ref type="bibr" target="#b14">, Tsai 2000</ref>.</p><p>Another approach is to construct a Voronoi diagram, which leads directly to a complete distance field representation. Voronoi-based methods can be used for distance transform in voxel data and then have a time complexity of O(N logN). The approach seems to be ∇u 1 f ⁄ = Computer Graphics Laboratory, Computer Science Dept., ETH Zürich, CH-8092 Zürich, Switzerland. <ref type="bibr">IEEE Visualization 2003</ref><ref type="bibr">, October 19-24, 2003</ref>, Seattle, Washington, USA 0-7803-8120-3/03/$17.00 ©2003 IEEE more natural when the distance field to a triangle mesh is being computed. In this case, the set of Voronoi sites consists of the vertices, edges and faces. Since they are not isolated points, a generalized Voronoi diagram (GVD) has to be computed. The time for generating a diagram with M sites is O(M log M). Once a GVD is computed, the distance field can easily be computed as the distance to the respective site.</p><p>All methods mentioned thus far are image space methods. An alternative are object space methods, i.e. methods based on scan conversion. Here, the distance field is obtained by scan converting a number of geometric objects related to the triangle mesh and by conditionally overwriting the computed voxel values. The advantage of object space methods is their sub-pixel accuracy. However, it is obvious that the relative performance degrades if the average triangle size shrinks to the size of a single voxel. It has been shown that for distance fields of triangle meshes, methods based on scan conversion are competitive. Such an algorithm was presented by <ref type="bibr" target="#b8">Mauch [2003]</ref>.</p><p>Starting from Mauch's algorithm, we derived a version where twodimensional grid slices are passed to the graphics hardware for scan conversion. The challenge of getting the correct nonlinear interpolation of the distance value in a grid slice was solved by a fragment program. In addition, we revised the method such that it correctly handles vertices where both convex and concave edges are adjacent.</p><p>In order to further speed up computations, we propose a modified method. By scan converting a different type of polyhedron, we were able to reduce the number of triangles to be rendered to less than a third. Our modified algorithm is significantly faster than the original software algorithm.</p><p>In Section 2, the basic definitions of a distance field and related concepts are given. In Section 3, two algorithms for computing distance fields using a scan conversion process are summarized. These two algorithms, one for graphics hardware and one for software, are the basis for our improved algorithm. Implementation issues are discussed in Section 4, and performance results are given in Section 5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Distance Fields</head><p>Given a manifold S of dimension n-1 in R n , the distance field u is a unique scalar function defined in R n . At each point, u equals the distance to the closest point on S. If the manifold S is closed and orientable, the space is divided into inner and outer parts. Therefore, a signed distance field can be defined. A positive sign is chosen outside the surface and a negative sign inside. Thus, the gradient of the distance field on the surface is equivalent to the surface normal.</p><p>The type of distance metric which is chosen depends on the application. Common choices are chessboard, chamfer and Euclidean distance <ref type="bibr" target="#b11">[Rosenfeld and Pfaltz 1968]</ref>. We will restrict ourselves to the Euclidean distance, which is probably the most meaningful, but it is also the most expensive to compute.</p><p>The signed distance field u is the solution to the Eikonal equation with boundary condition . The boundary condition shows that the definition of S as a subset of R n and the signed distance function are equivalent descriptions. The manifold corresponds to the zero-set of the signed distance function:</p><p>. Therefore, the signed distance transform converts an explicit surface representation to an implicit one.</p><p>If S is the union of S i with i=1..n, the distance field of S is the point-wise minimum of the distance fields u i of S i .</p><p>(1) For signed distance fields, minimization must be carried out with respect to absolute values. If S is a triangle mesh in 3-space, the S i can be chosen to represent the triangle faces. It is also possible to use a disjoint union. In the case of a triangle mesh, the S i become the triangles (excluding the edges), the edges (excluding the endpoints) and the vertices. Collectively, faces, vertices and edges will be denoted as primitives.</p><p>In order to sample the distance field on a grid, a brute force algorithm would compute the distance of each grid point to each primitive. The distance at one grid point is chosen to be the distance to the closest primitive, thus resulting in the shortest distance. If the triangle mesh consists of a large number of triangles and the sampling grid is large, this approach is impractical. For an efficient algorithm, one needs to reduce the number of distances calculated per grid point or alternatively, per primitive.</p><p>To achieve this goal, we use the fact that only one distance per grid point is stored in the final distance field, namely the distance to the closest primitive. When computing the distance field value for a sample, a primitive can be excluded from the calculation if it is known that a closer primitive exists. To quickly find a primitive that is relatively close and exclude a large number of primitives that are further away, one can store the primitives in a spatial data structure such as a BSP tree. By using this structure, one can quickly find the closest primitive to a point: While the tree is scanned for the closest primitive, one can give an upper limit of the final distance. At the same time, a lower bound of the distance can be computed for any subtree. If the lower bound of a subtree is larger than the current upper bound of the final distance, the subtree can be excluded from the search. This leads to an algorithm logarithmic in the number of primitives of the input mesh.</p><p>Alternatively, the loops can be reversed, by iterating over the primitives instead of the grid points. For each primitive, we try to reduce the computation of distances to grid points that lie closer to a different primitive. Optimally, only distances to grid points contained in the Voronoi cell of the corresponding primitive are calculated. However, the computation of Voronoi diagrams is not easier than the computation of distance fields. Nevertheless, if a point is known to lie outside of a Voronoi cell, the distance to its base primitive does not need to be calculated. An algorithm which uses this approach will be presented in Section 3.2.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Scan Conversion Based Algorithms</head><p>Scan conversion refers to the process of sampling a geometric shape on a pixel or voxel grid, interpolating color and other attributes defined at the vertices. In computer graphics, scan conversion is a key operation in the rendering pipeline and is efficiently performed by standard graphics cards. By reading back the frame buffer data, the computing power of graphics cards becomes available for more purposes than just rendering. In recent years, the programmability of graphics cards made it possible to adapt the scan conversion operation. In particular, nonlinear interpolation functions can be programmed.</p><p>In Sections 3.1 and 3.2, we explain two algorithms using scan conversion for generalized Voronoi diagrams and for signed distance transforms, respectively. The idea of combining their strengths, the suitability for graphics hardware and the small number of triangles, brought us to the algorithm described in Sections 3.3 and 3.4.</p><formula xml:id="formula_0">u ∇ 1 = u S 0 = S x u x ( ) 0 = { } = u S i ∪ ( ) min u i ( ) =</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">The Generalized Voronoi Algorithm</head><p>A standard Voronoi diagram is a partitioning of a planar region into cells based on a finite set of points, the Voronoi sites. Each cell consists of the points which are closer to one particular site than to all others. Thus, Voronoi diagrams can be constructed with a graphical method by drawing the graphs of the sites' distance fields. For a single point site, the graph is a vertical circular cone which opens downwards at a fixed angle. After drawing all graphs, a view from the top shows their point-wise minimum which, by definition, is the Voronoi diagram. For a rendering with graphics hardware, cones must be clamped at some distance d and approximated by a set of triangles. If the graphs are drawn in distinct colors, the frame buffer now contains the Voronoi diagram. The depth buffer holds the distance field.</p><p>Based on this observation, <ref type="bibr" target="#b6">Hoff et al. [1999]</ref> presented algorithms for generalized Voronoi diagrams (GVD) in two and three dimensions. In a general Voronoi diagram, the set of sites can contain more geometric objects than just points, such as line segments or triangles. In that case the cone must be replaced by the graph of their distance field. For a line segment e.g. the graph is a "tent" consisting of two rectangles and two half cones. Curved sites can be treated by piece-wise linear approximations. As a special case the sites can be the points, edges and faces of a triangle mesh.</p><p>The GVD algorithm produces unsigned distance fields. However, in cases where a sign is defined, it can easily be computed in a separate pass, by computing the vector to the nearest point on the Voronoi site and comparing it with the outward normal.</p><p>In three dimensions, the same approach can be used to obtain the distance field and the GVD. However, if done with graphics hardware, the scan conversion has to be done slice by slice. On a slice, the graphs of the distance field are again surfaces which can be tessellated and rendered. However, these surfaces are more complex than for the 2D method. In the case of a point site e.g., the graph is a hyperboloid of revolution of two sheets.</p><p>In order to bound the errors introduced by the linear interpolation performed by the graphics hardware, graphs must be finely tessellated, with up to 100 triangles for a cone <ref type="bibr" target="#b6">[Hoff et al. 1999]</ref> and even more for the hyperboloids which are doubly curved surfaces.</p><p>Because the GVD algorithm does not restrict the configuration of Voronoi sites, it is more general than needed for signed distance transforms of triangle meshes. However, each primitive of the input surface produces a large number of triangles to render. Thus, the method becomes inefficient for large meshes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">The Characteristics/Scan-Conversion Algorithm</head><p>A different approach to applying scan conversion to distance field computations was presented by <ref type="bibr" target="#b8">Mauch [2003]</ref>. His Characteristics/ Scan-Conversion (CSC) algorithm computes the signed distance field for triangle meshes up to a given maximum distance d. Using the connectivity of a triangle mesh, special polyhedra serving as bounding volumes for the Voronoi cells can be computed. Therefore, only a small part of the distance field has to be calculated for each primitive.</p><p>The CSC algorithm does not try to find exact Voronoi cells, but instead uses polyhedra which are easier to compute and are known to contain the Voronoi cell as a subset.</p><p>The algorithm computes the signed distance field up to a given maximum distance d, i.e. within a band of width 2d extending from both sides of the surface. Since the triangle mesh is assumed to be orientable, it is possible to classify all edges as either convex, concave, or planar. Accordingly, vertices can be classified as convex, concave, saddle or planar. The set of Voronoi sites is chosen as the open faces (triangles), the open edges, and the vertices of the mesh. According to the three types of sites, three types of polyhedra are constructed such that they contain the Voronoi cell as a subset.</p><p>• Polyhedra for the faces: 3-sided prisms (hereafter called towers) built up orthogonally to the faces <ref type="figure" target="#fig_0">(Fig. 1, left)</ref>.</p><p>• Polyhedra for the edges: 3-sided prisms (hereafter called wedges) filling the space between towers <ref type="figure" target="#fig_0">(Fig. 1, right)</ref>. Wedges contain an edge and extend to one side of the mesh only.</p><p>• Polyhedra for the vertices: n-sided cones which fill the gaps left by towers and wedges <ref type="figure" target="#fig_0">(Fig. 1, left)</ref>. Cones contain the vertex and extend to one side of the mesh. If the vertex is a saddle, the polyhedron is no longer a cone and now has a more complex shape. This case is not explicitly treated in <ref type="bibr" target="#b8">[Mauch 2003</ref>].</p><p>In <ref type="figure" target="#fig_0">Fig. 1</ref>, one can see that each polyhedron contains at least the generalized Voronoi cell of its primitive (i.e. face, edge or vertex). Therefore, by scan converting each polyhedron, every voxel lying within the band of width 2d will be assigned a distance value. Regions of intersection are scan converted once for each intersecting polyhedron and the minimum value is taken at each voxel. By this process, the intersection of two towers is divided along the dihedral angle bisector.</p><p>The goal of scan converting a polyhedron is to calculate the local distance field of a single mesh primitive. However, in the cases of an edge or a vertex, this field is not trilinear thus it cannot be obtained by a standard scan conversion as done by the graphics hardware. For this reason, the authors of the CSC algorithm proposed a software implementation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">A Hardware-Based Characteristics/Scan-Conversion Algorithm</head><p>The computations for the Characteristics/Scan-Conversion algorithm described in section 3.2 can be divided into two parts. First, all polyhedra are constructed. The rest of the algorithm consists in scan converting these polyhedra and calculating the distances for each grid point inside the polyhedra. For standard mesh and grid resolutions, scan conversion and distance calculation are much more expensive than setting up the polyhedra. There are two possible improvements which significantly speed up the algorithm. First, one could reduce the amount of polyhedron overlaps. Hence, also the number of points which are scan converted and the number of distances calculated is reduced. This approach will be discussed in Section 3.4. Second, one could exploit parallelism, for example by distributing the polyhedra on a cluster.</p><p>Instead, a version that transfers the main workload to the graphics card was implemented. In order to display scenes with a large number of triangles at interactive rates, today's graphics hardware permit SIMD parallelism for high-speed scan conversion of twodimensional polygons. The graphics processor unit (GPU) can perform simple operations on a per-fragement basis. To reap the benefits of this computational power, 3D scan conversion was implemented as a series of 2D scan conversions. The programmability of the GPU is crucial for a hardware-based implementation of CSC because the necessary operations exceed standard bilinear interpolation and texture lookup.</p><p>For each xy-slice of the grid, the cross sections of all polyhedra intersected by that slice are computed. These cross sections are sent to the graphics card, which handles the remainder of the algorithm for that slice. That is, the graphics card computes the distance to the primitive for all points inside its corresponding polygon. If a point is inside more than one polygon, the minimum distance value is chosen. Similar to the algorithm described in Section 3.1, it is not possible to draw a planar polygon and use the depth buffer for the minimization process. The reason is that the distance function is not bilinear within one polygon if the base primitive is a vertex or an edge (see <ref type="figure" target="#fig_1">Fig. 2</ref>). One possible remedy would be to compute a tessellation of each polygon, approximating the radial distance value. Because the number of edges and vertices in the triangle mesh can be large, this approach leads to a vast amount of geometry data that has to be transferred to the graphics card for every slice. For a typical problem setup, this is not practical. Instead, one can use the observation that the vector to the closest point on the primitive is indeed a trilinear function within one polyhedron.</p><p>The operations available in a fragment program include normalization of vectors using cube maps and dot products. Therefore, it is possible to compute the distance value for all grid points inside a polyhedron slice without further tessellation. At each polygon edge, the vector to the closest point on the primitive is passed to the graphics card as a texture coordinate. The graphics card performs a bilinear interpolation of the texture coordinates within the polygon. For each pixel, the GPU computes the dot product of the texture coordinate and its normalized version. This value is used as the z-value for that pixel. The minimization process is performed by using the depth buffer. Furthermore, the stencil buffer is used to store the sign of the distance value. Because the stencil function cannot be altered within one polygon, regions of positive and negative signs are rendered one after the other. This is achieved by splitting towers into two regions, one for each sign. Distance values within wedges and cones have a constant sign.</p><p>The large number of polyhedra which need to be sliced and scan converted significantly contribute to the overall computing time. For each polyhedron slice that has to be processed, rendering calls must be issued to define the geometric shape of the slice. The amount of time required for this operation is independent of the size of the slice. If the grid resolution is small in comparison to the triangle size, only a few distance values are calculated per polyhedron slice. Thus, sending the geometric information to the graphics hardware becomes the bottle neck and parallelism of CPU and GPU cannot be fully exploited. Therefore, the hardware version proves to be faster than the original software algorithm only if the number of triangles is relatively small in comparison to the voxel size.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">The Prism Scan Conversion Algorithm</head><p>To overcome this limitation, a modified algorithm based on fewer polyhedra is proposed in this section. The key idea is to build a three-sided pyramid frustum for each triangle that also encloses the grid points that are closest to the edges and vertices of the triangle. To explain the construction, we will start with tower of one triangle from Section 3.2. This tower contains the region where the closest point on the surface is inside that triangle, up to a maximum distance. But it does not enclose any point where the closest point is on an edge or a vertex of the triangle. As a result, there is a gap on the convex side of the edge between two neighboring triangles. This gap can be filled with a wedge as explained in Section 3.3. By using the observation that the towers of the two triangles overlap on the concave side of the edge, the gap can also be filled by tilting the side of both towers to the half angle plane between the two corresponding triangles. Because of the topology and for ease of notation, this new shape will be denoted with prism. The two prisms share one side, but do not necessarily end at a common edge. This can result in overlaps around the vertex as shown in <ref type="figure" target="#fig_3">Fig. 4</ref>. For vertices forming a saddle, it is even possible that there is a gap between the neighboring prisms. In order to ensure that the area around the surface is completely covered up to a maximum distance d, each prism is made to contain the three vertex normals of its base triangle, each scaled to the length d. This is achieved by shifting the prism sides outwards.</p><p>With this new approach, the total number of polyhedra is greatly reduced. Instead of computing one polyhedron per face, edge and vertex, only one polyhedron per face is computed. Thus, the overall number of polyhedra is reduced to less than one third, thereby reducing the data transfer to the graphics card per slice.  The drawback of this approach is that the information about the closest primitive, i.e. face, edge, or vertex, is lost. Consequently, generalized Voronoi diagrams are no longer computed. Additionally, the vector to the closest point on the surface is no longer a trilinear function within the polyhedron. Hence, the approach of interpolating the distance vector within one polyhedron slice and computing the vector length on the GPU fails. Instead, OpenGL's ARB (Architecture Review Board) fragment program is used to calculate the distance to the triangle from a bilinearly interpolated vector on a per-fragment basis. This 3-vector defines the position of the fragment in the local coordinate frame of the triangle. Therefore, the task of locating the closest point on the triangle can be performed in two dimensions. The third coordinate holds the signed distance to the triangle plane. After joining it to the difference vector of the two dimensional problem, the length of this vector equals the distance to the triangle. The sign of the distance equals the sign of the third coordinate.</p><p>The minimization process for regions of overlapping polyhedra is achieved by using the depth buffer. In order to avoid read back of more than one buffer, the signed distance is stored in a floating point pixel buffer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.">Implementation</head><p>In this section, implementation details of the algorithm will be described. First, a short overview of the OpenGL implementation is given. Then, the setup of one triangle's non-orthogonal prism that has to be scan converted is described. Finally, the process of slice iteration is explained.</p><p>As explained in Section 3.4, OpenGL's ARB fragment program is used to calculate the distance to the triangle from a bilinearly interpolated vector on a per-fragment basis. This OpenGL extension is supported by several types of graphics hardware, such as NVIDIA's GeForceFX and ATI's Radeon 9000 chipsets.</p><p>In each polyhedron, a local coordinate system r, s and t is used, defined by an axis frame aligned with the triangle. The r-axis is laid through the longest triangle side such that the three triangle vertices lie on the positive r-axis, the positive s-axis and the negative r-axis, respectively (see <ref type="figure" target="#fig_4">Fig. 5</ref>). Their distances from the origin are denoted by a, h and b. For each vertex of a polyhedron slice, the texture coordinate is used to define the position of the vertex in this local coordinate system. Texture coordinates are bilinearly interpolated within the polygon and therefore, the texture coordinate of a fragment always holds the position of the fragment in the local coordinate frame.</p><p>Given these texture coordinates r, s and t, the task of the fragment program is to compute the unsigned <ref type="figure">distance D(r,s,t)</ref> to the triangle. The triangle itself is uniquely described in the same coordinate frame by the three constants a, h and b, as shown in <ref type="figure" target="#fig_4">Fig. 5</ref>. These constants are passed to the fragment program as second texture coordinates. This was found to be faster than passing the values as fragment program environment variables, although it involves unnecessary interpolation of constant values during rasterization.</p><p>First, the distance calculation is split into a parallel and an orthogonal part of the triangle plane. Since ,</p><p>the main task is to compute D(r,s,0) which is a 2-dimensional problem. The fragment program performs this computation by partitioning the triangle plane into several regions. If r is negative, a reflection at the s-axis can be done. Thus, it is sufficient to treat the six regions labeled I through VI in <ref type="figure" target="#fig_4">Fig. 5</ref>. For regions with a positive s-coordinate, the problem is transformed to a second coordinate frame to simplify the location of the closest point on the triangle. Unfortunatly, branching is limited in fragment programs. Therefore, the fragment program computes the distance in both coordinate frames and then chooses the appropriate distance depending on the values of r and s. This leads to the following pseudo-code for the fragment program.</p><p>In order to achieve high-precision results, a floating point pixel buffer is used to store the distance values calculated by the fragment program. Both NVIDIA and ATI cards support floating point buffers. Additionally, read backs from floating point buffers were   found to be much faster than two subsequent read backs of depth buffer and stencil buffer, as proposed by the algorithm in Section 3.3. Yet, for a typical problem setup, the read back of the calculated distance field consumes 20-25% of the overall computational time.</p><p>The polyhedra which are sliced and then sent to the graphics card are computed for all triangles in a setup step. First, an orthogonal prism which entirely encloses all points that lie within the requested maximal distance d is built for all triangles. Then, the prism is clipped by the three half angle planes between the triangle and one of its neighbors. During the clipping process, it is ensured that the topology of the prism stays constant by possibly reducing the clipped volume. This simplifies the computation of intersections during the slice iteration. As explained in Section 3.4, it is also ensured that the vertex normal is contained in all prisms of adjacent triangles.</p><p>After clipping the prism, the coordinates of the corner points in the local coordinate frame of the triangle are computed. The edges and vertices of the prism are stored in a graph. During slice iteration, the graph is traversed along the z-coordinate of the vertices. An active edge table stores all edges intersected by the current slice. When a vertex is passed during slice iteration, all incoming edges of the graph node are deleted from the active edge table and replaced with the outgoing edges.</p><p>After sorting all prisms according to their first slice intersection, the slice iteration process is initiated. All prisms that are intersected by the first slice are copied to an active prism table. Only prisms in this table need to be considered for the current slice. After rendering all prism intersections, the distance field of the slice stored in the pixel buffer is read from the graphics card memory. Now, the slice can be advanced. For all active edges of all active prisms, both local and world coordinates of the intersection are incrementally updated. If a corner of a prism was passed when advancing the slice, the active edge table of that prism needs to be updated. All incoming edges of the graph node corresponding to the prism corner are deleted and replaced by the outgoing edges, where in and out is defined by the z-direction of the edge. Once the active edge table of a prism is empty, the prism is deleted from the active prism table. The distance field is computed by repeating these steps until all slices are processed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.">Results</head><p>For a performance evaluation, we compared computing times of our hardware-assisted prism algorithm with the software CSC algorithm. The CSC algorithm was downloaded from the URL given in <ref type="bibr" target="#b8">[Mauch 2003</ref>]. Both programs were run on a 2.4 GHz Pentium 4 equipped with 2 GB of RAM and an ATI Radeon 9700 PRO graphics card.</p><p>As a first comparison, both programs were fed with the Stanford bunny dataset, a mesh with 69,451 triangles, and a torus knot with 2880 triangles. As can be seen in <ref type="table">Table 1</ref>, the two models of different size and complexity result in a speed up greater than five compared to the original software algorithm.</p><p>To analyze the performance of the two methods as a function of problem size, we chose as a simple refinable model a tessellated sphere obtained by repeatedly subdividing an octahedron. <ref type="table" target="#tab_1">Table 2</ref> shows a good speedup factor for coarse and medium fine meshes. Performance remains reasonable even if the triangle size comes close to the voxel size. In the mesh of 131,072 triangles, the average area is only π/2 times the voxel size.   <ref type="table">Table 1</ref>: Timings (in seconds) for Bunny and Knot data sets. The band width is set to 10% of the model extent, the grid resolution is set to 256 3 . <ref type="table" target="#tab_2">Table 3</ref> demonstrates the effect of varying the width of the band, i.e. the computational domain. For both programs, a linear dependency is expected, plus a constant setup time. Although the hardware method needs a longer setup time, it is efficient for thin bands, too. With increasing domain size, the setup time becomes less important and the speedup factor improves.</p><p>Finally, the usefulness of our method is shown by keeping the mesh and the band constant but increasing the grid resolution. The speedup factor is expectedly more or less constant up to the point where the memory size becomes an issue. In contrast to the software CSC algorithm, our Prism algorithm does not have to keep the full grid in memory (see <ref type="table" target="#tab_3">Table 4</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.">Conclusion</head><p>In this paper we have shown that today's graphics hardware is suitable for supporting the computation of distance fields of triangle meshes on a regular grid. The construction of simple polyhedra containing the Voronoi cell of a single primitive of the input surface was presented. An algorithm was proposed to scan convert these polyhedra and compute a signed distance field up to a maximum distance. In order to exploit parallelism, slices of the polyhedra are computed by the CPU while scan conversion, distance computation, and minimization is performed entirely on the GPU. By using OpenGL's ARB fragment program, it is possible to achieve the nonlinear interpolation of distance values within one polyhedron slice. This avoids fine tessellation of a polyhedron slice and reduces the amount of geometry sent to the graphics card, which raises the hardware assisted version to a competitive level. Also, the slice-oriented calculation allows a smaller memory footprint than the polyhedron-oriented software version of <ref type="bibr" target="#b8">[Mauch 2003</ref>]. To further reduce the CPU workload and the amount of data being sent to the graphics card, polyhedra are constructed for triangles only and are assured to completely cover the area around the mesh up to a maximum distance. The calculation of the distance to the closest point on the triangle is simple enough to be performed per-fragment on the GPU. Using full computational power of both CPU and GPU, our algorithm turns out to be significantly faster than the pure software version.    </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Mesh Size</head><note type="other">Software</note></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Polyhedra constructed on one side of a (yellow) one-ring of the mesh: (cyan) towers, (blue) wedges, and a (red) cone. The polyhedra are moved away from the surface for better visibility.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Distance field within a wedge type polyhedron.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Sample Generalized Voronoi cells and slices generated by the HW-based CSC algorithm.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 4 :</head><label>4</label><figDesc>Polyhedra constucted by the modified algorithm for a one-ring of the mesh.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 5 :</head><label>5</label><figDesc>Distance computation in the t=0 projection plane.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 6 :</head><label>6</label><figDesc>Fragment program pseudo-code which computes the distance to a triangle in local coordinates on a per-fragment basis. to half-space r&gt;=0 if necessary if (r&lt;0) { r = -r; a = b; } // Transform to a 2nd coordinate frame lenSqr = a^2 + h^2; r' = (a*r -h*s + h^2) / lenSqr; s' = (h*r -a*s -a*h) / lenSqr; // Clamp components of the distance vector r' = max(-r',r'-1,0); // regions IV, V, VI s' = max(s',0); // regions I, V r = max(r-a, 0); // regions II, III // Compute the distance if(s&lt;0) // regions II, III dist = sqrt(r^2 + s^2 + t^2); else // regions I, IV, V, VI dist = sqrt( (r'^2 + s'^2) * lenSqr + t^2); // Place sign dist = copysign(dist, t);</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 7 :</head><label>7</label><figDesc>Three distance field slices of the Stanford Bunny computed by the HW-based Prism algorithm.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 8 :</head><label>8</label><figDesc>Five translucent distance field slices of a knot computed by the HW-based Prism algorithm.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 2 :</head><label>2</label><figDesc>Timings (in seconds) with variable input mesh size for 0.1 band width and a 256 3 grid.</figDesc><table><row><cell>Width of band</cell><cell>Software Algorithm</cell><cell>Hardware Algorithm</cell><cell>Speedup</cell></row><row><cell>0.1</cell><cell>6.162</cell><cell>1.346</cell><cell>4.58</cell></row><row><cell>0.2</cell><cell>11.701</cell><cell>1.785</cell><cell>6.56</cell></row><row><cell>0.4</cell><cell>21.009</cell><cell>2.546</cell><cell>8.25</cell></row><row><cell>0.8</cell><cell>34.489</cell><cell>3.724</cell><cell>9.26</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 3 :</head><label>3</label><figDesc>Timings (in seconds) with variable band width for a tessellated sphere with 32,768 triangles on a 256 3 grid.</figDesc><table><row><cell>Grid Resolution</cell><cell>Software (seconds) Algorithm</cell><cell>Hardware (seconds) Algorithm</cell><cell>Speedup</cell></row><row><cell></cell><cell>0.901</cell><cell>0.244</cell><cell>3.69</cell></row><row><cell></cell><cell>1.638</cell><cell>0.482</cell><cell>3.40</cell></row><row><cell></cell><cell>6.162</cell><cell>1.346</cell><cell>4.58</cell></row><row><cell></cell><cell>109.400</cell><cell>6.534</cell><cell>16.7</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 4 :</head><label>4</label><figDesc>Timings (in seconds) with variable grid resolution for a tessellated sphere with 32,768 triangles and 0.1 band width.</figDesc><table><row><cell>64 64 64 × ×</cell></row><row><cell>128 128 128 × ×</cell></row><row><cell>256 256 256 × ×</cell></row><row><cell>512 512 512 × ×</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>This work was partially funded by Schlumberger Cambridge Research.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">3D Scan Conversion of CSG Models into Distance, Closest-Point and Colour Volumes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">E</forename><surname>Breen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Mauch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">T</forename><surname>Whitaker</surname></persName>
+		</author>
+		<editor>M. Chen, A.E. Kaufman, R. Yagel</editor>
+		<imprint>
+			<date type="published" when="2000" />
+			<publisher>Springer</publisher>
+			<biblScope unit="volume">Graphics</biblScope>
+			<biblScope unit="page" from="135" to="158" />
+			<pubPlace>London, Chapter</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Threedimensional distance field metamorphosis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Or</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Levin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Solomovici</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="116" to="141" />
+			<date type="published" when="1998-04" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Distance Transformations: Fast Algorithm and Applications to Medical Image Processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Cuisenaire</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+			<pubPlace>Louvain-la-Neuve, France</pubPlace>
+		</imprint>
+		<respStmt>
+			<orgName>Université Catholique de Louvain, Dept. of Engineering</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">P.h.D. thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Two Fast Euclidean Distance Transformations in Z^2 Based on Sufficient Propagation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Eggers</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Vision and Image Understanding</title>
+		<imprint>
+			<biblScope unit="volume">69</biblScope>
+			<biblScope unit="page" from="106" to="116" />
+			<date type="published" when="1998-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Adaptively sampled distance fields: a general representation of shape for computer graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">F</forename><surname>Frisken</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">N</forename><surname>Perry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">P</forename><surname>Rockwood</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">R</forename><surname>Jones</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 27th annual conference on Computer graphics and interactive techniques</title>
+		<meeting>the 27th annual conference on Computer graphics and interactive techniques</meeting>
+		<imprint>
+			<date type="published" when="2000-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Using distance maps for accurate surface representation in sampled volumes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">F F</forename><surname>Gibson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 1998 IEEE symposium on Volume visualization</title>
+		<meeting>the 1998 IEEE symposium on Volume visualization</meeting>
+		<imprint>
+			<date type="published" when="1998-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Fast Computation of Generalized Voronoi Diagrams Using Graphics Hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">E</forename><surname>Hoff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Culver</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Keyser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Manocha</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="volume">99</biblScope>
+			<biblScope unit="page" from="277" to="285" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A complete distance field representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">C</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">Y</forename><surname>Liou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 12th IEEE Visualization</title>
+		<meeting>12th IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="247" to="254" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Effcient Algorithms for Solving Static Hamilton-Jacobi Equations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Mauch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">California Inst. of Techn</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Ph.D. Thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A Linear Time Algorithm for Computing Exact Euclidean Distance Transforms of Binary Images in Arbitrary Dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Maurer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Qi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Raghavan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Pattern Analysis Mach. Intell</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<date type="published" when="2003-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">The vector distance transform in two and three dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Mullikin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">CVGIP: Graphical Models and Image Processing</title>
+		<imprint>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page">54</biblScope>
+			<date type="published" when="1992-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Distance Functions on Digital Pictures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Rosenfeld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">L</forename><surname>Pfaltz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Pattern Recognition</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="33" to="61" />
+			<date type="published" when="1968" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">A Fast Marching Level Set Method for Monotonically Advancing Fronts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Sethian</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Nat. Acad. Sci</title>
+		<meeting>Nat. Acad. Sci</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="volume">94</biblScope>
+			<biblScope unit="page" from="1591" to="1595" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Fast Ray-Tracing of Rectilinear Volume Data Using Distance Transforms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sramek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Visualization Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="page" from="236" to="252" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Rapid and Accurate Computation of the Distance Function Using Grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><forename type="middle">R</forename><surname>Tsai</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+			<pubPlace>Los Angeles</pubPlace>
+		</imprint>
+		<respStmt>
+			<orgName>Department of Mathematics, University of California</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Distance-Field-Based Skeletons for Virtual Navigation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Dachille</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 12th IEEE Visualization</title>
+		<meeting>12th IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="239" to="245" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

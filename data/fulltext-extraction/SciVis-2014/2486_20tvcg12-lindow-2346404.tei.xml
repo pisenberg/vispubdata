@@ -1,0 +1,1188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main"></title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<idno type="DOI">10.1109/TVCG.2014.2346404</idno>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T19:35+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<abstract/>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>Abstract-The most popular molecular surface in molecular visualization is the solvent excluded surface (SES). It provides information about the accessibility of a biomolecule for a solvent molecule that is geometrically approximated by a sphere. During a period of almost four decades, the SES has served for many purposes -including visualization, analysis of molecular interactions and the study of cavities in molecular structures. However, if one is interested in the surface that is accessible to a molecule whose shape differs significantly from a sphere, a different concept is necessary. To address this problem, we generalize the definition of the SES by replacing the probe sphere with the full geometry of the ligand defined by the arrangement of its van der Waals spheres. We call the new surface ligand excluded surface (LES) and present an efficient, grid-based algorithm for its computation. Furthermore, we show that this algorithm can also be used to compute molecular cavities that could host the ligand molecule. We provide a detailed description of its implementation on CPU and GPU. Furthermore, we present a performance and convergence analysis and compare the LES for several molecules, using as ligands either water or small organic molecules.</p><p>Index Terms-Molecular visualization, solvent excluded surface, ligand excluded surface, cavity analysis</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">MOTIVATION</head><p>In molecular sciences, the use of molecular surfaces has a long tradition, starting with the van der Waals (vdW) surface and the solvent accessible surfaces (SAS) described by <ref type="bibr" target="#b25">Lee and Richards in 1971</ref>  <ref type="bibr" target="#b25">[26]</ref>. A few years later, in 1977, Richards defined the solvent excluded surface (SES), which he simply named molecular surface <ref type="bibr" target="#b39">[40]</ref>. Only one year later, Greer and Bush <ref type="bibr" target="#b11">[12]</ref> proposed the first method to depict parts of the 3D structure of the SES by computing the height field of the molecule with respect to a particular direction. In 1983, Pearl and Honegger <ref type="bibr" target="#b36">[37]</ref> proposed a three-dimensional grid method to compute the complete SES, before in 1985 Conolly <ref type="bibr" target="#b5">[6]</ref> presented a method to directly compute a triangular surface from the analytical surface description of the SES. Since the first three-dimensional representations of the SES, there has been a large number of publications dealing with the computation and the visualization of the SES. However, the fundamental problem that almost no molecule, not even water, has a spherical shape, has so far not been addressed in the computation and visualization of molecular surfaces.</p><p>To address this, we propose a new molecular surface, called ligand excluded surface (LES). It represents the surface of a receptor that is accessible to a specific individual ligand, which is represented by its spatial configuration of atom spheres (rather then a single 'approximating' sphere). Thus receptor and ligand are geometrically represented in the same manner. An example of an LES is shown in <ref type="figure" target="#fig_0">Fig. 1</ref>, which also demonstrates the difference to the SES. We present an algorithm for computing the LES based on a grid representation. We define the LES as an implicit function of a distance field. In order to approximate this distance field well, we need to take into account a possibly large number of orientations of the ligand. Since a bruteforce approach that places the ligand at all positions of the grid with a large number of orientations would be computationally too expensive, we apply a two-phase approach that significantly reduces the computational effort. Moreover, we implement this method on the GPU, which further speeds up the computation. The algorithm for computing the LES can be easily extended to also compute cavities that are large enough to host the ligand molecule (see, for example, <ref type="figure" target="#fig_2">Fig. 2</ref>). In addition to the geometry of the cavities, we also obtain information about how the ligand is positioned inside the cavities. This might be of particular interest when applying our method for subsequent docking simulations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Since our contributions concern both molecular surfaces and cavity analysis, we have split the related work with regard to these subfields.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Molecular Surfaces</head><p>Since the ligand excluded surface is most closely related to the solvent excluded surface, we will focus here on previous work dealing with SES. As mentioned before, the SES was originally defined by  Cavities of hexameric insulin (PDB-Id: 3MTH) for methylparaben, computed with the LES algorithm (with 200 orientations). The three main cavities are depicted by their boundaries, together with methylparaben. The insulin molecule is depicted by its secondary structure.</p><p>Richards in 1977 <ref type="bibr" target="#b39">[40]</ref>. Since then, many approaches have been proposed to compute and visualize this surface. These approaches either compute an implicit representation of the surface or a piecewise parametric description.</p><p>Most implicit representations use a grid structure on which the implicit surface is defined <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b16">17,</ref><ref type="bibr" target="#b34">35,</ref><ref type="bibr" target="#b36">37]</ref>. This is done by marking the grid points as lying either inside or outside the SES or by computing a distance function giving the minimal distance of each grid point to the SES. A triangular mesh of the SES can then be computed using the marching cubes algorithm <ref type="bibr" target="#b30">[31]</ref> or it can be rendered directly using ray casting <ref type="bibr" target="#b12">[13]</ref>. Instead of using a grid structure to represent the implicit surface, Parulek et al. <ref type="bibr" target="#b33">[34]</ref> apply a ray casting approach that computes the distance function to the SES interactively for small molecules. Another way to approximate the SES is to use Gaussian models <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b32">33]</ref>.</p><p>The computation of a parametric description of the SES was first addressed by Connolly <ref type="bibr" target="#b5">[6]</ref>, who also presented an algorithm to triangulate the surface. More efficient algorithms were later proposed by Sanner et al. <ref type="bibr" target="#b40">[41]</ref> (reduced surface algorithm) and Totrov and Abagyan <ref type="bibr" target="#b44">[45]</ref> (contour-buildup algorithm). Due to the advent of commodity multi-core hardware and the advances in GPUs, it was worthwhile to consider the matter again. In 2009, Krone et al. <ref type="bibr" target="#b19">[20]</ref> presented a ray casting approach to render the SES based on the reduced surface algorithm. One year later, we presented a CPU-parallelized version of the contour-buildup algorithm which also applied ray casting for the visualization of the SES <ref type="bibr" target="#b29">[30]</ref>. With both approaches, it became possible to compute and render the SES of dynamic molecules with several thousands of atoms at interactive speed. A further acceleration can be achieved by a GPU implementation of the contour-buildup algorithm <ref type="bibr" target="#b22">[23]</ref>.</p><p>Since the LES, as defined in this work, cannot be computed analytically, we approximate the implicit description of the surface using a discrete signed distance function. The surface can then be rendered directly or triangulated using marching cubes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Cavity Analysis</head><p>Methods for computing molecular cavities sometimes are classified according to the particular type of cavity (void, pocket and tunnel). We do not make this distinction and refer to all of these types as 'cavity'. Instead, we subdivide the methods according to whether the primary structures being computed are volumetric representations of the cavities or molecular paths, which can be considered as centerlines of the cavities. While it is easy to compute a volumetric representation from a path representation, the opposite is generally not true.</p><p>One of the first approaches to compute a volumetric representation of cavities was presented by Levitt and Banaszak <ref type="bibr" target="#b26">[27]</ref>. Their approach creates a regular grid. A point on this grid is defined as cavity point if it lies outside the molecule and at least for one of the three main axes, the protein is hit in both directions. Finally, neighbored cavity points are clustered to define a cavity. A similar strategy was used by a few other approaches that consider more axes, define the protein grid points differently, or cluster cavity points in a different way <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b18">19,</ref><ref type="bibr" target="#b46">47]</ref>. Laskowski <ref type="bibr" target="#b23">[24]</ref> identifies cavities by placing spheres between two non-intersecting atoms. If other atoms intersect this sphere, its radius is decreased until no atom is intersected anymore. Spheres of appropriate size describe cavities. Brady et al. <ref type="bibr" target="#b4">[5]</ref> also place spheres from which the final cavities are computed. However, they start with an initial coating that is iteratively extended layer by layer, until no more spheres can be placed. Alpha shapes have also been used to compute molecular cavities <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b8">9]</ref>. Recently, a computation of internal cavities using alpha shapes was presented that is more robust regarding perturbations of atom radii <ref type="bibr" target="#b43">[44]</ref>. A meta-approach to cavity analysis was presented by Huang <ref type="bibr" target="#b17">[18]</ref>, who combined several approaches <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b18">19,</ref><ref type="bibr" target="#b23">24,</ref><ref type="bibr" target="#b24">25]</ref> to improve the prediction quality. Another approach uses volume rendering to determine cavities <ref type="bibr" target="#b21">[22]</ref>. Here, the molecule is represented as a continuous density sampled on a grid. The density can be efficiently computed and the cavity analysis is interactive, such that it can be applied to analyze molecular dynamics trajectories.</p><p>One of the earliest methods to compute molecular paths was presented by Smart et al. <ref type="bibr" target="#b42">[43]</ref>. Starting from a user-defined point inside a cavity, their method computes a path to the outside of the molecule using simulated annealing. Petřek et al. <ref type="bibr" target="#b38">[39]</ref> also compute paths from a cavity to the outside by utilizing shortest paths on a weighted graph that is computed from the distance field of the molecule. In a subsequent work <ref type="bibr" target="#b37">[38]</ref>, they improve their method by using the Voronoi diagram of the atom positions for the graph computation. Further works employing Voronoi diagrams of points include the ones by Yaffe et al. <ref type="bibr" target="#b47">[48]</ref> and Medek et al. <ref type="bibr" target="#b31">[32]</ref>. More recently <ref type="bibr" target="#b28">[29]</ref>, we developed an approach based on the Voronoi diagram of spheres, which takes correctly into account the size of the atoms. In a subsequent work <ref type="bibr" target="#b27">[28]</ref>, we extended this approach to dynamic molecular paths computed from molecular trajectories. Two of the few approaches that compute possible molecular paths based on the correct geometry of a ligand are the methods by Cortes et al. <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b7">8]</ref> and Haranczyk &amp; Sethian <ref type="bibr" target="#b13">[14]</ref>. While Cortes et al. use rapidly exploring random trees, Haranczyk &amp; Sethian sample the ligand orientation space to compute possible molecular paths.</p><p>The cavities we compute are volumetric representations given by the ligand structure on a discrete grid. Additionally, at each grid point the possible orientations of the ligand are known. This information can be used to quickly compute and display the cavity surfaces.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">LES DEFINITION</head><p>Informally, the LES of a receptor can be defined as the surface enclosing the space around the receptor that is not accessible to a specific ligand. Below we give a mathematical definition of the LES.</p><p>We start with some formalization: Let the receptor molecule r, for which we want to compute the LES, consist of n atoms with positions p r i ∈ R 3 and atomic radii r r i ∈ R, with i = 1...n. Furthermore, let the flexibility of the ligand l be given by a set of c conformations and let the ligand consist of m atoms with positions p l jk ∈ R 3 and radii r l j ∈ R, with j = 1...m and k = 1...c. The state of the ligand is given by a conformation k, a translation T , and an orientation R, which is given by a rotation. We define the state of the ligand as valid if no ligand atom intersects any atom of the receptor molecule. This can be formulated using a binary function I r,l : (N, R 3 , SO 3 ) → {0, 1}, which is 1 if the state is valid and 0 otherwise. Now we can define the ligand excluded surface as the surface that encloses all points in R 3 that are not reachable by a valid ligand state. This can be mathematically described by a ligand-dependent distance</p><formula xml:id="formula_0">I r,l (k, T, R) = 1, p r i − (Rp l jk + T ) ≥ r r i + r l j , ∀i = 1...n, ∀ j = 1...m 0, else.</formula><formula xml:id="formula_1">function d r,l with d r,l (p) = max k=1...c, T ∈R 3 ,R∈SO 3    max j=1...m r l j − p − (Rp l jk + T ) , I r,l (k, T, R) = 1 −∞,</formula><p>else.</p><p>The ligand excluded surface is then given as implicit function of all points p with d r,l (p) = 0. Note that d r,l is not completely equal to the Euclidean distance function of the LES, but they are equal inside the LES and within a local distance outside the LES. Furthermore, for a 'ligand' consisting of a single atom, the LES is equal to the SES; thus the LES is a generalization of the SES. In contrast to the SES, the ligand excluded surface cannot be computed in an analytical way. We can only approximate the surface geometrically by discretizing the space of ligand states. Since we use a finite set of c conformations, the dynamics of the ligand is already discretized. Additionally we need to discretize the orientations and positions of the ligand. To do so, we introduce two parameters, the number o ∈ N of sample orientations and the spacing g ∈ R of the cubic grid being used for uniform sampling of the positions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">ALGORITHM</head><p>First, we give an overview of the computation of the ligand excluded surface (LES) (Sect. 4.1). Then, the two phases (Sect. 4.2 and Sect. 4.3) for the construction of the discrete distance function defining the LES are described in detail. We conclude with a description about how we can exploit our approach to compute cavities (Sect. 4.4). Note that the distance field we compute only correctly approximates the distance function defined in Sect. 3 in the local vicinity of of the LES.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Overview</head><p>Instead of directly computing the LES, we compute a signed distance field that is negative inside the LES and positive outside. Thus, the LES is implicitly defined by the zero level set of this distance field. To compute the LES, we do not need the exact distance field; it needs to be exact only in the vicinity of the LES. We compute the distance field iteratively on a discrete grid. In order to approach the correct distance field values close to the LES, we apply a two-phase approach.</p><p>In the first phase, a sphere completely enclosing the ligand is used to update the distance field at positions of the grid where the ligand can rotate around its center without ever intersecting any atom of the molecule. In the following, we call this sphere ligand bounding sphere. For the positions at which we can place the ligand bounding sphere (blue points in <ref type="figure" target="#fig_3">Fig. 3(a)</ref>), we update the distance field for all grid points inside the bounding box of the ligand bounding sphere.</p><p>The resulting distance field is depicted in <ref type="figure" target="#fig_3">Fig. 3</ref>(b) together with its implicit surface. This implicit surface is a discrete representation of the SES for a probe sphere equal to the ligand bounding sphere. Note that after computing the distance field, the largest distance value will be equal to the radius of the ligand bounding sphere. This value is set at all positions where the ligand bounding sphere could be placed. In addition to modifying the distance field, we also mark the positions where the ligand bounding sphere could be placed. These positions do not need to be considered any further. In the first phase, a second sphere is used to conservatively mark grid points at which no ligand can be placed without intersecting the molecule, including grid points inside the molecule but also some grid points close to the LES. These grid points are depicted in <ref type="figure" target="#fig_3">Fig. 3</ref>(a) as red points.</p><p>The second phase of our approach completes the computation of the distance field in the vicinity of the LES. It uses all information computed in the first phase, in particular the grid positions that are neither marked blue nor red. These are marked as yellow points in <ref type="figure" target="#fig_3">Fig. 3</ref>(a) and represent the remaining sampling positions to be considered. At these positions, it will now be tested whether the ligand can be placed without intersecting with any atom sphere of the molecule. To approach the distance field as well as possible, the ligand will be rotated at each of these positions. Furthermore, if the ligand is flexible, more than one conformation can be considered. For each rotation and each conformation for which the ligand does not intersect any atom of the molecule, the distance field of all grid points inside the bounding box of the ligand will be updated. Note, however, that the distance values will be updated only if the values increase. The result of phase II is illustrated in <ref type="figure" target="#fig_3">Fig. 3</ref>(c).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Phase I</head><p>In phase I, we sample the discrete grid with two spheres. The first one is a small sphere that is inscribed in the ligand atom spheres and is therefore referred to as ligand inscribed sphere (see red spheres in <ref type="figure" target="#fig_3">Fig. 3(b)</ref>). The second sphere is usually much larger than the first one and completely contains all ligand atom spheres. In the following, we refer to it as ligand bounding sphere (see blue spheres in <ref type="figure" target="#fig_3">Fig. 3(b)</ref>). These spheres are used to initialize the distance field and to make later computations more efficient.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">Ligand Bounding Sphere</head><p>We define the ligand bounding sphere as the smallest sphere completely containing all ligand atom spheres. If p b ∈ R 3 is the position and r b ∈ R is the radius of the ligand bounding sphere, then</p><formula xml:id="formula_2">p b − p l i + r l i ≤ r b , for all i = 1.</formula><p>..m, and no smaller sphere exists for which the inequality also holds. The minimal bounding sphere of a set of spheres can be tangent to more than four input spheres, but it is already defined uniquely by at most four spheres. An illustration of the ligand bounding sphere is depicted in <ref type="figure" target="#fig_3">Fig. 3</ref>(b) as blue circle. We compute the minimal bounding sphere using a simple iterative algorithm. More efficient algorithms have been proposed <ref type="bibr" target="#b9">[10]</ref>, but since the number of atoms in a ligand is generally small and the computation has to be performed only once per conformation, the simple algorithm is sufficient. We start by computing the minimal bounding sphere of four randomly selected input spheres <ref type="bibr" target="#b10">[11]</ref>. Then, the bounding condition of this bounding sphere is checked for all remaining input spheres. If a sphere is not enclosed by the current bounding sphere, the sphere is interchanged with one of the previous four selected spheres such that the radius of the new minimal bounding sphere becomes maximal. This procedure is repeated until all input spheres are enclosed by the current bounding sphere.</p><p>We compute the ligand bounding sphere for each ligand conformation separately. Then, the overall ligand bounding radius r max ∈ R is the maximum of the radii of all ligand bounding radii r b computed for all conformations. The sphere with radius r max can be used to determine positions on the grid, where all ligand conformations, no matter what orientations they have, can be placed without intersecting any receptor atom sphere. This is illustrated in <ref type="figure" target="#fig_3">Fig. 3</ref>(b).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">Ligand Inscribed Sphere</head><p>The ligand inscribed sphere is also computed for each ligand conformation separately. To determine the ligand inscribed sphere for a single conformation, we place the sphere at the center of the ligand bounding sphere. We then determine the maximal radius such that the sphere is completely enclosed by the atoms of the ligand. The ligand inscribed sphere is illustrated as red circle in <ref type="figure" target="#fig_3">Fig. 3(b)</ref>. Note that the ligand inscribed sphere has a negative radius, if the center of the ligand bounding sphere lies completely outside the ligand conformation.</p><p>From the ligand inscribed spheres of all ligand conformations we compute the radius r min ∈ R as the minimum radius of the ligand inscribed spheres over all conformations. The sphere with radius r min will be used to exclude grid positions from being tested with either the ligand bounding sphere or the ligand geometries. The reason for this is that if a sphere with radius r min intersects the protein atoms, all ligand conformations placed at the same position, no matter what orientations they have, will also intersect the protein atoms (see <ref type="figure" target="#fig_3">Fig. 3(a)</ref>).</p><p>The two spheres with radii r max and r min allow us to speed up the surface computation as will be described next.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.3">Distance Field Initialization</head><p>In phase I, we uniformly sample the ligand positions and initialize the discrete distance function. Note that we use the same samples for the ligand positions and the distance function. In addition, we detect all positions for which we have to investigate all ligand conformations and orientations.</p><p>To compute the discretization of the sample positions and the distance field, we first compute the minimal axis-aligned bounding box of the atom spheres of the receptor molecule. This box is then extended in all directions by r max . Afterwards, the box is uniformly sampled in all directions with a user-defined grid spacing g.</p><p>The distance field is initialized with the negative value of the maximal atomic radius r r of the receptor. Then we iterate over all sample positions T and perform at each position an intersection test of the receptor atom spheres with the minimal ligand inscribed sphere with radius r min . If an atom i intersects the sphere, which means that p r i − T &lt; r r i + r min , all ligand conformations and orientations also intersect this atom. Hence, the position can be ignored for further investigations. In case that the minimal ligand sphere does not intersect the receptor, we perform a second intersection test with the maximal ligand bounding sphere having radius r max . If this sphere does not intersect the receptor atom spheres, all ligand conformations and orientations at this position are valid, that is, they do not intersect the receptor. In this case, we set the distance value at this position to r max . For all remaining positionsT , where the maximal ligand sphere intersects the receptor and the minimal ligand sphere does not, we have to investigate all ligand orientations and conformations. These positions are marked by yellow points in <ref type="figure" target="#fig_3">Fig. 3(a)</ref>.</p><p>Finally, we iterate over all sample positions T at which the distance field has a value equal to r max . If one of the 26 neighboring grid points has a distance that is smaller than r max , we update the distance function in the neighborhood of the maximal ligand bounding sphere using the distance function that is depicted in <ref type="figure" target="#fig_4">Fig. 4(a)</ref>. This function has a value of r max in the center, 0 at the border of the sphere, and outside the sphere, the values take on the negative distance to the sphere border. The new distance at a neighboring position p is set to the maximum of the old distance and r max − p − T . After this phase, the implicit function defined by the current distance function represents the discrete SES with probe radius r max (see <ref type="figure" target="#fig_3">Fig. 3</ref>(b)).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Phase II</head><p>In the second phase of the algorithm, the discrete distance function is refined in the vicinity of the LES. For this, we consider all the sample points (yellow points in <ref type="figure" target="#fig_3">Fig. 3(a)</ref>) that might contribute to this refinement. At all these points, all conformations of the ligand are placed one after another and the distance field is updated accordingly. Of course, considering only a single orientation per ligand conformation will lead to large errors in approximating the LES. Therefore, we use a user-defined number o of orientations for each ligand conformation. These orientations should be sampled such that the space of all orientations is well represented. In the following, we describe this sampling before we describe the final refinement step.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.1">Precomputation of Ligand Orientations</head><p>To obtain the most different ligand orientations, the computation of the orientations is done for each conformation separately. Consider a single conformation with m atoms whose positions are p l i ∈ R 3 and atomic radii are r l i ∈ R, with i = 1...m. For the purpose of sampling the ligand orientations, we transform the ligand such that the center of its ligand bounding sphere lies in the origin. The transformed atom positionsp l i ∈ R 3 are given byp l i = p l i − p b , for all i = 1...m. Due to transforming the ligand such that its bounding sphere center lies in the origin, for each rotation of the transformed ligand, all atoms are always inside the ligand bounding sphere with radius r b . For the computation of the o orientations, we first uniformly sample points on the surface of the unit sphere. The vectors from the center of the unit sphere to the sampled points represent the axes for the rotations of the orientations. Furthermore, the angles for the rotations around each axis are uniformly sampled. We initially computeõ = 10 • o orientations. Afterwards, the differences between orientations are computed and the most significant o orientations are selected. Thus we aim at maximizing the minimal distance between the ligand orientations. This allows us to filter unnecessary orientations due to, for example, symmetry properties of the ligand. Let R j be the initial sampled rotations with j = 1...õ,õ o. We approximate the difference between the orientations by the root mean square metric (RMSM) of the atom positions. Let D ∈ Rõ ,õ be the symmetric matrix that stores the distances between the orientations, then</p><formula xml:id="formula_3">d j,k = m ∑ i=1 (R jp l i − R kp l i ) 2 .</formula><p>with d j,k being the matrix element in row j and column k. The goal is to find the o most different orientations of theõ orientations. This can be mathematically formulated by finding the set of o orientations where the minimal distance becomes maximal. We approximate the solution to this optimization problem using k-means clustering, which is much faster than computing the optimal solution. The k-means clustering algorithm starts by randomly selecting o orientations as cluster centers. Then, each orientation R i is assigned to the cluster center R j with the minimal distance d i, j . This creates o clusters of orientations. In each cluster, the orientation whose maximal distance within the cluster becomes minimal is computed. If this orientation is different to the previous selected center, the orientations are interchanged. Then the assignments and the new cluster centers are recomputed. This is repeated until no cluster center changes anymore. To achieve an even better solution, the algorithm can be run several times. The best solution is then the one with the maximal minimal distance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3.2">Distance Field Refinement</head><p>Now that we have computed a discretization of the grid as well as the orientations of the ligand conformations, we can describe the final part of the algorithm. During this last step, we need to perform intersection tests between the ligand and the receptor molecule for all orientations R and all conformations k at the precomputed positionsT . If the ligand does not intersect the protein for a certain position, orientation, and conformation, the distance function is updated in its local neighborhood using a distance function similar to those depicted in <ref type="figure" target="#fig_4">Fig. 4(b)</ref> and (c). In detail we perform the following steps. end for 10: end for 11: end for Note that the values of the distance function are only updated if they become larger. During the distance updates, points reachable by a ligand become positive and unreachable points stay negative, but might still increase. Since the ligand excluded surface is the surface which separates positive and negative values, it is defined by the implicit description d r,l (p) = 0.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Cavity Structure</head><p>Apart from computing the LES, our sampling approach can also be used to extract the cavity structure of the receptor. Since we have already computed all valid and invalid ligand states, we simply need to store this information. To do so, we maintain a bit array of length c • o at each sample point. In this bit array, for each ligand conformation and orientation, we store whether it is valid or not. If the conformation and orientation is valid, we set the bit to 1. If it is not valid, it is set to 0. Note that for sample points where we can place the maximal ligand bounding sphere, all bits of the array are set to 1. On the other hand, all bits of the array are set to 0 if the minimal ligand inscribed sphere intersects the receptor molecule. Thus we only have to store this bit array for all sample pointsT (see yellow points in <ref type="figure" target="#fig_3">Fig. 3(a)</ref>).</p><p>All points with at least one bit set to 1 define valid sample points of a cavity. However, usually we are only interested in positions that represent real cavities. Therefore, we remove sample points that are outside the molecule by utilizing ambient occlusion as it was done before <ref type="bibr" target="#b28">[29]</ref>. For each sample position with at least one valid ligand state, we cast a set of uniformly distributed rays from this position. The ambient occlusion value for this sample is the quotient of the number of rays that hit any receptor atom sphere and the overall number of rays. Thus, the higher the ambient occlusion value the less ambient light is received at this position and the deeper the sample lies inside the receptor molecule. All sample points with a value less than a user-defined threshold are removed from the following considerations. The remaining sample positions are then clustered to get the cores of the cavities. Two neighboring sample positions belong to the same cluster if at least one entry is 1 at the same position in both bit arrays. This means, for all samples of the same cluster, the ligand can move from one sample position to a neighboring one without changing the orientation or conformation. At a sample position, the ligand can change its orientation or conformation to another valid state. Each cluster defines a core of a cavity. Additionally, small clusters can be filtered out according to a user-defined minimal cluster size.</p><p>From the cores of a cavity, its surface can be easily generated using again a discrete distance field. This is also initialized with a negative value, for example −r r . Then the distance field is updated according to the maximum of all distance functions of valid ligand states of the cavity. The surface of the cavity is then defined as the implicit surface given by this distance field. Due to the fact that we store for each sample point its valid states, we can easily compute trajectories of the ligand from inside the cavity to the outside or vice versa.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">IMPLEMENTATION</head><p>In this section, we describe implementational details for the two most expensive steps of the algorithm.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Intersection Tests</head><p>During the execution of the algorithm, many intersection tests between spheres have to be carried out. In phase I, we need intersection tests between the minimal ligand inscribed sphere and the maximal ligand bounding sphere with the atom spheres of the receptor. In phase II, intersection tests between the ligand atoms and the receptor atoms need to be computed. Without using a data structure to reduce the number of intersection tests, n • m sphere-sphere intersections tests need to be carried out for a single receptor ligand intersection test in the worst case, where n is the number of receptor atoms and m the number of ligand atoms. We can stop if the first intersection has been found, but if the molecules do not intersect, all intersection tests are needed. Hence, a data structure is required to reduce the number of intersection tests.</p><p>Since the receptor molecule is static, we can store the atoms in a 3dimensional grid. In each cell of this grid, we record all receptor atoms that intersect with the cell. For molecular data, typically a uniform grid is used with a grid size of approximately 1Å. Then, in order to compute the intersection of a sphere with the atoms of the receptor, all grid cells are accumulated that intersect with the sphere. Only atoms stored in all accumulated grid cells need to be tested for intersection, which enormously reduces the number of intersection tests. Since the atom spheres of a molecule cannot be arbitrarily dense, because they have a fixed minimal distance to each other, the number of atoms that need be tested is much smaller than n. With this, the complexity for an intersection test of a single sphere with the receptor molecule reduces from linear to constant <ref type="bibr" target="#b45">[46]</ref>. In addition to the usage of a 3-dimensional grid as accelerator, we can further speed-up the intersection tests by computing them in parallel. This is possible since intersection tests of spheres with the receptor molecule are independent of each other. On the CPU, we can use OpenMP. Faster computations can be achieved by running the intersection tests on the GPU. In order to be platform independent, we used OpenCL <ref type="bibr" target="#b0">[1]</ref>. In our implementation, each thread computes the intersection of one sphere with the receptor molecule. Here, the grid is stored using two arrays, one containing an integer value for each cell that represents an index to the second array with floating point values. The second array stores all spheres per cell, where each sphere consists of four values, three for the position and one for the radius. The integer array maps to the first sphere of the corresponding cell. All remaining spheres of the cell are stored in the consecutive entries. The end of the list is indicated by a sphere with negative radius.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Distance Field Updates</head><p>The distance field updates are the most expensive part of the algorithm. Recall that distance field updates are needed for two types of instances, that is, for the maximal ligand bounding sphere and for the ligand conformations with different orientations. If we place any of these instances at a particular sample position, updating the distance field means that for each point in the distance field, we have to compute the distance to the boundary of this instance. For the maximal ligand bounding sphere, this boundary is the sphere surface. For a ligand conformation, this boundary is the van der Waals surface of the ligand atoms, which is the surface enclosing all ligand atom spheres.</p><p>Since the distance field defining the LES is negative inside the LES and positive outside, the signs of the distances we compute to the instance boundaries need to have inversed signs. That is, we need to have positive distances inside the instance and negative distances outside. Recall that we have initialized the distance field with the negative maximal atom radius of the receptor. If we wanted to compute the correct distance field, we would have to initialize the distances with −∞. However, since we are not interested in the distance field itself but only in the implicit surface defined by d r,l (p) = 0, only the grid points close to the LES need to have the correct values. For all other grid points, it suffices to have the correct distance sign. Once we have computed the distance of a particular grid point to the instance boundary, the distance is updated only if the new distance value is larger than the current one. That is, the values of the distance field only increase. Now, if s is the number of grid points and we update the distance field in the naïve way, that is, all grid points for each instance at each sample position, the time complexity is O(s 2 ). Even for medium-sized grids, this would result in very long computation times. Hence, in the following, we describe two ways to reduce this run time.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.1">Local Distance Fields</head><p>The first observation is that we do not have to update the whole distance field, but only a part that is in the local neighborhood of the sample point. Here, the size of the neighborhood is defined by the particular instance. In fact, it is sufficient to consider all those grid points p that are inside the axis-aligned bounding box of the instance plus those points within a distance p − p bb ∞ ≤ g to the bounding box (see <ref type="figure" target="#fig_4">Fig. 4</ref>). Thus, the instance will be completely surrounded by grid points with negative distance to the instance.</p><p>Since we use the same points for the distance field and the sample points of the instances, we can precompute the distances for the local neighborhood of each instance. To do so, we compute local distance fields placed in the origin with the same grid spacing g. We do this for each instance, that is, for the maximal ligand bounding sphere and all ligand conformations and orientations (see <ref type="figure" target="#fig_4">Fig. 4</ref>). Then, during an update step, the local distance field only needs to be moved to the current position and we can compare the values of the global distance field with those of the local distance field directly. The maximum of these two values determines the new value.</p><p>Since the average sizes of the local distance field is usually much smaller than s, the run time reduces from s 2 tos • s. However, sincẽ s is a fixed fraction of s, that is,s = αs, where α is constant, the complexity of the algorithm remains O(s 2 ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.2">Use of KD-Tree</head><p>A second observation can be used to further reduce the number of grid points that need to be updated: The only grid points defining the implicit surface d r,l (p) = 0 are the ones in whose neighborhood the sign of the distance values changes. Furthermore, recall that the distance values only increase over the duration of the algorithm. Hence, if a grid point p has a positive value and all of its 26 neighbors also have positive distance values, p will not contribute to the definition of the implicit surface. Hence, we do not need to consider p any further. For this purpose, we maintain a KD-tree that only contains those sample points that possibly need further updates. Using the KD-tree, these points can be quickly queried. Furthermore, we dynamically update the KD-tree by removing all samples that become positive and also have only positive neighbors. Thus, if we have placed an instance at a particular sample point T , we use the KD-tree to quickly identify the grid points in the local neighborhood of T with respect to the instance size and only update those points, if needed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2.3">Parallel Distance Updates on the GPU</head><p>While we used the KD-tree to accelerate the CPU implementation, for the GPU we implemented a parallel distance field update. For this, the OpenCL kernel gets three inputs: the overall distance field, the local distance field, and a set of valid ligand positions for this field. Each thread corresponds to one sample point of the ligand distance field. The thread iterates over the ligand positions and detects in each step the corresponding sample point in the distance field. If the value in the distance field is smaller than the value in the ligand distance field, it is replaced by the new value. Note that this can lead to concurrent accesses of different threads on the same sample point in the distance field. However, as mentioned before, the values in the distance function can only increase. Thus, if we run the OpenCL kernel several times, the distance values converge to the correct result. To ensure the correct result, we use a single boolean variable, which is initialized with 'false' before each call of the kernel. If during the call a distance value has changed, the variable is set to true. The kernel is called again as long as the variable is 'true'. Thus we call the kernel at least two times and in practice on average three to four times.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">VISUALIZATION</head><p>The results of the above algorithms are a discrete scalar field describing the distance function in the local vicinity of the LES, and the cavities given by all their valid ligand states. In this section, we briefly describe how we render the LES and the cavities.</p><p>The LES can be visualized either by extracting a triangular mesh with the marching cubes algorithm <ref type="bibr" target="#b30">[31]</ref> or by direct isosurface ray casting <ref type="bibr" target="#b12">[13]</ref>. With todays GPU implementations of marching cubes, the surface can be generated nearly as fast as with direct ray casting. With some additional effort, the triangular surface can be colored according to arbitrary molecular properties. It can also be used to measure the area of the surface and its enclosed volume. Since the discrete distance function describing the LES is a signed distance function which is positive outside the LES and negative inside, ray casting the LES can be further accelerated. Outside the LES, the distance in the distance field is always smaller or equal to the minimal Euclidean distance to the LES. Hence, instead of a constant step size for the direct isosurface ray casting, we can directly use the distance in the discrete field. This is similar to the classical sphere tracing by Hart <ref type="bibr" target="#b14">[15]</ref>, which is usually faster than a ray casting with constant step size.</p><p>The cavities can be visualized both by its cores and their surfaces. To render their surfaces, we construct for each cavity a distance field similar to the LES distance field and render it in the same way <ref type="figure" target="#fig_2">(Fig. 2)</ref>. The cavity cores are visualized by placing at each core sample position a small sphere <ref type="figure" target="#fig_7">(Fig. 6</ref>). For the sphere rendering, we use a modern GPU-based ray casting <ref type="bibr" target="#b41">[42]</ref>. The depth perception of all representations can be improved by ambient occlusion or surface cuts.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">RESULTS</head><p>All results have been produced on an Intel Xeon X5650 E5540 2.66 GHz with 6 cores and an Nvidia GeForce GTX 680. For measuring the quality and performance, we used several molecules from the PDB <ref type="bibr" target="#b35">[36]</ref> as well as two other data sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">Parameters</head><p>Although the surface definition is independent of parameters, the algorithm requires parameters due to the discretization. The two parameters used for the LES computation are the grid spacing g and the number of orientations o. In <ref type="figure">Fig. 8</ref>, we have plotted how the enclosed volume and the surface area change depending on the number of orientations. For this we used ketosteroid isomerase with ligand equilenine (PDB-Id: 1OGZ, <ref type="figure" target="#fig_0">Fig. 1)</ref>. We computed the LES with 10 to 200 orientations by increasing the number of orientations by 5 in each step. From 200 to 1, 000 orientations, we increased the number of orientations by 100 each, and from 1, 000 to 10, 000 orientations, a step size of 1, 000 orientations was used. For each number of orientations, we generated a triangular mesh of the LES and computed its surface area and the enclosed volume. It can be observed that the main changes in surface area and volume occur between 10 and 1, 000 orientations. Furthermore, it can be observed that for a smaller grid spacing the changes are more rapid than for larger grid spacings.</p><p>In our experiments, we generally used 200 or fewer orientations. Only in the case of the HIV-protease with inhibitor amprenavir we were not able to find the binding site with this number of orientations. With 1, 000 orientations, however, we found the binding site even with a grid spacing of 0.75Å <ref type="figure">(Fig. 9)</ref>.</p><p>The cavity analysis only needs one parameter, which determines when a sample point is considered to lie outside the molecule. To determine the degree of burriedness we used ambient occlusion by casting a fixed number of rays. We always used 100 rays. The user can then set a threshold at what ambient occlusion value a sample point is considered to lie outside the molecule.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">Performance</head><p>Let s ∈ N be the number of sample positions which is defined by the grid spacing g and the size of the receptor. Note that s grows cubically when linearly decreasing g.  <ref type="table">Table 1</ref>. Run times (given in seconds) for LES and cavity computation for different receptors, ligands, grid spacings (g) and number of orientations (o) both on CPU (*without KD-tree) and GPU. Phases I and II are split into the two most time-consuming steps: intersection tests (IT) and distance updates (DU). Note that for 1HPV, four conformations of amprenavir were used with 1,000 orientations each.  In phase I we detect all sample positions that have to be investigated for each ligand conformation and orientation. This preprocessing accelerates the algorithm because many of the sample positions can be ignored in phase II. The amount of acceleration depends mainly on the size of the ligand and the ratio between this size and the size of the receptor, but also on the geometrical complexity of the receptor <ref type="table">. During   14000  13500  13000  12500  12000  11500  11000  10500  10000  9000  8000  7000  6000  5000  4000  3000  2000  1000  0   6400  6200  6000  5800  5600  5400  5200  5000  10000  9000  8000  7000  6000  5000  4000  3000  2000  1000  0</ref> 1.0Å 0 .5Å 0 .25Å <ref type="figure">Fig. 8</ref>. For the graphs shown above, the LES of ketosteroid isomerase (PDB-Id: 1OGZ; also see <ref type="figure" target="#fig_0">Fig. 1</ref>) with respect to the ligand equilenine was computed for different grid spacings and an increasing number of orientations. Note, however, that the used orientations were independent of each other. The graphs in the two images plot the enclosed volume (top) of the LES and the surface area (bottom) of the LES against the number of ligand rotations used for computing the LES.</p><formula xml:id="formula_4">A 3 A 2 o o</formula><p>our tests, we observed that for water, which has a bounding radius of 1.52Å, approximately 90% of the sample positions can be ignored in phase II. For morphine, with a bounding radius of 5.44Å, still around 75% of the sample positions can be ignored and for fentanyl, whose bounding radius is 8.47Å, approximately 68% can be ignored. For all tested ligands, on average the number of sample points was higher than 60%. Note that the percentages for each ligand were averaged over a couple of receptors of different size, ranging from 272 atoms to 58, 870 atoms. Detailed timings for all parts of the algorithm are given in <ref type="table">Table 1</ref>. In all our examples, we observed that the computations for common receptor-ligand systems were 6 to 10 times faster on the GPU compared to the CPU with KD-tree. On the CPU, the use of the KD-tree accelerated the computation by a factor of at least two. Furthermore, we observed that the intersection tests can be slower than the distance updates, although the complexity of the distance updates is worse (see, for example, 1HPV or the nanotransporter with morphine).</p><p>Most of the memory is required to store the valid ligand orientations at each sample position. For the nanotransporter and morphine in <ref type="table">Table 1</ref>, this structure requires approximately 50 MB. For 1HPV and amprenavir with a grid spacing of 0.25Å, approximately 3 GB are required. However, this memory is only temporarily needed if cavities are computed. The largest memory consumption on the GPU is due to the global distance field. For the nanotransporter and morphine, this field requires approximately 25 MB. For 1HPV and amprenavir with a grid spacing of 0.25Å, approximately 66 MB are required. Detailed memory requirements for the data sets in <ref type="table">Table 1</ref> are given in the supplementary material.</p><p>While the SES can be computed interactively, the computation of the LES usually takes several minutes up to hours depending on the grid spacing and the number of orientations (see <ref type="table">Table 1</ref>). On the other hand, the LES better reflects the actual accessibility of a certain ligand, which can be seen in <ref type="figure" target="#fig_0">Figs 1, 5</ref>, and 6.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">FEEDBACK BY DOMAIN SCIENTISTS</head><p>Apart from an evaluation in terms of computational complexity and performance, we carried out a small survey about the usability of the proposed new molecular surface by performing a structured interview about potential advantages and disadvantages of the LES. We interviewed four senior experts from different labs, working in molecular dynamics simulation and dealing with a wide range of applications. In the following we summarize the most important statements.</p><p>Advantages: All experts agreed that the LES provides valuable ligand-specific information. In particular, the LES can help identify binding sites that have so far been unknown from experimental data. Furthermore, the LES allows one to discard cavities that are poor candidates as hosts for a ligand. Thus, more expensive methods comput-ing the binding free energies or molecular dynamics simulations using force fields can be applied more effectively. If a protein can bind different ligands, the LES might also enable the identification of different binding sites for different ligands. The pure visualization of the LES is of interest, because in many applications of molecular modeling, the chemical intuition of the observer is an important addition to fully automatic methods. This intuition is even further supported by the identified cavities.</p><p>Disadvantages: If both the protein and the ligand are highly flexible, the computation of the LES is expensive. Then it might be favorable to use the SES to identify binding sites and cavities and compute the LES only for a few time steps or locally near the binding site.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">DISCUSSION</head><p>The most crucial parameter of our algorithm is the number of orientations. We tried to investigate the quality of the results depending on the number of orientations by plotting the surface area and the enclosed volume versus the number of orientations <ref type="figure">(Fig. 8)</ref>. It is clear that both curves will converge, but the plots gives us a good indication, how fast this convergence will be. What can be clearly seen is that the largest changes occur between 10 and 1, 000 orientations. This suggests that with less than 1, 000 orientations the LES can be very well approximated. In our experiments, we typically used 200 or even less orientations and were able to reproduce most known cavities. In rare cases, however, it might be necessary to use more than this number or even more than 1, 000 orientations. Hence, if the run time is of minor importance, we suggest using between 500 and 1, 000 orientations.</p><p>More important in terms of run time is the choice of the grid spacing. The run time grows quadratically with the number of grid points, which again grows inversely cubically with the grid spacing. For gridbased cavity analysis, commonly a minimal grid spacing of 0.5Å is used. We either used a grid spacing of 0.5Å or 0.25Å. While the latter is clearly favorable in terms of precision, in our experiments, we measured an approximate 28-fold run time. Furthermore, in all our experiments, a grid spacing of 0.5Å was sufficient to find the known binding sites. Hence, we suggest using a grid spacing of 0.5Å.</p><p>If the ligand binding site is very tight and the flexibility of the ligand is high, it might be necessary to use a large number of conformations. Since the run time depends linearly on the number of conformations, this is expensive. In this case, it might be possible to reduce the complexity by taking into account the redundancy in the conformations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="10">CONCLUSION AND FUTURE WORK</head><p>We have defined a new type of molecular surface, the ligand excluded surface (LES), which naturally extends the definition of the solvent excluded surface (SES). Instead of approximating the ligand by a probe, the LES considers the complex geometry of a ligand described by its van der Waals atoms. Thus, the LES represents a more accurate approximation of the regions accessible to the ligand than the SES. We have presented a grid-based algorithm to compute an approximation of the LES. This algorithm has a complexity of O(s 2 ), where s is the number of grid points. Despite this complexity, we show that it is feasible to calculate the LES for typical receptors and ligands in a reasonable time. This is possible because we identified the most time-consuming parts of the algorithm and optimized these parts algorithmically but also by parallelizing them on the CPU and the GPU.</p><p>We have also shown that with a minor extension of the algorithm, the cavity structure of the molecule with respect to the ligand can be computed with almost no run-time overhead. In addition to the positions, we also obtain the possible orientations and conformations of the ligand. This information might be exploited to steer molecular docking simulations, where the ligand binding path into the active site is detected (see <ref type="figure" target="#fig_8">Fig. 7</ref>).</p><p>It is obvious that with the calculation of the LES, a new computational challenge is associated. Below we outline some ideas on how the computation could be improved and extended.</p><p>First, the fixed user-defined number of orientations might be eliminated by measuring the error rate between increasing numbers of orientations. For this, we might start with a few orientations and subse-quently add more orientations while at the same time measuring the rate of change of the volume. As long as the change is larger than a predefined fraction, we would continue adding more orientations. This strategy, however, requires a suitable way to successively pick new orientations from a large set of orientations such that the distances between neighbored orientations remains similar. But it is not obvious, how the selection can be done most efficiently.</p><p>Currently, each sample position with at least one valid ligand state belongs to exactly one cavity core. However, it is possible that the ligand cannot continuously change from one valid state to another valid state at the same sample position without intersecting the receptor molecule. Hence, the cavity cores might have to be split at such positions which also means that a sampling position can belong to different cavities and, thus, that the cores can overlap. In the future, we want to handle such situations more correctly. For this, it is necessary to define valid changes of orientations and conformations within a sample position.</p><p>Despite our algorithmic optimizations, the run time of the algorithm can still be very long, particularly for large molecules and a small grid spacing. In terms of cavity analysis, one is often only interested in cavities existing in certain regions. Thus, it might be sensible to restrict the cavity computation to user-defined regions. Furthermore, a combination of our approach with one that approximates the ligand by a sphere, such as our molecular path computation <ref type="bibr" target="#b28">[29]</ref>, might significantly speed up the computation.</p><p>We would also like to investigate whether the use of tetrahedral meshes with the same number of grid points as for hexahedral meshes improves the surface quality and leads to a faster convergence.</p><p>The focus of this work was the definition and computation of a purely geometry-based representation of the accessibility of a receptor with respect to a ligand molecule. The definition of the LES could be extended further by considering physico-chemical properties, such as the binding affinity of the ligand. By considering only those positions and orientations for which the binding affinity is high, the LES might even better reflect the true accessibility of the ligand. finally Ana-Nicoleta Bondar from Freie Universität Berlin and Frank Cordes from GETLIG &amp; TAR for their helpful comments and feedback. g = 1.0Å g = 0.75Å g = 0.5Å g = 0.25Å <ref type="figure">Fig. 9</ref>. LES of HIV protease (PDB-Id: 1HPV) for ligand amprenavir (red) with different grid resolutions. For the computation of the LES, four ligand conformations with 1,000 orientations were considered. For a grid spacing of 1.0Å, the ligand binding site was not found.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>LigandFig. 1 .</head><label>1</label><figDesc>Excluded Surface : A New Type of Molecular Surface Norbert Lindow, Daniel Baum, and Hans-Christian Hege, Member, IEEE Comparison of a solvent excluded surface (SES) and a ligand excluded surface (LES) on the example of ketosteroid isomerase (PDB-Id: 1OGZ). To simplify the comparison, both surfaces have been cut. (a) SES of isomerase with probe radius 1.4Å. The spherical probe is depicted in red. (c) LES of isomerase for the ligand equilenine, computed with 0.25Å grid spacing and 200 orientations. The ligand (red) is depicted in its active position. (b) Overlaid surface cuts, showing differences between SES and LES.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>For</head><label></label><figDesc>information on obtaining reprints of this article, please send e-mail to: tvcg@computer.org. Manuscript received 31 Mar. 2014; accepted 1 Aug. 2014 ate of publication 2014; date of current version 2014. 11 Aug. 9 Nov. D . Digital Object Identifier 10.1109/TVCG.2014.2346404</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 2 .</head><label>2</label><figDesc>Fig. 2. Cavities of hexameric insulin (PDB-Id: 3MTH) for methylparaben, computed with the LES algorithm (with 200 orientations). The three main cavities are depicted by their boundaries, together with methylparaben. The insulin molecule is depicted by its secondary structure.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 3 .</head><label>3</label><figDesc>Illustration of our algorithm: (a) The gray spheres depict the receptor molecule and the grid points show the discretization of the space around the molecule. Red dots mark sample positions where the ligand inscribed sphere (red circles) cannot be placed without intersecting the receptor; blue dots mark sample positions where the ligand bounding sphere (blue circles) can be placed without intersecting the receptor. The red and blue dots are the result of phase I of the algorithm. The yellow dots mark the remaining sample positions, which need to be processed in phase II. (b) The distance field after completing phase I. The resulting implicit surface is equal to the SES of the ligand bounding sphere. The yellow spheres depict the ligand molecule enclosed by its ligand bounding sphere. (c) The distance field and resulting LES after completing phase II.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 4 .</head><label>4</label><figDesc>Illustration of local discrete distance fields. (a) The bottom image shows the local distance field of the ligand bounding sphere (top), which is used in phase I of the algorithm. (b) and (c) Local distance fields (bottom) for two ligand orientations (top). These distance fields are used in phase II.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>1 : 5 :</head><label>15</label><figDesc>for k = 1...c do 2: for all orientations R do 3: for all ligand positionsT do 4: if I r,l (k,T , R) = 1 then for all distance samples p ∈ R 3 do 6: d r,l (p) = max d r,l (p), max j=1...m r l j − p − (Rp l jk +T )</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 5 .</head><label>5</label><figDesc>Difference between the SES (left) and the LES (right) for an enzyme (PDB-Id: 4DFR). The LES was computed for methotrexate (red). Each surface point is colored according to its minimal distance to the other surface.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 6 .</head><label>6</label><figDesc>SES and LES with cavity cores of a dendritic core multi-shell nanotransporter: (a) SES, (b) LES of morphine, (c) LES of fentanyl. In the image, the probe sphere and the ligands have been scaled by a factor of 3. The surface of the nanotransporter is depicted in yellow, the cut of the surface is gray, and the cavity cores are colored according to their clustering.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 7 .</head><label>7</label><figDesc>LES (blue) depicted for four selected time steps of a simulation trajectory of β -lactamase (data courtesy of Gregory L. Bowman and Philipp L. Geissler<ref type="bibr" target="#b3">[4]</ref>). During the simulation, the active site of the β -lactamase opens. The sequence of images shows the computed positions of the CBT ligand (yellow) closest to the active site.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head></head><label></label><figDesc>Because of the grid data structure, the cost of each intersection test with the receptor molecule is constant, Hence, the intersection tests have a complexity of O(c • o • s). An upper bound for the number of values in the local distance field of the ligand is α • s, where α is the ratio of the volume of the local field and the overall distance field. Hence the updates of the distance field have a complexity of O(c • o • α • s 2 ). The k-means clustering is the most</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head></head><label></label><figDesc>expensive part for the computation of the orientations. It grows polynomially with o. However, compared to the rest of the algorithm, in practice the computation of the orientations is negligible.The maximal memory requirements for the algorithm are given by the following data structures.The global distance field with a space complexity of O(s), the local distance field with O(α • s), the grid data structure of the receptor molecule with O(n), the KD-tree with a worst case complexity of O(s), and the ligand orientations at all sample points with a complexity of O(s • o • c). For the intersection tests on the GPU, the grid of the receptor molecule and a set of spheres are required. For the distance updates on the GPU, the global and local distance fields and a set of update positions given by sample indices are required. Based on performance tests, for each call of an OpenCL kernel, we set the number of spheres for the intersection tests to 65, 536 and the number of positions for the distance updates to 1, 024.</figDesc></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The authors thank Greg Bowman from the Miller Institute for his feedback and for providing the dynamic data set (see <ref type="figure">Fig. 7</ref>), Marcus Weber from Zuse Institute Berlin for his feedback and Marcus Weber and Amir Sedighi for providing the CMS nanotransporter (see <ref type="figure">Fig. 6</ref>), and</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Opencl</forename><surname>Website</surname></persName>
+		</author>
+		<ptr target="http://www.khronos.org/opencl/" />
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Adaptive grid based methods for computing molecular surfaces and properties</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Bajaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Siddavanahalli</surname></persName>
+		</author>
+		<idno>06-56</idno>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+		<respStmt>
+			<orgName>The University of Texas at Austin ; Institute for Computational and Engineering Sciences</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">ICES Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">CASTp: Computed atlas of surface topography of proteins</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">A</forename><surname>Binkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Naghibzadeh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Nucleic Acids Research</title>
+		<imprint>
+			<biblScope unit="volume">31</biblScope>
+			<biblScope unit="issue">13</biblScope>
+			<biblScope unit="page" from="3352" to="3355" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Equilibrium fluctuations of a single folded protein reveal a multitude of potential cryptic allosteric sites</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">R</forename><surname>Bowman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">L</forename><surname>Geissler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proc Natl Acad Sci U S A</title>
+		<imprint>
+			<biblScope unit="volume">109</biblScope>
+			<biblScope unit="issue">29</biblScope>
+			<biblScope unit="page" from="11681" to="11687" />
+			<date type="published" when="2012-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Fast prediction and visualization of protein binding pockets with pass</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">P</forename><surname>Brady</surname><genName>Jr</genName></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">F W</forename><surname>Stouten</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computer-Aided Molecular Design</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="383" to="401" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Molecular surface triangulation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">L</forename><surname>Connolly</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Applied Crystallography</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="page" from="499" to="505" />
+			<date type="published" when="1985" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Encoding molecular motions in voxel maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cortés</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Barbe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Erard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Siméon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE/ACM Trans. Comput. Biol. Bioinformatics</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="page" from="557" to="563" />
+			<date type="published" when="2011-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">A path planning approach for computing largeamplitude motions of flexible molecules</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cortés</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Siméon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Ruiz De Angulo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Guieysse</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Remaud-Simon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Tran</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Bioinformatics</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="116" to="125" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+	<note>suppl</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Measuring proteins and voids in proteins</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Edelsbrunner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Facello</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Liang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Twenty-Eighth Hawaii International Conference on</title>
+		<meeting>the Twenty-Eighth Hawaii International Conference on</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1995" />
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="256" to="264" />
+		</imprint>
+	</monogr>
+	<note>System Sciences</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Smallest enclosing balls of balls: Combinatorial structure &amp; algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Fischer</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<pubPlace>ETH Zürich</pubPlace>
+		</imprint>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Updating the topology of the dynamic Voronoi diagram for spheres in Euclidean d-dimensional space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">L</forename><surname>Gavrilova</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Rokne</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Aided Geom. Des</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="page" from="231" to="242" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Macromolecular shape and surface maps by solvent exclusion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Greer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">L</forename><surname>Bush</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the National Academy of Sciences</title>
+		<imprint>
+			<biblScope unit="volume">75</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="303" to="307" />
+			<date type="published" when="1978-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Realtime ray-casting and advanced shading of discrete isosurfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Sigg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Scharsach</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bühler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">H</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="303" to="312" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Navigating molecular worms inside chemical labyrinths</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Haranczyk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Sethian</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the National Academy of Sciences</title>
+		<meeting>the National Academy of Sciences</meeting>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="volume">106</biblScope>
+			<biblScope unit="page" from="21472" to="21477" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Sphere tracing: a geometric method for the antialiased ray tracing of implicit surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Hart</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Visual Computer</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page" from="527" to="545" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Ligsite: automatic and efficient detection of potential small molecule-binding sites in proteins</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hendlich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Rippmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Barnickel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J Mol Graph Model</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="359" to="63" />
+			<date type="published" when="1997-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Algorithm for rapid calculation of excluded volume of large molecules</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Higo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Go</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Comp. Chem</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="page" from="376" to="379" />
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Metapocket: A meta approach to improve protein ligand binding site prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Huang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">OMICS</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="325" to="330" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">LIGSITEcsc: predicting ligand binding sites using the Connolly surface and degree of conservation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schroeder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">BMC Struct Biol</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="page">19</biblScope>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Interactive visualization of molecular surface dynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Krone</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bidmon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1391" to="1398" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Fast Visualization of Gaussian Density Surfaces for Molecular Dynamics and Particle System Trajectories</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Krone</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Stone</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Schulten</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2012" />
+			<publisher>Eurographics Association</publisher>
+			<pubPlace>Vienna, Austria</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Interactive exploration of protein cavities</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Krone</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Falk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rehm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Pleiss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="673" to="682" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Parallel contour-buildup algorithm for the molecular surface</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Krone</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Grottel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Symposium on Biological Data Visualization (BioVis &apos;11)</title>
+		<meeting>IEEE Symposium on Biological Data Visualization (BioVis &apos;11)</meeting>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="17" to="22" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Surfnet: A program for visualizing molecular surfaces, cavities, and intermolecular interactions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Laskowski</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Molecular Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page" from="323" to="330" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Q-sitefinder: an energy-based method for the prediction of protein-ligand binding sites</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">T R</forename><surname>Laurie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Jackson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Bioinformatics</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="1908" to="1916" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">The interpretation of protein structures: Estimation of static accessibility</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">M</forename><surname>Richards</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Molecular Biology</title>
+		<imprint>
+			<biblScope unit="volume">55</biblScope>
+			<biblScope unit="page" from="379" to="400" />
+			<date type="published" when="1971" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Pocket: A computer graphics method for identifying and displaying protein cavities and their surrounding amino acids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">G</forename><surname>Levitt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">J</forename><surname>Banaszak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Mol. Graph</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="229" to="234" />
+			<date type="published" when="1992-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Exploration of cavity dynamics in biomolecular systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Lindow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Baum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A.-N</forename><surname>Bondar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-C</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">BMC Bioinformatics</title>
+		<imprint>
+			<biblScope unit="page">14</biblScope>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Voronoi-based extraction and visualization of molecular paths</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Lindow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Baum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-C</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2025" to="2034" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Accelerated visualization of dynamic molecular surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Lindow</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Baum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Prohaska</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-C</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Graph. Forum</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="943" to="952" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Marching cubes: A high resolution 3d surface construction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Siggraph Computer Graphics (Proc. of SIGGRAPH 87)</title>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1987-07" />
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="page" from="163" to="169" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Computation of tunnels in protein molecules using Delaunay triangulation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Medek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Beneš</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sochor</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of WSCG</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1-3</biblScope>
+			<biblScope unit="page" from="107" to="114" />
+			<date type="published" when="2007" />
+		</imprint>
+		<respStmt>
+			<orgName>University of West Bohemia</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Fast blending scheme for molecular surface representation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Parulek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Brambilla</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2653" to="2662" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Implicit representation of molecular surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Parulek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Viola</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">PacificVis</title>
+		<editor>H. Hauser, S. G. Kobourov, and H. Qu</editor>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="217" to="224" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Improved technique for calculating X-ray scattering intensity of biopolymers in solution: Evaluation of the form, volume, and surface of a particle</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pavlov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Fedorov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Biopolymers</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="page" from="1507" to="1522" />
+			<date type="published" when="1983" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Protein Data</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bank</surname></persName>
+		</author>
+		<ptr target="http://www.pdb.org" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Generation of molecular surfaces for graphic display</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">H</forename><surname>Pearl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Honegger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Molecular Graphics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="9" to="12" />
+			<date type="published" when="1983" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">MOLE: a Voronoi diagram-based explorer of molecular channels, pores, and tunnels. Structure</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Petřek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Košinová</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Koča</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Otyepka</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2007-11" />
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1357" to="1363" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">CAVER: a new tool to explore routes from protein clefts, pockets and cavities</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Petřek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Otyepka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Banas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kosinová</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Koca</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Damborsky</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">BMC Bioinformatics</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page">316</biblScope>
+			<date type="published" when="2006-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Areas, volumes, packing, and protein structure</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">M</forename><surname>Richards</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Annual Review of Biophysics and Bioengineering</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="page" from="151" to="176" />
+			<date type="published" when="1977" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Fast and robust computation of molecular surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">F</forename><surname>Sanner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Olson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-C</forename><surname>Spehner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Computational Geometry</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="6" to="7" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">GPU-based ray-casting of quadratic surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Sigg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Weyrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Botsch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eurographics Symposium on Point-Based Graphics</title>
+		<meeting>the Eurographics Symposium on Point-Based Graphics</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="59" to="65" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Hole: a program for the analysis of the pore dimensions of ion channel structural models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><forename type="middle">S</forename><surname>Smart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">G</forename><surname>Neduvelil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">A</forename><surname>Wallace</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">S</forename><surname>Sansom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J Mol Graph</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="354" to="60" />
+			<date type="published" when="1996-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Extraction of Robust Voids and Pockets in Proteins</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Sridharamurthy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Doraiswamy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Patel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Varadarajan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Natarajan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">EuroVis -Short Papers</title>
+		<editor>M. Hlawitschka and T. Weinkauf</editor>
+		<meeting><address><addrLine>Leipzig, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Eurographics Association</publisher>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="67" to="71" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">The contour-buildup algorithm to calculate the analytical molecular surface</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Totrov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Abagyan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Structural Biology</title>
+		<imprint>
+			<biblScope unit="volume">116</biblScope>
+			<biblScope unit="page" from="138" to="143" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Linearly scalable computation of smooth molecular surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Varshney</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">P B</forename><genName>Jr</genName></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>William</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">V</forename><surname>Wright</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="page" from="19" to="25" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">PocketPicker: analysis of ligand binding-sites with shape descriptors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weisel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Proschak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Schneider</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Chemistry Central Journal</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">7</biblScope>
+			<biblScope unit="page" from="1" to="17" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">MolAxis: Efficient and accurate identification of channels in macromolecules</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Yaffe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Fishelovitch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">J</forename><surname>Wolfson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Halperin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Nussinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proteins: Structure, Function, and Bioinformatics</title>
+		<imprint>
+			<biblScope unit="volume">73</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="72" to="86" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

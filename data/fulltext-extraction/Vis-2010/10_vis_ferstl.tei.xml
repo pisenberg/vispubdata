@@ -1,0 +1,1391 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Interactive Separating Streak Surfaces</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Florian</forename><surname>Ferstl</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kai</forename><surname>Bürger</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Holger</forename><surname>Theisel</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rüdiger</forename><surname>Westermann</surname></persName>
+						</author>
+						<title level="a" type="main">Interactive Separating Streak Surfaces</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:55+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Unsteady flow visualization</term>
+					<term>feature extraction</term>
+					<term>streak surface generation</term>
+					<term>GPUs</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1. Our method generates streak surfaces revealing separating structures in unsteady 3D flow interactively on the GPU. Red surfaces in the figures depict generalized streak surfaces emanating from 1D FTLE ridges on a planar seeding probe. Green particles show points on time surfaces, which are additionally released from the seeding plane into the flow and serve as context information.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>For the visual analysis of flow data, feature extraction methods are a well-established class of techniques because the extraction of features offers insight into different flow phenomena while reducing the amount of data to be processed. Another important and wellestablished class of visualization algorithms are real-time interactive exploration approaches, such as interactively seeding and tracking particles, characteristic lines, or integral surfaces. The increasing amount and complexity of flow data brings limitations to both classes of techniques: the features themselves may become so complex that their visual representation becomes challenging. On the other hand, interactive exploration techniques suffer from the danger that important phenomena are missed because certain areas are not explored. A solution for this is a combination of feature extraction and interactive exploration: either the extracted complex features are visualized by appropriate real-time flow exploration tools, or the seeding in interactive flow exploration is controlled by a feature extraction approach. In this paper, we propose such a combination for particular features (ridges of FTLE fields) and interactive exploration tools (generalized • F. Ferstl (E-mail: ferstlf@in.tum.de), K. Bürger (E-mail: buerger@tum. <ref type="bibr">de)</ref> and R. Westermann (E-mail: westermann@tum. <ref type="bibr">de</ref> </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>streak surfaces).</head><p>Ridges of finite time Lyapunov exponent (FTLE) fields are wellestablished features for computing separating structures in timedependent flows. While their definition is well-understood, for 3D time-dependent flows their visualization is complicated because the ridges of interest are 3D hypervolumes in the 4D space-time domain, i.e., surface structures changing their shapes and appearance over time. Because of this, existing algorithms in 3D carefully focus on particular times and locations to show ridge surfaces, making a systematic exploration of all FTLE ridges in 3D time-dependent flows a timeconsuming process.</p><p>Streak surface extraction is a prominent tool for interactive flow exploration. Since for every location in the space-time domain there is a one-parametric family of streak lines passing through, the sheer amount of existing streak lines (and therefore streak surfaces as well) leave the chance of missing interesting and important streak surfaces.</p><p>The approach presented in this paper aims in overcoming the drawbacks of both FTLE ridges and interactive streak surface exploration. It is justified by the following observation: FTLE ridges are approximately material structures <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b43">44]</ref> and can therefore be interpreted as generalized streak surfaces (for 2D flows, <ref type="bibr" target="#b32">[33]</ref> exploit this fact by considering the intersection of forward and reverse-time FTLE LCS).</p><p>We use this for the following algorithm: given a 3D time-dependent flow field, we interactively place and move a planar seeding structure s (usually a rectangle) in the flow domain at a certain time t. Note that moving the seeding structure s is possible both in space and time. We consider the restriction of the FTLE field on s (i.e., a 2D field), either by computing the FTLE values on s in-turn or by computing the entire FTLE field (i.e., a 4D scalar field) in a preprocess and resampling the values onto s via interpolation. We then extract ridge structures in the FTLE field on s in real-time, and employ them as seeding structures for a streak surface integration. Since the ridges on s change their shape by moving s in space and time, the surfaces generated this way are generalized streak surfaces (an extension of the concept of generalized streak lines <ref type="bibr" target="#b51">[52]</ref>). The streak surfaces are shown only for the integration time which was used for computing the FTLE, since only for this integration time a separation was detected. As our choice of seeding locations for streak surface integration aims to uncover separation structures, we will refer to them as separating streak surfaces in the following.</p><p>Our method exploits the fact that 2D FTLE ridges (LCS) in 3-space are advected in a similar way to streak surfaces seeded at 1D FTLE ridges on a 2D manifold in 3-space. This statement is based on two facts: firstly, the 1D FTLE ridges on the seeding plane are approximately on 2D ridges in 3-space as long as the seeding plane is approximately perpendicular to the flow (this was exploited in <ref type="bibr" target="#b6">[7]</ref>, where ridges on cutting planes are considered instead of 2D ridges). Secondly, FTLE ridges are approximately material structures and do in fact converge to exact material structures if the integration time goes to infinity <ref type="bibr" target="#b43">[44]</ref>.</p><p>In <ref type="bibr" target="#b31">[32]</ref> and <ref type="bibr" target="#b22">[23]</ref> this temporal coherence of LCS was exploited to efficiently compute time series of FTLE ridges via simultaneous advection of a sampling grid and incremental 1D ridge tracking, respectively. Since a finite integration time is used in our work, the generalized streak surfaces we extract do not coincide with 2D FTLE ridges in general. However, we will demonstrate in this work that these surfaces resemble the 2D ridges at high fidelity and can be computed very efficiently. Furthermore, since generalized streak surfaces move according to the flow they provide a more intuitive flow exploration metaphor than 2D FTLE ridges. Notably, no visual information will be generated in regions where many 2D ridges exist but for none of them an approximating streak surface has its origin on the selected seeding structure. This allows using our approach as an effective technique to focus on particular flow structures in space and time.</p><p>Our contributions: In this work we present the first approach to construct separating streak surfaces in 3D unsteady flows at interactive rates. This enables visually guided 3D flow exploration based on the concept of LCS. Our approach distinguishes from previous approaches in that it avoids computing LCS in 3D. Instead, the computation is restricted to a 2D manifold and streak surfaces are constructed at significantly less computational effort. All processing stages of the proposed algorithm are realized on the GPU, including FTLE computation, ridge extraction, streak surface reconstruction, and surface rendering. The specific contributions of our work are:</p><p>• A navigation tool that allows placing a 2D sampling grid in space-time and computing FTLE values on it in an interactive way.</p><p>• A new ridge extraction method that is specifically tailored to the GPU and produces ridges well-suited as seeding structures.</p><p>• A new method for the reconstruction and rendering of highquality streak surfaces emanating from 1D FTLE ridges.</p><p>The remainder of this paper is organized as follows: After reviewing previous work that is related to ours, Section 3 is dedicated to the spatial selection of separating streak surfaces based on the FTLE. In Section 4 we introduce our new ridge extraction algorithm. The reconstruction of streak surfaces from extracted 1D FTLE ridges is described in Section 5. Section 6 presents a detailed analysis of our approach with respect to performance and quality. We conclude the paper with some thoughts on future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Our approach is based on a number of established techniques in visualization, namely FTLE computation, ridge extraction, streak surface integration, and interactive flow exploration. A thorough overview of feature extraction techniques in flow visualization and geometric flow visualization techniques can be found in <ref type="bibr" target="#b27">[28]</ref> and <ref type="bibr" target="#b23">[24]</ref>, respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>FTLE</head><p>Lagrangian coherent structures as ridges of FTLE fields were introduced by Haller <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b12">13]</ref> and experienced an intensive research since then <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b11">12,</ref><ref type="bibr" target="#b44">45,</ref><ref type="bibr" target="#b50">51]</ref>. Shadden <ref type="bibr" target="#b43">[44]</ref> has shown that ridges of FTLE are approximate material structures, i.e., they converge to material structures for increasing integration times. This fact was used in <ref type="bibr" target="#b32">[33]</ref> to extract topology-like structures and in <ref type="bibr" target="#b22">[23]</ref> and <ref type="bibr" target="#b29">[30,</ref><ref type="bibr" target="#b6">7]</ref> to accelerate the FTLE computation in 2D and 3D flows.</p><p>In the visualization community, different approaches have been proposed to increase the performance, accuracy and usefulness of FTLE as a visualization tool. For example, volume rendering and slicing techniques were used for a visual analysis of 3D FTLE fields in <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b6">7]</ref>, <ref type="bibr" target="#b30">[31]</ref> proposed to extract LCS as filtered height ridges and compared LCS-and topology-based flow visualizations and <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b6">7]</ref> considered the FTLE to control the visualization of particles to show divergent regions in 3D flows. None of them is designed for a real-time exploration of the separating structures in 3D space and time.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Ridge Extraction</head><p>To extract ridge structures, a variety of different approaches has been proposed in the literature. We mention local conditions by relaxing conditions of extremal structures <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b21">22]</ref>, topological/watershed approaches <ref type="bibr" target="#b33">[34]</ref>, definitions based on extremal curvature structures, adaptive methods <ref type="bibr" target="#b29">[30]</ref>, or particle based methods <ref type="bibr" target="#b16">[17]</ref>. <ref type="bibr" target="#b26">[27,</ref><ref type="bibr" target="#b42">43]</ref> focus on the extraction of ridge surfaces in 3D fields. To the best of our knowledge, none of these approaches aims in a real-time extraction of ridge structures in time-varying fields.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Streak Surfaces</head><p>Streak surfaces have recently moved into the focus of flow visualization. <ref type="bibr" target="#b49">[50]</ref> introduced non-adaptive smoke surfaces in an attempt to mimic the appearance of real-world flow structures. <ref type="bibr" target="#b18">[19]</ref> presented remeshing techniques and conditions to get high-quality streak surfaces for flow fields on irregular grids without real-time constraints. <ref type="bibr" target="#b1">[2]</ref> proposed interactive GPU based visualizations of streak surfaces for flow fields on regular grids. <ref type="bibr" target="#b51">[52]</ref> introduced generalized streak lines which are obtained by moving the seeding point according to the zeros of the flow on a boundary surface. In addition, there exists a variety of approaches for the integration of stream and path surfaces <ref type="bibr" target="#b14">[15,</ref><ref type="bibr" target="#b47">48,</ref><ref type="bibr" target="#b37">38,</ref><ref type="bibr" target="#b48">49,</ref><ref type="bibr" target="#b41">42,</ref><ref type="bibr" target="#b35">36,</ref><ref type="bibr" target="#b7">8]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Interactive Flow Exploration</head><p>Interactive flow exploration heavily relies on interactive frame rates and is therefore often concerned with efficient solutions on graphics hardware. On recent GPUs it is now possible to interactively trace millions of particles in Cartesian grids using higher order integration schemes <ref type="bibr" target="#b39">[40,</ref><ref type="bibr" target="#b45">46,</ref><ref type="bibr" target="#b19">20,</ref><ref type="bibr" target="#b3">4]</ref>, and to instantly render these particles using a multitude of different options including oriented point sprites, lines, and more complex geometric representations like bands and tubes <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b40">41,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b24">25]</ref>. For a detailed description of an efficient GPU implementation of particle tracing in tetrahedral meshes we refer the reader to the work by Schirski and Kuhlen <ref type="bibr" target="#b38">[39]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">FTLE</head><p>Our approach for visualizing separating streak surfaces is based on seeding particles along Lagrangian coherent structures (LCS) in a 3D unsteady flow field. Since LCS are formed by ridges in the finite time Lyapunov exponent (FTLE) field, the FTLE first has to be computed before meaningful seeding structures can be found.</p><p>The FTLE is a scalar quantity that measures the stretching induced by the flow. Let φ T t 0 (x) denote the flow map that defines the mapping of particles at position x in space and t 0 in time via path line integration over the time interval T . According to <ref type="bibr" target="#b10">[11]</ref> the FTLE is then defined as</p><formula xml:id="formula_0">σ T t 0 (x) = 1 |T | ln √ λ max ( (∇φ T t 0 (x)) ⊤ ⋅ ∇φ T t 0 (x) )</formula><p>where λ max is the largest eigenvalue of the right Cauchy-Green deformation tensor (∇φ T t 0 (x)) ⊤ ⋅ ∇φ T t 0 (x) of the flow map. Intuitively the FTLE can also be seen as a value derived from the spectral norm of the flow map gradient, describing the maximum rate of separation of infinitesimally closely seeded particles. In this work we compute the flow map, and the FTLE derived thereof, by sampling particles on a planar seeding structure s, which is discretized by a uniform 2D sampling grid. For estimating the flow deformation in the vicinity of one of these particles, however, we consider additional particles that are seeded within an ε-region around it. Following <ref type="bibr" target="#b15">[16]</ref>, we have chosen ε according to the grid spacing in all of our examples.</p><p>The FTLE computation, and thus the following ridge extraction, is restricted to a sub-domain of the 3D flow domain. The user is provided a navigation tool to place s in the 3D field. Both the size and the resolution of the sampling grid can be set by the user. At the center of each grid cell the FTLE value is computed as described above. Specifically, if a center is at position (x, y, z), the trajectories of 6 particles seeded at positions (x ± ε, y ± ε, z ± ε) are traced and the deformation gradient is computed from the particle destinations. Particle tracing and FTLE computation is entirely performed on the GPU, and the resulting values are written into a 2D texture.</p><p>It should be noted that the FTLE computation we perform can generate less reliable results, since the particles can separate significantly during path line integration. Even though there exist approaches to overcome this problem, e.g. by a FTLE redefinition to local criteria on the center trajectory <ref type="bibr" target="#b15">[16]</ref> or renormalization of the particle neighborhood [1], we have not yet integrated these approaches into our method. <ref type="figure" target="#fig_0">Figure 2</ref> shows two snapshots of an exploration session in which FTLE values have been computed on different sampling grids. In both cases the computation was performed at a grid size of 256 × 256 with an integration time of 0.15 s (100 Runge-Kutta 4th order integration steps, requiring 20 time steps of the unsteady flow field). Since the computation is performed on the GPU, interactive update rates of less than 150 ms are achieved as long as all time steps can be stored in the GPU memory. This indicates that often it is not necessary to pre-compute the 3D FTLE field. The values can be updated in-turn once the user moves s or changes any of the parameters the FTLE depends upon, like the start time t 0 , the integration time T , the spatial sampling distance ε, or the size and resolution of the sampling grid. However, in scenarios where the time-resolved flow field sequence does not fit into GPU memory, pre-computing the time-dependent FTLE should be preferred. In this case the pre-computed FTLE values can simply be interpolated at the grid cell centers. Note that in this case the FTLE parameters are fixed and, therefore, ε might significantly differ from the grid spacing on s.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">FTLE RIDGE EXTRACTION</head><p>In the following we describe our novel extraction technique for 1D ridges in 2D FTLE fields. Ridge extraction techniques-also in the context of LCS extraction-have been studied extensively over the last years. There is a vast body of literature related to this field and a comprehensive review is beyond the scope of this paper. However, Eberly <ref type="bibr" target="#b4">[5]</ref>, Haralick <ref type="bibr" target="#b13">[14]</ref>, and Peikert and Sadlo <ref type="bibr" target="#b26">[27]</ref> discuss the basic principles underlying such techniques as well as the different ridge types that exist, and they provide many useful algorithmic and implementation specific details.</p><p>Our ridge extraction technique builds upon the concepts of height ridges and watersheds. The definition of height ridges involves pointwise evaluations of algebraic equations based on geometric ridge properties, which are expressed via first-order derivatives and derivatives into the main curvature directions, i.e., the (transversal) ridge directions <ref type="bibr" target="#b4">[5]</ref>. Let f (p) denote the FTLE value at a point p on s, and let H and g denote the Hessian matrix and the gradient of f , respectively. According to <ref type="bibr" target="#b26">[27]</ref> the height ridges are a subset of the zero-contour of det(Hg, g) = 0, which can be extracted in 2D using the marching squares algorithm.</p><p>In general, unfiltered height ridges do not provide suitable seeding regions for streak surfaces. Even though height ridges cannot really branch as shown in <ref type="bibr" target="#b42">[43]</ref>, they tend to appear as branched structures at larger scales. Highly branched and fragmented structures, however, result in many separate and even non-manifold surface parts. From a visualization point of view, the streak surfaces constructed from such ridges do not allow any intuitive interpretation due to their complex topology and visual clutter thereof. <ref type="figure" target="#fig_1">Figure 3</ref> shows a set of unfiltered FTLE height ridges (top) and compares them to the ridges we are interested in (bottom). Even though height ridges can be post-processed to eliminate undesirable ridge parts and thus to yield simpler seeding structures <ref type="bibr" target="#b29">[30]</ref>, it seems to be difficult to implement this process efficiently on the GPU. Watersheds <ref type="bibr" target="#b28">[29]</ref> are another popular approach for ridge extraction in 2D. It is based on the topology of the underlying 2D scalar field and aims at extracting slopelines separating hills and basins. In this definition a ridge is considered a slopeline going from one maximum to another maximum through a single saddle point. Even though the topology of watershed ridges is often much simpler than that of height ridges, they nevertheless fail to focus on the main axis of hills of the height field. Using a general watershed approach can also lead to rather cumbersome special cases in which significant ridges are missed because they do not separate different minima correctly.</p><p>To overcome the limitations of height ridges and watersheds we introduce a novel ridge extraction algorithm. Generally speaking, a ridge is a graph G = (V, E) consisting of a set V of vertices and a set E of edges. Vertices v ∈ V can be end points (deg(v) = 1), line points (deg(v) = 2) or crossings (deg(v) &gt; 2). With respect to this definition, for our purpose the specific goals are a) to minimize the number of crossings per ridge, and thus to avoid non-manifold surfaces, and b) to maximize the ridge length, i.e. to connect as many vertices as possible, and thus to prevent the streak surfaces from falling into many parts. The basic idea underlying our algorithm is to separate the extraction of the ridge topology from the computation of the exact ridge locations, similar to the concept proposed in <ref type="bibr" target="#b36">[37]</ref>. Starting with the FTLE field in a 2D texture in GPU memory, the texture is first filtered via a gaussian kernel of size 5 × 5 to smooth high-frequency FTLE regions (typically, 5 − 10 smoothing iterations are performed). Then, the texture is processed to classify the FTLE values and build threshold regions. These regions are successively thinned to compute a pixel-accurate ridge skeleton, from which ridge line segments are extracted at subpixel accuracy. The different steps of this algorithm are illustrated in <ref type="figure" target="#fig_2">Figure 4</ref>.</p><p>The result of our technique are continuous ridges with a simple topology. They consist of points that are local maxima into the direction of the local ridge normals, similar to the concept of watersheds. These ridges are returned as a common graph structure G with uniform vertex spacing.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Ridge Topology</head><p>The extraction of the ridge topology is performed by first classifying the discrete set of FTLE values on the sampling grid based on the height and the local curvature of this field, and then by shrinking the resulting regions towards the ridge skeletons. If a sufficient symmetry of the hills in the height field along their main axis can be assumed, the skeleton will roughly coincide with valid ridge locations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.1">Classification</head><p>Performing the classification of FTLE values based on a height threshold is not sufficient in general, since ridges can be of different heights. This classification also fails to segment regions of nearby ridges that are separated by valleys of insufficient depth. To solve this problem we introduce an additional threshold that is used to separate convex and non-convex FTLE regions.</p><p>Let f ww be the second order directional derivative of f (p) into direction w at a fixed position p. Moreover let λ 1 , λ 2 (with λ 1 ≤ λ 2 ) be the eigenvalues of H at p. The point p is a convex point if every second order directional derivative is non-positive: ∀w ∕ = 0 : f ww ≤ 0. Since λ 1 ≤ f ww ≤ λ 2 holds for any arbitrary |w| = 1, p is convex if and only if H is negative semi-definite. This results in the following condition to be fulfilled by every ridge point:</p><formula xml:id="formula_1">λ 2 ≤ 0</formula><p>Applying this criterion to every sample on the seeding structure s gives the desired classification into points belonging to convex regions and points belonging to non-convex regions. For this we calculate the Hessian pixel-wise using discrete filters on the smoothed FTLE field f on s.</p><p>The used criterion, on the other hand, is rather sensitive against small but random fluctuations and thus leads to a rather noisy classification in approximately planar regions. This misclassification, which results in unfeasible skeletons, is resolved by allowing small positive values of λ 2 , i.e., a curvature threshold κ &gt; 0. Combined with a height threshold h to exclude ridges at locations where the FTLE value is too low we arrive at the condition</p><formula xml:id="formula_2">λ 2 ≤ κ ∧ f (p) ≥ h .<label>(1)</label></formula><p>The reason for making the condition dependent on λ 2 rather than λ 1 is that in practice this condition turns out to be much more capable of reducing the ridges' fuzziness. <ref type="figure" target="#fig_3">Figure 5</ref> shows FTLE classifications using the different criteria with varying threshold values. As can be seen, vastly different results are obtained, ranging from rather fuzzy to well-defined and smooth threshold regions. According to our experience, choosing κ one or two orders smaller than the largest occurring curvatures on s provides the best results, i.e. κ ∈ [0.01; 0.1] ⋅ max s {|λ 1 |, |λ 2 |}. For the minimal ridge height h, reasonable values are between 50% and 80% of the maximum FTLE value. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1.2">Skeletonization via Curve-Thinning</head><p>Applying the convexity test (1) to the FTLE field results in a binary threshold image. We assume that pixels labeled 1 passed the test, while all others are labeled 0. We are now seeking for the topological skeletons of those regions consisting of pixels that passed the test, i.e., the skeletons of the convex regions.</p><p>To compute these skeletons efficiently on the GPU we employ a 2D version of the region thinning algorithm proposed by <ref type="bibr" target="#b25">[26]</ref>. The algorithm is very robust against noise at the region boundaries, and since it performs purely local computations at every pixel it can be parallelized effectively. Furthermore, it directly generates the inner skeleton of a region, meaning that the algorithm avoids branches touching the region contour. At every pixel the algorithm considers the 4-neighborhood to classify this pixel, i.e., a pixel is classified as N-(or W-, E-, S-) border-pixel if it has value 1 and its neighbor in the respective direction has value 0:</p><formula xml:id="formula_3">N W • E S</formula><p>In every iteration, at every pixel four sub-iterations are performed to remove certain border pixels. The first sub-iteration NW removes N-and W-border-pixels that match at least one of the following three adjacency templates:</p><formula xml:id="formula_4">0 0 0 x 1 x x 1 x ∨ 0 x x 0 1 1 0 x x ∨ 0 0 ⋅ 0 1 1 ⋅ 1 ⋅</formula><p>Here '0' and '1' mark pixels that have to be exactly matched. Of the neighbors marked 'x', per template at least one has to be '1' while those marked with '⋅' are irrelevant for the evaluation of the respective template. Upon finishing this sub-iteration, the algorithm proceeds with sub-iterations SE, NE, and SW in exactly this order. The templates for these sub-iterations are derived by rotating the templates used in the first sub-iteration accordingly. The thinning process is performed in as many iterations as are required until no more pixels are removed from the input image (typically a maximum of 20 iterations is sufficient).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Sub-pixel Ridge Refinement</head><p>Given the set of skeleton pixels that is output by the thinning algorithm, we construct a graph representation of the skeletons by connecting neighboring pixels. For every skeleton pixel with at least one neighbor a vertex at its center is created. Two vertices are connected via an edge if they belong to horizontally or vertically adjacent pixels (N,W,S, or E template positions) or if they belong to diagonally adjacent pixels which do not share a common neighbor. Note that this implies deg(v) ≤ 4 for all ridge vertices v.</p><p>The graph is stored on the GPU as a linear array of vertex primitives, each carrying a pixel coordinate p v in the sampling grid s and an adjacency list</p><formula xml:id="formula_5">U v ⊂ V with 1 ≤ |U v | ≤ 4</formula><p>implemented as pointers (indices) to up to 4 neighbors. The array is created by invoking a geometry shader for every texel in the 2D texture storing the FTLE values. Using the stream output functionality of current GPUs, we can generate primitives solely for the pixels who are part of the skeleton. To establish the connectivity between these vertex primitives, in a second rendering pass, we scatter their array indices back into an index texture of the same dimensions as the initial texture. In a third pass every vertex finally determines the connectivity information U by a lookup into the index texture.</p><p>The ridge graph is then refined iteratively at sub-pixel precision. Underlying the refinement process is the condition that every ridge vertex v should be lying on a maximum of the image function f into the direction of the local ridge normal n v . Consequently, the ridge vertices have to be moved upwards the FTLE field until they reach such a maximum. Since moving vertices along the image gradient g would cause the ridge graph G to be heavily distorted or even collapse at the absolute maxima of f , we restrict the movement to the n v -direction by projecting g onto n v . This also ensures the convergence of the refinement process under the assumption of a reasonable initial guess produced by the skeletonization. To avoid degenerate cases and to additionally obtain evenly spaced vertices, we incorporate some smoothing into each refinement step by interpolating vertex positions along ridge lines. Specifically, the position p v of a vertex v is updated according to</p><formula xml:id="formula_6">p v ′ = ⎧ ⎨ ⎩ p v + δ r v , if |U v | = 1 (1 − σ ) p v + σ |U v | ( ∑ u∈U v p u ) + δ r v , else<label>(2)</label></formula><p>with</p><formula xml:id="formula_7">r v = ⎧ ⎨ ⎩ ⟨(p u 1 − p u 2 ) ⊥ , g⟩ ⋅ (p u 1 − p u 2 ) ⊥ , if U v = {u 1 , u 2 } ∑ u∈U v ⟨(p u − p v ) ⊥ , g⟩ ⋅ (p u − p v ) ⊥ , else</formula><p>Here, δ is the step-size along the gradient, σ is the amount of line smoothing, and w ⊥ denotes a unit-length vector perpendicular to w. In order to allow for the procedure to converge, we choose the largest δ for which the step size |δ r v | is smaller than one pixel. σ was set to 0.25.</p><p>We perform a fixed number of iteration steps (typically 50), which are computed for every vertex in parallel on the GPU. In a final postprocess the graph G is modified by removing vertices that have moved more than a user-specified distance threshold d max during the refinement (by default we set d max to the length of 5 pixels). In this way we eliminate skeletons that were too far from ridges after the initial skeletonization. Therefore, each vertex v gets assigned an additional attribute d v , which stores the distance a vertex has been moved. Similar to p v , d v is smoothed along ridge lines to prevent oscillation artifacts caused by thresholding:</p><formula xml:id="formula_8">d ′ v = { (1 − ω) d v + ω |U v | ( ∑ u∈U v d u ) + |p v ′ − p v | , if |U v | ≤ 2 d v + |p v ′ − p v | , else<label>(3)</label></formula><p>Compared to σ , ω should be chosen significantly smaller. For instance, ω = 0.05 was used throughout all of our experiments. Vertices with d v &gt; d max are marked invalid. Finally this mark is propagated through G in k cut iterations, marking all vertices invalid from which an invalid vertex can be reached in k cut steps. k cut was set to 5 throughout all experiments. In <ref type="figure" target="#fig_4">Figure 6</ref> extracted ridges before (left) and after the sub-pixel refinement stage are shown. The result of the ridge extraction stage is the array of ridge vertices containing both the invalid and the valid ridge vertices V + ⊆ V . From these vertices the set of valid edges E + ⊆ V + ×V + is derived. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">SEPARATING STREAK-SURFACE VISUALIZATION</head><p>Our ridge extraction technique yields a set of ridge structures for a given point in time. These structures are used as seeding curves for streak surfaces. Since the seeding structures change over time, the surfaces generated this way are generalized streak surfaces.</p><p>The ridges are provided as a set of uniformly distributed line segments E + consisting of a discrete set of control vertices V + . To construct separation surfaces, we repeatedly release particles from the set of seed points V + into the flow and compute their trajectories in the unsteady 3D flow. All particles released at a given point in time are then integrated and rendered. Since the FTLE values have been computed by integrating particles over a specific time interval, the life time of the particles seeded at the FTLE ridges is restricted to the same interval.</p><p>Figures 7 and 9 (c) show separating streak surfaces that were visualized by rendering the set of particles as individual spherical point sprites. As proposed by Sigg et al. <ref type="bibr" target="#b46">[47]</ref>, an analytic ray/sphere intersection is performed in the pixel shader stage to determine correct depth values on a per fragment basis. Numerical particle integration on the GPU is performed as described in <ref type="bibr" target="#b19">[20]</ref>.</p><p>Red particles in the images correspond to control points on a separating streak surface. We optionally adapt the opacity of particles representing a separating streak surface according to the scalar FTLE value at their current position in space and time, thus, fading out primitives that are passing through regions of low FTLE. Green particles represent control points of time surfaces. Those time surfaces are aligned parallel to the planar probe and released into the flow at a fixed frequency to serve as additional context information, emphasizing the separating nature of the extracted streak surfaces. Approximating the surface through a set of individual samples allows us to use large sets of particles at real-time performance. However, as particles start to diverge, missing connectivity between surface samples and the omission of an adaptive refinement make it difficult to identify the separating surface. <ref type="figure">Fig. 7</ref>. Particle based surface visualization. Red particles correspond to points on the separating surface. Green particles serve as context information. They correspond to points on time surfaces, which are released from the planar probe at a fixed frequency.</p><p>In <ref type="bibr" target="#b1">[2]</ref> two different approaches for the visualization of closed streak surfaces were proposed, with the focus on the efficient construction of such surfaces on the GPU. The first approach represents the surface as a set of separate quad-patches, which deform under the influence of the flow. Each patch is traced separately through the flow, and it is adaptively refined into a set of sub-patches if the stretching becomes too severe. The refinement process introduces new vertices that are not shared by adjacent patches, and, thus, successive integration can lead to holes in the surface representation. The second approach generates a closed surface by repeatedly releasing time lines from a single static seeding structure and triangulating adjacent (adaptively refined) timelines.</p><p>Unfortunately, the latter approach can not easily be applied in our scenario since the seeding curve changes permanently. This makes it difficult to establish particle connectivity and construct a consistent surface triangulation. Especially since the topology of the seeding curves changes from time step to time step, we would first have to determine matching curve segments in successive time steps to build a triangulation. Finding these matchings is a rather time consuming task and can not efficiently be mapped to the GPU. For this reason we adopt a variant of the patch-based approach from <ref type="bibr" target="#b1">[2]</ref> in this work.</p><p>In each time step t i and for every edge e ∈ E + we construct a zero area quad, and we release two control vertices of each patch into the flow. Before releasing the remaining two vertices in time step t i+1 , the ridge line segments E + extracted in t i are traced along the gradient of the 2D FTLE field at t i+1 as described in section 4.2. Thus, the vertices are moved according to the movement of the ridge structure from one time step to the next. In this way we employ the temporal coherence of FTLE ridges to find for each ridge vertex a corresponding vertex in the next time step. The remaining two patch vertices are then released into the flow from the new positions on the seeding plane.</p><p>As the adjusted edges E + i (extracted at t i ) do not exactly match the edges E + i+1 , subsequent integration can lead to holes in the surface representation. This is fixed to a certain degree by using point splatting, which renders a slightly enlarged footprint to smear out holes between adjacent patches. <ref type="figure">Figure 8</ref> sketches the construction of surface patches for a seeding structure that moves over time. Adaptive patch refinement is performed as proposed in <ref type="bibr" target="#b1">[2]</ref>. <ref type="figure" target="#fig_0">Figures 1 and 12</ref> show separating streak surfaces that have been constructed and visualized using our approach. In <ref type="figure" target="#fig_6">Figures 11 and 9 (a,b)</ref> depth peeling was applied to create a semi transparent visualization of the separating streak surfaces.</p><formula xml:id="formula_9">t i t i t i+1</formula><p>Advect Refine <ref type="figure">Fig. 8</ref>. Patch-based surface visualization. Before releasing the second pair of vertices at time t i+1 , the line segment of the corresponding ridge structure extracted at time t i is traced along the FTLE gradient field g i+1 . The four white vertices (right) depict the control points of the resulting quadrilateral.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">RESULTS AND DISCUSSION</head><p>To validate the effectiveness of the proposed techniques, we have conducted a number of experiments on different data sets given on 3D Cartesian grids. Performance statistics were measured on a 2.83 GHz Core 2 Quad processor, equipped with a NVIDIA Quadro FX5800 with 4 GB local video memory. Results were rendered into a viewport at FullHD resolution (1920 × 1080). The following data sets were used:</p><p>• 3D double gyre: A 3D extension of the synthetic, periodic 2D double gyre <ref type="bibr" target="#b43">[44]</ref>, sampled at a spatial resolution of 256 × 128 × 256 and a temporal resolution of 10 for one period: • Square cylinder: A DNS simulation of the three-dimensional flow around a square cylinder between parallel walls <ref type="bibr" target="#b34">[35]</ref>. The vector field was resampled onto a uniform grid at resolution 192 × 64 × 48. 102 time-steps were used. The scalar FTLE fields were pre-computed at fourfold the spatial and eightfold the temporal resolution.</p><formula xml:id="formula_10">gyre(x,</formula><p>• Flow around a cylinder: A large eddy simulation of an incompressible unsteady turbulent flow around a wall-mounted cylinder <ref type="bibr" target="#b5">[6]</ref>. 22 time-steps were simulated. The size of the data grid is 256 × 128 × 128. Pre-computed FTLE fields were generated at twice the spatial, and fourfold the temporal resolution.</p><p>• LBM Flow: A Lattice-Boltzmann simulation of the flow around a donut-shaped obstacle. The spatial resolution of the simulation domain is 128 × 64 × 64. The FTLE fields on the 2D sampling grid were computed on the fly during flow exploration. In every time step, 10 vector fields were used in advance to compute the FTLE values.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Visual Exploration</head><p>3D double gyre: Placing the seeding plane parallel to the (x, y) plane essentially means to compute the FTLE ridges on the classical 2D double gyre. Our extraction shows that the obtained ridges agree with expected ridges known from the literature, with the main difference that our extraction works in real-time. Seeding streak surfaces from the  ridges confirms that the ridges are approximate material structures: the generalized streak surfaces and the ridges show a good coincidence as depicted in <ref type="figure" target="#fig_7">Figure 10</ref> (left). Placing the seeding plane parallel to the (x, z) plane reveals approximate sine shaped ridge structures (see <ref type="figure">Figure 1 (right)</ref>). Note that this curve does not coincide with moving saddle of the vector field which is a well-known characteristic property of the data set <ref type="bibr" target="#b43">[44]</ref>.</p><p>Furthermore, the plane can interactively be moved, yielding separating generalized streak surfaces (see accompanying video). Square cylinder: Seeding from a plane in front of the cylinder with a distance according to the integration time to compute the FTLE field reveals one distinct streak surface separating the flow passing above and below the cylinder (see <ref type="figure" target="#fig_0">Figure 12</ref>). Moving the seeding plane closer towards the cylinder makes more separation surfaces parallel to the first one appear. They denote a separation occurring behind the cylinder. <ref type="figure" target="#fig_0">Fig. 12</ref>. A separating streak surface (red) in the square cylinder data set, visualized using a patch-based approach.</p><p>Placing the seeding plane behind the cylinder perpendicular to the main flow direction shows periodically appearing and disappearing streak surfaces which alternate in moving upward and downward. This confirms the appearance of the well-known von Karman vortex street behind the cylinder. In order to show that the streak surfaces are indeed separating structures, we release time surfaces from the seeding plane at times when streak surfaces are released. The time surfaces get advected and clearly get distorted mostly around the intersections with the streak surfaces. As can be seen in Figures 1 (middle) and 7, this shows the separating structure of our streak surfaces. LBM Flow: A tube shaped generalized streak surface is revealed by placing the seeding plane in front of the torus, separating the flow passing through the hole and around the toroidal obstacle.</p><p>Moving s closer towards the obstacle creates two surfaces parallel to the first one, indicating the occurrence of a separation behind the torus (see <ref type="figure" target="#fig_6">Figure 9</ref> (b)). Flow around a cylinder: Two streak surfaces enclosing the cylindrical obstacle are revealed by placing the seeding probe perpendicular to the inflow in front of the object. The extracted surfaces emanating from 1D FTLE ridges on the planar probe-as shown in Figures 1 (left) and 9 (c) -closely resemble the 2D FTLE ridges obtained by incremental ridge tracking in a similar data set <ref type="bibr" target="#b31">[32]</ref>. Notably the separating streak surface is in strong accordance with the LCS in this data set.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Performance</head><p>We applied an explicit fourth-order Runge-Kutta scheme at single floating point precision for numerical particle integration during FTLE (pre-)computation as well as for the integration of streak surfaces.</p><p>Performance measures for FTLE pre-computation are presented in <ref type="table" target="#tab_2">Table 2</ref>. Representative timings in hours (h) are given in column Time <ref type="table">Table 1</ref>. Performance statistics for the extraction and visualization of separating streak surfaces. The surfaces were visualized using either the particle based approach (entries marked •), or the patch-based approach (marked □) including adaptive surface refinement. for varying temporal (Timesteps) and spatial (SpatialRes) FTLE resolutions. Column Integration contains the integration time T and the amount of integration steps. Timings for the ridge extraction on the planar probe as well as for the streak surface generation and visualization are given in <ref type="table">Table 1</ref>. We extract seeding structures (FTLE calculations and ridge extraction) at a fixed temporal frequency (Seed Interval) on the planar probe s with varying texture resolutions (Sampling texture resolution). In cases where the FTLE was calculated interactively, columns FTLE Setup and FTLE Time show the used parameters and the respective calculation time, whereas resampling the precalculated FTLE using trilinear interpolation comes at negligible cost. Timings for FTLE thresholding, curve thinning and ridge refinement are summarized in column Ridge extraction. Column #Quads+Particles shows the average amount of primitives employed to visualize the separating streak surfaces and additional context information, column Adv+Vis the time spent for respective particle integration and rendering. Column FPS contains the average achieved frame rate during the interactive flow exploration sessions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Seed</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Limitations</head><p>For the visual exploration of turbulent flows the proposed technique seems problematic. As can be seen in <ref type="figure" target="#fig_1">Figure 13</ref>, when placing s in turbulent flow regions the FTLE exhibits rather fuzzy ridge structures undergoing frequent topology changes. Hence, many small, disconnected, and strongly moving surface parts will be generated, leading to visual clutter. Reducing the FTLE integration time T as proposed by <ref type="bibr" target="#b32">[33]</ref> to simplify the "Lagrangian skeleton" can only be done to a certain extent, as the surface integration time is restricted to T . The application of the curvature criterion (1) followed by skeletonization especially aims to simplify the extracted ridges. It is clear, on the other hand, that this can change the ridge topology, e.g. by removing non-shallow saddles, or lead to slightly misplaced ridges, i.e., at crossings. Therefore, care has to be taken to not "misinterpret" the resulting ridges. <ref type="figure" target="#fig_1">Fig. 13</ref>. Placing the seeding probe in turbulent regions. Frequent movements and topology changes of ridges result in highly fragmented surface parts and visual clutter thereof.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.4">Conclusion</head><p>In this paper we have presented a real-time technique for the extraction of FTLE ridges on a 2D planar seeding structure in unsteady 3D flows. As we employ ridges as seeding structures for generalized streak surface integration, we focused on the extraction of a subset of all valid ridges. Whereas we aimed to a) obtain predominant features, i.e., long continuous ridge lines and b) to remove unwanted ridges such as discontinuous structures and crossings to avoid visual clutter while rendering the separating streak surface.</p><p>The GPU-based framework allows users to experience a visually guided exploration of semantic separating surfaces by moving the probe in space and/or time and changing parameters steering the ridge extraction and streak surface construction process interactively. To the best of our knowledge, this is the first time that the reconstruction and display of semantic separable surfaces in 3D unsteady flows can be performed at interactive rates, giving rise to new possibilities for gaining insight into complex 3D flow phenomena.</p><p>In fact, the interactive treatment of LCS allows insight not only into the locations of the separating structures but also into their temporal evolution including changing shapes, appearance and disappearance. Moreover, regions of interest can be determined interactively by moving around the seeding plane. This way, a fast visual impression of the "big picture" of the flow as well an in-depth analysis of relevant parts (both in space and time) becomes possible.</p><p>In the future we will pursue research into the following two directions: Firstly, we will perform a detailed analysis of the similarities and differences between generalized streak surfaces and LCS in 3D flows. Secondly, adaptive meshing techniques for constructing highquality polygonal generalized streak surfaces will be examined. In this respect it will be worthwhile to investigate ridge extraction techniques that are specifically tailored to the intended application and can monitor topological changes and degeneracies.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>Two FTLE fields on a planar probe at grid size 256×256. The parallelized FTLE computation on the GPU yields interactive update rates (less than 150 ms for the given probe texture resolution).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 .</head><label>3</label><figDesc>Top: unfiltered height ridges; Bottom: ridges extracted by our approach.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 4 .</head><label>4</label><figDesc>Steps of the ridge extraction algorithm. (a) A planar probe positioned in the flow domain, and the corresponding color coded FTLE scalar field. (b) Threshold regions. (c) Thinning yields the pixel-accurate ridge skeleton. (d) Extracted ridge line segments at sub-pixel accuracy.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 5 .</head><label>5</label><figDesc>Classification of FTLE values into convex (red) and non-convex (blue) regions, using height threshold (left), height and curvature threshold with κ = 0 (middle) and with κ = 10 −3 (right).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 6 .</head><label>6</label><figDesc>Ridges extracted with our approach. Left: Ridges obtained by connecting adjacent vertices. Right: Sub-pixel precise ridges after the refinement and post-processing stage.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head></head><label></label><figDesc>y, z,t) = (−πA ⋅ sin(π f (x,t + 5z)) ⋅ cos(πy), πA ⋅ cos(π f (x,t + 5z)) ⋅ sin(πy) ⋅ d f dx , 0) with f (x,t) = a(t)x 2 + b(t) x, a(t) = εsin(ωt), b(t) = 1 − 2εsin(ωt), A = 0.1, ε = 0.25, ω = 2π 10 and (x, y, z,t) ∈ [0; 2] × [0; 1] × [0; 2] × [0; 10)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 9 .</head><label>9</label><figDesc>(a) A tube shaped transparent streak surface around a torus, separating the flow passing through the hole and around the obstacle. (b) Moving the planar probe closer to the object reveals two individual surfaces denoting a separation behind it. (c) Placing the planar probe perpendicular to the inflow in front of the cylinder reveals two separating surfaces enclosing the object. Note that the rendering artifacts in (c) are a result of the particle based visualization approach.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 10 .</head><label>10</label><figDesc>Correspondence between separating streak surfaces and FTLE ridges. Besides the seeding plane, a second plane is placed such that it intersects the surface and FTLE values are visualized on it. Left: The separating surface stays on the 2D FTLE ridges. Right: In general, since the integration time used to compute the FTLE is finite, the surface keeps staying in regions of high FTLE but does not stay on the 2D FTLE ridges any more.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 11 .</head><label>11</label><figDesc>Separating streak surfaces in the double gyre data set. Individual surface layers are extracted via depth peeling. Green arrows show the velocity direction on time surfaces that are additionally released from the planar probe.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>) are with the Computer Graphics &amp; Visualization group, Technische Universität München.• Holger Theisel (E-mail: theisel@isg.cs.uni-magdeburg.de) is with the Visual Computing group, University of Magdeburg.</figDesc><table /><note>Manuscript received 31 March 2010; accepted 1 August 2010; posted online 24 October 2010; mailed on 16 October 2010. For information on obtaining reprints of this article, please send email to: tvcg@computer.org.</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 2 .</head><label>2</label><figDesc>Performance statistics for GPU-based FTLE computation.</figDesc><table><row><cell>Timesteps</cell><cell>SpatialRes</cell><cell>Integration</cell><cell>Time</cell></row><row><cell>80</cell><cell>256 × 256 × 128</cell><cell>8s in 50 steps</cell><cell>0.8h</cell></row><row><cell>576</cell><cell>384 × 128 × 96</cell><cell cols="2">10s in 100 steps 5.0h</cell></row><row><cell>576</cell><cell cols="2">768 × 256 × 192 10s in 100 steps</cell><cell>43h</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The authors wish to thank Simone Camarri et al. for providing the square cylinder data set, and Tino Weinkauf for resampling the data onto a cartesian grid. Furthermore we wish to thank Octavian Frederich and co-workers for providing the large eddy simulation results.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Lyapunov characteristic exponent for smooth dynamical systems and hamiltonian systems; a method for computing all of them</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Benettin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Galgani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Giorgilli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">M</forename><surname>Strelcyn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Mechanica</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="9" to="20" />
+			<date type="published" when="1980" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Interactive Streak Surface Visualization on the GPU</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bürger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Ferstl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Theisel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1259" to="1266" />
+			<date type="published" when="2009-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Importance-Driven Particle Techniques for Flow Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bürger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kondratieva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE VGTC Pacific Visualization Symposium</title>
+		<meeting>IEEE VGTC Pacific Visualization Symposium</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="71" to="78" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Interactive Visual Exploration of Instationary 3D-Flows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bürger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kondratieva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics/IEEE VGTC Symposium on Visualization (EuroVis)</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="251" to="258" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Ridges for image analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Eberly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Gardner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Morse</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Pizer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Scharlach</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Math. Imaging Vis</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="353" to="373" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Flow Simulation around a Finite Cylinder on Massively Parallel Computer Architecture</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Frederich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Wassen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Thiele</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Parallel Computational Fluid Dynamics</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="85" to="93" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Efficient Computation and Visualization of Coherent Structures in Fluid Flow Applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Garth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Gerhardt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Tricoche</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hagen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page" from="1464" to="1471" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Generation of Accurate Integral Surfaces in Time-Dependent Vector Fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Garth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Krishnan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Tricoche</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Bobach</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1404" to="1411" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Visualization of Coherent Structures in Transient 2D Flows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Garth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Tricoche</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hagen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Topology-Based Methods in Visualization II (Proceedings of TopoInVis 2007)</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="1" to="14" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Interactive visualization of volumetric vector fields using texture based particles</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gumhold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of WSCG</title>
+		<meeting>WSCG</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="page" from="33" to="41" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Distinguished material surfaces and coherent structures in three-dimensional fluid flows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Haller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Phys. D</title>
+		<imprint>
+			<biblScope unit="volume">149</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="248" to="277" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Lagrangian coherent structures from approximate velocity data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Haller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Physics of Fluids</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1851" to="1861" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Lagrangian coherent structures and mixing in two-dimensional turbulence</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Haller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Yuan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Phys. D</title>
+		<imprint>
+			<biblScope unit="volume">147</biblScope>
+			<biblScope unit="issue">3-4</biblScope>
+			<biblScope unit="page" from="352" to="370" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Ridges and valleys on digital images</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Haralick</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Vision, Graphics, and Image Processing</title>
+		<imprint>
+			<date type="published" when="1983" />
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="page" from="28" to="38" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">P M</forename><surname>Hultquist</surname></persName>
+		</author>
+		<title level="m">Constructing stream surfaces in steady 3D vector fields</title>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="171" to="178" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Localized finitetime lyapunov exponent for unsteady flow analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kasten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Petz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Hotz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Noack</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-C</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Vision Modeling and Visualization</title>
+		<editor>M. Magnor, B. Rosenhahn, and H. Theisel</editor>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="265" to="274" />
+		</imprint>
+		<respStmt>
+			<orgName>Universität Magdeburg</orgName>
+		</respStmt>
+	</monogr>
+	<note>Inst. f. Simulation u. Graph.</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Sampling and visualizing creases with scale-space particles</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">L</forename><surname>Kindlmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">S J</forename><surname>Estépar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">M</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C.-F</forename><surname>Westin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1415" to="1424" />
+			<date type="published" when="2009-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kondratieva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<title level="m">The Application of GPU Particle Tracing to Diffusion Tensor Field Visualization. 0:10</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Time and Streak Surfaces for Flow Visualization in Large Time-Varying Data Sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Krishnan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Garth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1267" to="1274" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">A Particle System for Interactive Visualization of 3D Flows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kipfer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kondratieva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="744" to="756" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Pollution release tied to invariant manifolds: A case study for the coast of florida</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Lekien</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Coulliette</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Mariano</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">H</forename><surname>Ryan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">K</forename><surname>Shay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Haller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Marsden</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Phys. D</title>
+		<imprint>
+			<biblScope unit="volume">210</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Edge detection and ridge detection with automatic scale selection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Lindeberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Int. J. Comput. Vision</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="117" to="156" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">A ridge tracking algorithm and error estimate for efficient computation of lagrangian coherent structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lipinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mohseni</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Chaos: An Interdisciplinary Journal of Nonlinear Science</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page">17504</biblScope>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Over Two Decades of Integration-Based, Geometric Flow Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mcloughlin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Laramee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Post</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics Forum</title>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+	<note>to appear)</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Hybrid visualization for white matter tracts using triangle strips and point sprites</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Merhof</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sonntag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Enders</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Nimsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Greiner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1181" to="1188" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">A parallel 3d 12-subiteration thinning algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Palgyi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kuba</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Graphical Models and Image Processing</title>
+		<imprint>
+			<biblScope unit="volume">61</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="199" to="221" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Height Ridge Computation and Filtering for Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE VGTC Pacific Visualization Symposium 2008</title>
+		<meeting>IEEE VGTC Pacific Visualization Symposium 2008</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="119" to="126" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">The state of the art in flow visualisation: Feature extraction and tracking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">H</forename><surname>Post</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Vrolijk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">S</forename><surname>Laramee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Doleisch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="775" to="792" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">The watershed transform: definitions, algorithms, and parallellization strategies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Roerdink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Fundamenta Informaticae</title>
+		<imprint>
+			<biblScope unit="volume">41</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="187" to="228" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Efficient Visualization of Lagrangian Coherent Structures by Filtered AMR Ridge Extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1456" to="1463" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Visualizing lagrangian coherent structures and comparison to vector field topology</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Topology-Based Methods in Visualization II (Proceedings of TopoInVis 2007)</title>
+		<imprint>
+			<date type="published" when="2009-03" />
+			<biblScope unit="page" from="15" to="30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Time-Dependent Visualization of Lagrangian Coherent Structures by Grid Advection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Rigazzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of TopoInVis 2009</title>
+		<meeting>TopoInVis 2009</meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+	<note>to appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Time-Dependent 2D Vector Field Topology: An Approach Inspired by Lagrangian Coherent Structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="88" to="100" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Vortex and Strain Skeletons in Eulerian and Lagrangian Frames</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sahner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Weinkauf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Teuber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-C</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="980" to="990" />
+			<date type="published" when="2007-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Simulation of the threedimensional flow around a square cylinder between parallel walls at moderate Reynolds numbers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Camarri</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Salvetti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Buffoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Iollo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of XVII Congresso di Meccanica Teorica ed Applicata</title>
+		<meeting>XVII Congresso di Meccanica Teorica ed Applicata</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Point-based Stream Surfaces and Path Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schafhitzel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Tejada</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Graphics Interface</title>
+		<meeting>Graphics Interface</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="289" to="296" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Topology-preserving λ 2 -based vortex core line detection for flow visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schafhitzel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Vollrath</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">P</forename><surname>Gois</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Castelo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1023" to="1030" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">A Tetrahedra-based Stream Surface Algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Scheuermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Bobach</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">H K</forename><surname>Mahrous</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Joy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Kollmann</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="151" to="158" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Interactive particle tracing on tetrahedral grids using the GPU</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schirski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Bischof</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kuhlen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Vision Modeling and Visualization</title>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">ViSTA FlowLib: A Framework for Interactive Visualization and Exploration of Unsteady Flows in Virtual Environments</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schirski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Gerndt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Van Reimersdahl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kuhlen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Adomeit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Lang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Pischinger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">H</forename><surname>Bischof</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">7th International Workshop on Immersive Projection Technology, 9th Eurographics Workshop on Virtual Enviroments</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="77" to="86" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Efficient visualization of large amounts of particle trajectories in virtual environments using virtual tubelets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schirski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kuhlen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hopp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Adomeit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Pischinger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Bischof</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VRCAI &apos;04: Proceedings of the 2004 ACM SIGGRAPH international conference on Virtual Reality continuum and its applications in industry</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="141" to="147" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Smooth Stream Surfaces of Fourth Order Precision</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wiebel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Scheuermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics/IEEE VGTC Symposium on Visualization (EuroVis)</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="871" to="878" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Crease Surfaces: From Theory to Extraction and Application to Diffusion Tensor MRI</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schultz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Theisel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Seidel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="page" from="109" to="119" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Definition and properties of lagrangian coherent structures from finite-time lyapunov exponents in two-dimensional aperiodic flows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">C</forename><surname>Shadden</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Lekien</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Marsden</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Phys. D</title>
+		<imprint>
+			<biblScope unit="volume">212</biblScope>
+			<biblScope unit="issue">7</biblScope>
+			<biblScope unit="page" from="271" to="304" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">The correlation between surface drifters and coherent structures based on high-frequency radar data in monterey bay</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">C</forename><surname>Shadden</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Lekien</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Paduan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">P</forename><surname>Chavez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Marsden</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AOSN II: The Science and Technology of an Autonomous Ocean Sampling Network</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="volume">56</biblScope>
+			<biblScope unit="page" from="161" to="172" />
+		</imprint>
+	</monogr>
+	<note>Deep Sea Research Part II: Topical Studies in Oceanography</note>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Interactive Visualization of Three-Dimensional Vector Fields with Flexible Appearance Control</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G.-S</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><forename type="middle">D</forename><surname>Bordoloi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="434" to="445" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">GPU-Based Ray Casting of Quadratic Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Sigg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Weyrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Botsch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eurographics/IEEE VGTC Symposium on Point-Based Graphics</title>
+		<meeting>the Eurographics/IEEE VGTC Symposium on Point-Based Graphics</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="59" to="65" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<monogr>
+		<title level="m" type="main">Fast Texture-based Algorithms for Vector Field Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Stalling</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+		<respStmt>
+			<orgName>FU Berlin, Department of Mathematics and Computer Science</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<monogr>
+		<title level="m" type="main">Implicit Stream Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Van Wijk</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="245" to="252" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">Smoke Surfaces: An Interactive Flow Visualization Technique Inspired by Real-World Flow Experiments</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Funck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Weinkauf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Theisel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Seidel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1396" to="1403" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Experimental and numerical investigation of the kinematic theory of unsteady separation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weldon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Peacock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">B</forename><surname>Jacobs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Helu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Haller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Fluid Mechanics</title>
+		<imprint>
+			<biblScope unit="volume">611</biblScope>
+			<biblScope unit="page" from="1" to="11" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">Generalized Streak Lines: Analysis and Visualization of Boundary Induced Vortices</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wiebel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Jaenicke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Tricoche</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Scheuermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1735" to="1742" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,701 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Predictor-Corrector Schemes for Visualization of Smoothed Particle Hydrodynamics Data</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Benjamin</forename><surname>Schindler</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raphael</forename><surname>Fuchs</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Biddiscombe</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Ronald</forename><surname>Peikert</surname></persName>
+						</author>
+						<title level="a" type="main">Predictor-Corrector Schemes for Visualization of Smoothed Particle Hydrodynamics Data</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:54+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Smoothed particle hydrodynamics</term>
+					<term>flow visualization</term>
+					<term>unsteady flow</term>
+					<term>feature extraction</term>
+					<term>vortex core lines</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>In this paper we present a method for vortex core line extraction which operates directly on the smoothed particle hydrodynamics (SPH) representation and, by this, generates smoother and more (spatially and temporally) coherent results in an efficient way. The underlying predictor-corrector scheme is general enough to be applied to other line-type features and it is extendable to the extraction of surfaces such as isosurfaces or Lagrangian coherent structures. The proposed method exploits temporal coherence to speed up computation for subsequent time steps. We show how the predictor-corrector formulation can be specialized for several variants of vortex core line definitions including two recent unsteady extensions, and we contribute a theoretical and practical comparison of these. In particular, we reveal a close relation between unsteady extensions of Fuchs et al. and Weinkauf et al. and we give a proof of the Galilean invariance of the latter. When visualizing SPH data, there is the possibility to use the same interpolation method for visualization as has been used for the simulation. This is different from the case of finite volume simulation results, where it is not possible to recover from the results the spatial interpolation that was used during the simulation. Such data are typically interpolated using the basic trilinear interpolant, and if smoothness is required, some artificial processing is added. In SPH data, however, the smoothing kernels are specified from the simulation, and they provide an exact and smooth interpolation of data or gradients at arbitrary points in the domain.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>The smoothed particle hydrodynamics (SPH) method was invented in the 1970's for astrophysical simulations. Recently, SPH has become an alternative to traditional Eulerian methods also in industrial computational fluid dynamics (CFD) applications. It is especially useful in problems where a free surface is present or in multi-phase flow simulations. Here, strong initiatives are being taken by academia and industry to make SPH a reliable tool to be used for practical engineering problems. The reason why SPH simulations have not been regularly used much earlier in industrial CFD lies in the fact that SPH was originally designed for unbounded domains. Much of the current research on the numerics side has to do with the modeling of boundaries <ref type="bibr" target="#b10">[11]</ref>.</p><p>Two obvious approaches to visualize SPH data would be resampling and triangulation. Resampled data, especially on uniform grids, can be post-processed with a broad range of visualization algorithms and implementations in commercial or academic software packages. There are, however, some major drawbacks linked to this approach. When resampling data of varying sampling density, either the density must match the highest density, causing an increase in data size, or detail is lost in some regions. Also, solid walls and free surfaces are difficult to represent in structured grids. And, finally, resampling causes the dilemma of either blurring data or generating artifacts. The alternative, to triangulate point-sampled data, is very time-consuming. A triangulation functionality is not often found in visualization software, and it has difficulties with concavities in domain boundaries. Finally, both resampling and triangulation induce an interpolation function which is not compatible with SPH interpolation.</p><p>There exist visualization algorithms and software that are capable of operating directly on SPH data. However, most of these are either limited to basic visualization techniques or they treat SPH data as general point-sampled data, this way not fully exploiting the information contained in the SPH representation.</p><p>Our approach is to respect the kernel functions that were used for the simulation and to reuse them also for visualization. The advantage is that at arbitrary points in the domain all interpolated values, including derivatives, are exact with respect to the SPH representation. However, it implies that visualization algorithms relying on the cell structure of grids cannot be used but must be adapted or replaced by new algorithms. Compared to other data representations, SPH data allows us to compute gradients and second derivatives more efficiently and in higher quality. This fact can be exploited especially in visualization problems that can be tackled with a predictor-corrector strategy. This holds for the extraction of line-type features, the problem addressed in this paper, but also for other types of features or other geometric objects such as isosurfaces. Both prediction and correction steps make heavy use of derivatives, therefore this strategy is appropriate for SPH.</p><p>Some classes of grid based visualization rely on the connectivity of a grid in the sense that they compute in a cell-by-cell manner. Examples are Marching Cubes type contouring methods and parallel vectors methods. Such methods can be reformulated as (spatial) tracking methods if it is possible to estimate the tangent of the feature curve or the tangential plane of the feature surface. Error accumulation in such tracking methods can be avoided by including correction steps, resulting in predictor-corrector schemes. These have the advantage that they work without a grid, but the price to pay is that derivatives are needed for the tangent estimation. In principle, a numerical integration method for stiff ODEs could be used instead of the correction steps. But for problems such as isosurfacing or finding parallel vectors, the error can be detected locally and correction to an exact feature point is possible. This is different from the standard case of streamline integration where a good integration method is the only choice to reduce errors. The simplicity of the prediction and correction steps makes this approach attractive from a performance point of view.</p><p>The properties of predictor-corrector schemes make them ideally suited for SPH visualization where no grid is available but where derivatives can be fast and accurately computed. Moreover, in timedependent data, prediction can be made for the feature in the subsequent time step. This way, temporal coherence is exploited. The efficiency of spatial tracking methods depends on the seeding strategy. Computing seed points should be fast, enough seed points must be generated not to miss a feature, and redundancy should be minimized. An important factor is the availability of a fast rejection test which helps to quickly traverse space where there is no feature.</p><p>In this paper we focus on vortex core lines, although the presented methods can be applied to more general line-type features as long as they can be expressed with the parallel vectors operator <ref type="bibr" target="#b14">[15]</ref>. Vortex core lines are a useful representation of vortices which, especially in unsteady flow, cannot be visually inferred from a streamline or pathline pattern. We present an algorithm to extract vortex core lines directly from SPH data, and we detail out versions for the vortex core line criteria defined by Levy et al. <ref type="bibr" target="#b8">[9]</ref>, Sujudi and Haimes <ref type="bibr" target="#b22">[23]</ref>, Weinkauf et al. <ref type="bibr" target="#b26">[27]</ref>, and Fuchs et al. <ref type="bibr" target="#b3">[4]</ref>. As a second contribution, we compare the latter two, which extend the Sujudi-Haimes criterion to unsteady flow, with the older criteria that implicitly assume steady flow. A comparison will be done on the level of the definitions, resulting in an equivalent formulation of Weinkauf et al.'s criterion in terms of the acceleration vector which reveals the Galilean invariance of this criterion. Based on two time-dependent data sets, we compare results of the mentioned variants, and we compare results of direct SPH visualization with those of visualization based on resampled data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">BACKGROUND AND RELATED WORK</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Smoothed Particle Hydrodynamics</head><p>SPH was introduced by Gingold and Monaghan <ref type="bibr" target="#b4">[5]</ref> and Lucy <ref type="bibr" target="#b9">[10]</ref> for astrophysical problems, and has later become a general CFD method. A review of SPH theory and application can be found in <ref type="bibr" target="#b12">[13]</ref>. Here, we focus on aspects of SPH that are most relevant for visualization.</p><p>The interpolation rule for a quantity A is</p><formula xml:id="formula_0">A(x) = N ∑ j=1 m j ρ j A j W (x − x j , h j )<label>(1)</label></formula><p>where m j is the mass of the j-th particle, ρ j its density, A j the value of A associated with that particle, x j its position, h j its smoothing length, and W is the radially symmetric kernel. The summation is done over all particles having the point x within their kernel support (cf. <ref type="bibr" target="#b16">[17]</ref>, equation 3). The normalized interpolation is obtained by dividing (2.1) by the interpolation of unity which is</p><formula xml:id="formula_1">N ∑ j=1 m j ρ j W (x − x j , h j ) ≈ 1<label>(2)</label></formula><p>The kernel most often used is the cubic spline</p><formula xml:id="formula_2">W (r, h) = 1 πh 3    1 − 3 2 q 2 + 3 4 q 3 1 4 (2 − q) 3 0 0 ≤ q ≤ 1 1 ≤ q ≤ 2 q ≥ 2<label>(3)</label></formula><p>where q = r /h. To avoid round-off errors, the interpolation formula is often rewritten as</p><formula xml:id="formula_3">A(x) = N ∑ j=1 w j A j W (x − x j , h j )<label>(4)</label></formula><p>where <ref type="bibr" target="#b16">[17]</ref>, equation 6). For simplicity, we use the abbreviation W j (x) for the full interpolation weight of A j , namely</p><formula xml:id="formula_4">w j = h −3 j m j /ρ j and W (x − x j , h j ) = h 3 j W (x − x j , h j ) (cf.</formula><formula xml:id="formula_5">m j ρ j W (x − x j , h j ). With this notation, the normalized interpolation is A(x) = N ∑ j=1 A j W j (x) N ∑ j=1 W j (x)<label>(5)</label></formula><p>and, using the quotient rule, the gradient can be calculated as</p><formula xml:id="formula_6">∇A(x) = N ∑ j=1 A j − A(x) ∇W j (x) N ∑ j=1 W j (x),<label>(6)</label></formula><p>and, if needed, the Hessian can be computed along the same lines. The SPH method introduces a smoothing kernel which imposes a coherency in space and time commensurate with the underlying physics used to define the model. An ideal simulation will produce a field which is as smooth as the real conditions, but a bad model, or a set of results which miss time steps, will introduce unrealistic fluctuations in the fields. It is beyond the scope of this paper which concerns visualization to address the deficiencies in the data itself, though the method used to track vortices tries to be as accurate as the data allows.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Direct visualization of SPH data</head><p>One of the best known visualization packages for SPH data is SPLASH <ref type="bibr" target="#b16">[17]</ref>, which is capable of producing 2D plots of data by projecting particles onto a plane, and 3D plots by integrating the kernel contributions of all particles intersecting a ray through the view pixel. Additionally, SPLASH can produce a form of surface plot by using an "optically thick" integration of particle contributions where the density of material through which the ray passes forms the absorption term of the transport equation. Both 3D plots provided by SPLASH can be considered as image-space based renderings and whilst a simple 2D streamline plot is possible, there is no true support for object-space feature based generation of images.</p><p>Extensions to ParaView <ref type="bibr" target="#b5">[6]</ref> given in <ref type="bibr" target="#b1">[2]</ref> make it possible to resample SPH data onto planes, grids and arbitrary geometric meshes. Rosenthal et al. presented an isosurfacing algorithm for SPH data and applied it to astrophysical data <ref type="bibr" target="#b20">[21]</ref>. It generates surfels (surface elements, i.e. points with radius, normal and color information) between selected pairs of neighboring particles. The method can be applied to any point-sampled data, not just SPH data. However, since it is ignores the SPH kernels, the obtained isosurface is not strictly correct in the sense of the SPH model. An alternative algorithm was presented later <ref type="bibr" target="#b19">[20]</ref> where the isosurface is computed by solving a PDE. Again it targets general point-sampled data, but it seems possible to use the same strategy to compute an isosurface of a quantity given in SPH representation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Vortex core line extraction</head><p>Vortices in flow fields can be represented by their axes, also known as vortex core lines. Like for the vortices themselves, there is no unique definition of a vortex core line, but rather a number of criteria defined by several authors. Some definitions include the pressure field <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b11">12]</ref>, but others only make use of the velocity information. Many of these definitions can be expressed in part by the parallel vectors operator <ref type="bibr" target="#b14">[15]</ref>. For this purpose, two vector fields v and w (which can be original or derived data) are specified. Then, vortex core lines according to this definition are obtained by finding locations of parallel vectors and applying a post-filtering. Some possible choices for the vector fields v and w are listed in <ref type="table" target="#tab_1">Table 1</ref>.</p><p>For extracting the raw feature lines, i.e., curves in space which point-wise fulfill the parallel vectors condition, a number of algorithms have been proposed. Peikert and Roth <ref type="bibr" target="#b14">[15]</ref> focused on cell-wise methods which solve for the intersection points with the faces of a cell. A different strategy is to track the feature line, starting from a seed point on the feature. Theisel et al. <ref type="bibr" target="#b24">[25]</ref> and Sukharev et al. <ref type="bibr" target="#b23">[24]</ref> formulated expressions for the tangent of a feature line, and based on this, algorithms for computing raw feature lines by numeric integration. Van Gelder and Pang pointed out that both these methods are prone to error accumulation. They came up with a method <ref type="bibr" target="#b25">[26]</ref> that alternates prediction steps with correction steps.</p><p>Post-filtering removes parts of raw features that do not fulfill additional criteria required by the respective feature definition. For instance, the vortex core line definition by Sujudi and Haimes <ref type="bibr" target="#b22">[23]</ref> requires that the velocity gradient has a pair of complex conjugate eigenvalues in addition to the above stated parallelism. Alternatively, raw feature points can be tested for a minimum amount of swirl. Furthermore, to remove false positives, it is also advisable to restrict the angle between the velocity and the feature tangent <ref type="bibr" target="#b15">[16]</ref> (e.g. to less than 45 • ). Finally, after removing raw feature points together with incident line segments, the remaining set of feature lines can be checked for a minimum length. Too short lines are considered as noise and removed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">A PREDICTOR-CORRECTOR METHOD FOR VORTEX CORE LINE EXTRACTION</head><p>Two vector fields v and w are parallel where their cross product  <ref type="bibr" target="#b25">[26]</ref>, our proposed method is restricted to 3-space and does not support inhomogeneous systems of equations. This restriction allows us to formulate a very simple correction step, which in a similar way could also be derived for other feature extraction problems such as isosurfaces or Lagrangian coherent structures.</p><formula xml:id="formula_7">c = (c 1 , c 2 , c 3 ) = v × w</formula><formula xml:id="formula_8">c = 0 1 c = 0 3 c = 0 2 prediction ∇c x ∇c i j c = v x w = 0 Fig. 1.</formula><p>Zero isosurfaces of components of c used for prediction and correction steps.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Generating seed candidates</head><p>In the first stage of the algorithm we need to find potential seed points for our predictor-corrector method. Since this process needs to look at the entire data volume, a very fast rejection test is needed for the algorithm to have reasonable performance. For the cross product c to vanish in the neighborhood of a particle, there must be a zero crossing in every component of c and thus both signs must occur for every component of c within this neighborhood. To make this test reasonably fast, the radius of the neighborhood is chosen smaller than the kernel support, but still large enough to guarantee a dense covering (1.5h in the case of the cubic spline kernel). Also, these calculations are carried out on raw feature data to avoid expensive SPH interpolations.</p><p>As a next step, candidates in regions with no swirl are discarded. This equals to calculating the characteristic polynomial χ of the velocity gradient and only selecting particles where χ has a pair of conjugate complex roots. Instead of just requiring swirl, a minimum vortex strength can be prescribed. Vortex strength ω is defined as the imaginary part of the complex eigenvalues of the velocity gradient. For rigid rotation, this is the angular speed, but if a deviatoric strain is added, |ω| gets smaller, and for pure shear it is zero. Thresholding by vortex strength is especially useful if large portions of the flow are nearly at rest (cf. the example in Section 5.3), because it effectively suppresses small features caused by noise. With the remaining seed candidates, an initial correction step is made before starting the predictor-corrector loop to make sure that the seed candidate lies on a feature line.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">The prediction step</head><p>To predict the next feature point from a given position, we need the gradient of the components of c = (c 1 , c 2 , c 3 ) = v × w. The gradient of c i can be expressed by v, w, and their gradients as follows (with indices taken modulo 3):</p><formula xml:id="formula_9">∇c i = v i+1 ∇w i+2 + w i+2 ∇v i+1 − v i+2 ∇w i+1 − w i+1 ∇v i+2 (7)</formula><p>From these three vectors, we compute the pairwise cross products ∇c i × ∇c j and select the pair (i, j) which maximizes the magnitude of this cross product. The motivation for this choice is that we want to simultaneously avoid small angles between isosurfaces (c i = 0) and small rates of change perpendicular to an isosurface. The direction of this cross product is now taken as the tangent direction of the feature line, and its sign is chosen consistent with the current tracking direction (see <ref type="figure">Fig. 1</ref>). Along this tangent, the next feature point is predicted at a given step size.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">The correction step</head><p>Again the gradients ∇c i are computed using (7), and the pair (i, j) is chosen for which ∇c i × ∇c j has maximal magnitude. The idea is now to find a feature point in the plane through the given point x and spanned by the two vectors ∇c i and ∇c j , that is a point x = x + s∇c i + t∇c j . At the point x the approximation</p><formula xml:id="formula_10">c k ≈ c k + (s∇c i + t∇c j ) • ∇c k (k = 1, • • • , 3)<label>(8)</label></formula><p>holds. Setting the right hand side to zero for k = i, j leads to the system</p><formula xml:id="formula_11">s∇c i • ∇c i + t∇c j • ∇c i = −c i s∇c i • ∇c j + t∇c j • ∇c j = −c j ,<label>(9)</label></formula><p>for the unknowns s and t. This system is solved for s and t which then yield the corrected point x . In this approach, we ignore the third component of the cross product, which is fine because the three components fulfill</p><formula xml:id="formula_12">v • (v × w) = v 1 c 1 + v 2 c 2 + v 3 c 3 = 0.<label>(10)</label></formula><p>Therefore, when c 1 and c 2 are zero, c 3 becomes also zero as long as v 3 = 0. If v 3 = 0, the same argument can be repeated with v replaced by w in <ref type="bibr" target="#b9">(10)</ref>. Only in the degenerate case where v 3 = w 3 = 0 can c 3 become nonzero. However, this will be detected if the corrector does not converge to a solution.</p><p>The correction step is essentially a Newton-Raphson step, and therefore it can be repeated. We found empirically that two iterations are sufficient to make the error negligible, for prediction step sizes chosen to meet rendering requirements. In case of no convergence, the prediction step can be redone with half the step size, or ultimately, the feature is terminated.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Usage of given velocity gradients</head><p>Typically, at least one of the vectors v and w involves the velocity gradient. But often the velocity gradients ∇u i (i = 1, 2, 3) are available from the simulation as particle attributes</p><formula xml:id="formula_13">g i = (g i 1 , g i 2 , g i 3 )</formula><p>. In this case, (7) can be computed with only first derivatives of the given quantities.</p><p>• For the Levy criterion, we have vector components</p><formula xml:id="formula_14">v i = u i w i = g i+1 i+2 − g i+2 i+1<label>(11)</label></formula><p>and gradients</p><formula xml:id="formula_15">∇v i = ∇u i ∇w i = ∇g i+1 i+2 − ∇g i+2 i+1<label>(12)</label></formula><p>• For the Sujudi-Haimes criterion, we have v = u as above and</p><formula xml:id="formula_16">w i = g i • u<label>(13)</label></formula><p>and its gradient is computed using the product rule</p><formula xml:id="formula_17">∇w i = ∇g i u + (∇u) g i .<label>(14)</label></formula><p>• For the criterion of Fuchs et al. <ref type="bibr" target="#b3">[4]</ref>, we have</p><formula xml:id="formula_18">w i = g i • u + ∂ u ∂t (15)</formula><p>and its gradient is computed in analogy to <ref type="bibr" target="#b13">(14)</ref>. Alternatively, because here w is the particle acceleration, this can be computed more simply and efficiently from particle velocities at two time steps (dividing their difference by the time difference).</p><p>• For the criterion of Weinkauf et al. <ref type="bibr" target="#b26">[27]</ref>, we have</p><formula xml:id="formula_19">v i = a i w i = g i • a<label>(16)</label></formula><p>(a is acceleration) and gradients computed in analogy to <ref type="bibr" target="#b13">(14)</ref>.</p><p>Note that in <ref type="bibr" target="#b11">(12)</ref> and <ref type="bibr" target="#b13">(14)</ref> the terms ∇u i must be computed by using the gradient of the SPH kernels, not using the data attributes g i (even if they are available). The reason is that the given gradient data may differ from gradients obtained using kernel gradients. Therefore, to make the predictor-corrector scheme work, the vectors g i and u must be treated as independent quantities.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Termination criteria</head><p>The predictor-corrector process terminates when the boundary of the fluid volume is reached, when the correction step does not converge or when the filtering criteria fail for N consecutive sample points. It also terminates when getting close to another feature line or when encountering a loop (see below). The way candidate selection works, it is very natural for the candidates to form a cloud around a feature line, thus candidates must be eliminated on the fly to prevent a feature line from being traced multiple times. Since the candidate list not only consists of positions, but also of ids, filtering candidates can simply be done by removing any id from the candidate list which is inside the neighborhood of a given tracing point. Since the neighborhood is already calculated for SPH interpolation, this step does not cause much overhead. Unfortunately, since candidate points are selected based on raw particle data, this process is not completely reliable. To detect a feature line being drawn multiple times, we save for every particle which core line id and step number visited it. Thus, when all neighboring particles at a certain step have already been visited by another core line, the tracing process is terminated. When all neighbors have been visited by the same core line already, there is the possibility of a looping core line.</p><p>If we would terminate at this point, looping core lines would not be closed. This is because neighborhoods overlap and the termination would come too early. Instead, we now calculate a similarity criterion loosely inspired by <ref type="bibr" target="#b2">[3]</ref>. We first find the point on the core line closest to the last point. We then calculate the average distance of the last N points to the core line. If this distance is smaller than the step size used for the prediction step, we terminate.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.6">Post-filtering of raw features</head><p>In the post-filtering stage, the set of raw features is reduced to the final, meaningful features. For vortex core lines, filtering criteria include the following:</p><p>• a pair of complex conjugate eigenvalues of ∇u • sufficient vortex strength (see Section 3.1)</p><p>• small angle between velocity and the core line.</p><p>The small angle criterion is useful, because some of the criteria assume a "swirl" type vortex and do not work well for "tumble" vortices <ref type="bibr" target="#b7">[8]</ref>. It is very usual for a criterion to fail along a core line. To get nicely connected core lines, we use a tolerant filtering which accepts N consecutive failures of any filtering criterion before aborting. If N is reached, the last N inserted feature points are removed to have a consistent output. In the end, only feature lines longer than a specified limit are accepted.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.7">Temporal coherence</head><p>When creating animated core lines, feature points of the previous time step can be reused. Since this guarantees candidate points for the features already available in the previous time step, we can reduce the amount of searching done when generating seed candidates. In our implementation, we chose to run the candidate test only on every tenth particle, which results in substantial speed-ups (see <ref type="figure" target="#fig_4">Fig. 5</ref>). This optimization can theoretically lead to a feature being missed for nine consecutive time steps, but in practice almost all features can be traced from many possible candidate points. Comparisons with full candidate searches revealed that only a few very small and short-lived features were missed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.8">Higher-order temporal interpolation</head><p>To save storage space, it is common practice in flow simulation to save only every n-th computed time step. This means that very often data sets have good resolution in space, but not in time. To make smooth animations of core lines possible, interpolation between two time steps is needed. Higher-order instead of linear interpolation can be used, which on average increases accuracy and reduces visualization artifacts, but comes at higher computational cost and can introduce other artifacts due to overshooting.</p><p>With SPH data we have to deal not only with field data, but also with particle positions, the interpolation of which is especially important because it affects not only the particle paths but the reconstruction of all other data channels as well. This is nicely illustrated in <ref type="figure" target="#fig_0">Fig. 2</ref> where linear interpolation leads to a water volume that incorrectly fills the hollow roll formed by a wave turning over. A consequence of this incorrectly enlarged domain is that a vortex core line is falsely detected near the center of the roll. When animated, such an "invented" feature pops up only at interpolated, but not at original, time steps.</p><p>With cubic interpolation, interpolated particle paths correctly remain inside the water volume and thus the popping artifacts are avoided. For this, it is sufficient to apply cubic interpolation to positions, while field data can be interpolated linearly. The advantage of this scheme is that it can be realized with no more than two time steps simultaneously kept in memory. This is achieved by using cubic Hermite interpolation based on particle positions and on particle velocities which serve as the first derivatives. The resulting particle paths are C1 and more consistent with the particle velocities. This way, a smooth (C 1 ) trajectory is obtained and moreover, the problem of overshooting is avoided by not applying polynomial interpolation to more than two data points. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">UNSTEADY EXTENSIONS OF THE SUJUDI-HAIMES VORTEX CORE LINE CRITERION</head><p>In this section we compare two recent extensions of the Sujudi-Haimes criterion for vortex core lines to unsteady flow. In its original formulation this criterion requires that the velocity gradient has one real and two complex eigenvalues and that the real eigenvector is aligned with the velocity vector. It was discovered later <ref type="bibr" target="#b21">[22]</ref> that the second part of the criterion can reformulated as (∇u) u u where the term on the left can be identified as the acceleration of a steady flow. It is obvious that this expression lacking any temporal derivatives cannot correctly describe a vortex axis unless the flow is steady or at least quasi-steady. A straightforward extension is to replace the steady acceleration by the true acceleration a = (∇u) u + ∂ u/∂ t. In the case of a steady flow, this is consistent with the original Sujudi-Haimes criterion, while for unsteady flow it was shown to give better results <ref type="bibr" target="#b3">[4]</ref> in the sense that they are more consistent with vortices reported by the λ 2 criterion.</p><p>Independently, Weinkauf et al. <ref type="bibr" target="#b26">[27]</ref> found a different extension by taking Sujudi and Haimes' initial motivation from 3D to the 4D spacetime domain. Instead of identifying the line about which the flow spirals, they identified a "plane of non-swirling flow" in the 4D domain. They came up with criteria for vortex centers in 2D and vortex axes in 3D for both steady and unsteady flow. We discuss these four criteria in the following two subsections, and we give for each of them a second equivalent formulation which we feel is more intuitive and which also reveals some close relations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Vortex centers in 2D</head><p>2D steady flow. In 2D steady flow a vortex center can be defined as a critical point of the velocity field u(x, y) of type focus or center. An equivalent formulation is: The velocity vector is zero and the velocity gradient has two complex eigenvalues.</p><p>2D unsteady flow. Weinkauf's criterion <ref type="bibr" target="#b26">[27]</ref> is the Sujudi-Haimes applied to the 3D steady space-time flow (encoding the given unsteady 2D flow):</p><formula xml:id="formula_20">p(x, y,t) = u(x, y,t) 1 =    u(x, y,t) v(x, y,t) 1   <label>(17)</label></formula><p>We observe that the Jacobian of p</p><formula xml:id="formula_21">J p = ∇u u t 0 0 =    u x u y u t v x v y v t 0 0 0   <label>(18)</label></formula><p>(with subscripts denoting derivatives) has a zero eigenvalue. The Sujudi-Haimes criterion demands that this is the only real eigenvalue and that p is the associated eigenvector. Hence we have</p><formula xml:id="formula_22">J p p = 0 • p<label>(19)</label></formula><p>which implies (∇u) u + u t = 0 (20)</p><p>An equivalent formulation is therefore: The acceleration vector is zero and the velocity gradient has two complex eigenvalues.</p><p>Consistency with steady case. It is easy to see that the definition for the unsteady case is consistent with the steady case when applied to steady flow. The acceleration vector is (∇u) u in the steady case. This is zero if u is.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Vortex axes in 3D</head><p>3D steady flow. In 3D steady flow a vortex axis can be defined by the Sujudi-Haimes criterion which requires that ∇u(x, y, z) has a single real eigenvector and that this is aligned with u(x, y, z). An equivalent formulation is: The velocity vector is either zero or along the single real eigenvector of the velocity gradient.</p><p>3D unsteady flow. In 3D, Weinkauf's criterion <ref type="bibr" target="#b26">[27]</ref> (equation 28) is that the vector </p><formula xml:id="formula_23">  f 1 f 2 f 3    − f 4 u (21)</formula><p>is the single real eigenvector of the velocity gradient. Here the vector f denotes the eigenvector of J p belonging to the zero eigenvalue:</p><formula xml:id="formula_24">J p f = ∇u u t 0 0      f 1 f 2 f 3 f 4      = 0<label>(22)</label></formula><p>From <ref type="bibr" target="#b21">(22)</ref> follows</p><formula xml:id="formula_25">(∇u)    f 1 f 2 f 3    + f 4 u t = 0<label>(23)</label></formula><p>and therefore the identity</p><formula xml:id="formula_26">(∇u)       f 1 f 2 f 3    − f 4 u    = − f 4 (u t + (∇u) u)<label>(24)</label></formula><p>in which, by <ref type="bibr" target="#b20">(21)</ref>, the left hand side is an eigenvector of ∇u. An equivalent formulation is therefore: The acceleration vector is either zero or along the single real eigenvector of the velocity gradient.</p><p>Consistency with steady case. Again, it is easy to show that the definition for the unsteady case is consistent with the steady case when applied to steady flow. The acceleration vector is (∇u) u in the steady case. This is an eigenvector of ∇u if u is.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Comparison of criteria</head><p>The above reformulation of the vortex axis criterion by Weinkauf et al. leads to two interesting observations. Firstly, it shows that this definition of a vortex axis in 3D unsteady flow is Galilean invariant. This is because both the acceleration vector and the velocity gradient are Galilean invariant. Secondly, it reveals a close relation with Fuchs et al.'s unsteady extension of the Sujudi-Haimes criterion <ref type="bibr" target="#b3">[4]</ref>.</p><p>Given a velocity field u (x,t) and a spatial location x where the velocity gradient has a single real eigenvalue (and two complex ones), let e r denote the corresponding eigenvector, and let a denote the acceleration vector (∇u) u + u t . With these three vectors the following criteria for vortex core lines can now be expressed: Of all these, Weinkauf et al.'s a e r is the only predicate which is Galilean invariant, which at least theoretically is an advantage. On the other hand, Fuchs et al.'s u a can be viewed as the more immediate extension to unsteady flow. In practice, the two criteria were found to behave quite similarly and depending on the application one or the other might have slight advantages. We provide a comparison based on unsteady SPH simulations in the results section.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RESULTS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Implementation details</head><p>Eigenvector-free formulations. We chose the eigenvector-free formulations of the Sujudi-Haimes and Weinkauf criteria (see <ref type="table" target="#tab_1">Table 1</ref>). This way the calculation of the second vector reduces to a matrixvector product, which is faster than explicitly computing eigenvectors. Eulerian vs. Lagrangian calculation of acceleration. Acceleration data, as is needed for the criteria of Fuchs et al. and Weinkauf et al., is usually not present in simulation data. Naively, it can be generated using the Eulerian formulation a = (∇u)u + ∂ u ∂t . This approach however requires expensive SPH interpolations in three different time steps, because for computing a finite difference, the velocity has to be evaluated at a given point in space in two additional time steps. A better approach is to calculate accelerations from particle attributes. Since SPH works in the Lagrangian frame, this operation can be done on the raw particle data. For the k-th particle, acceleration is calculated as a k (t) = ∂ ∂t u k (t) by using a finite difference. This calculation can be done off-line as a form of preprocessing which then gives an additional data channel in the input data, or it can be done on the fly very quickly. This data is treated like any other raw data quantity. The resulting core lines are not only more smooth compared to core lines generated from Eulerian acceleration, they are also significantly faster to generate, as is shown in <ref type="figure" target="#fig_3">Fig. 4</ref>.</p><p>Candidate filtering. As a means to reduce the number of candidates, we explored to filter them and discard those with a vortex strength ω below a given threshold. Vortex strength measures radians per second, but by multiplying with a ratio L/U of a typical length over a typical speed it can be nondimensionalized. For the Dam data L/U ≈ 8.5/3.0 and for the Tsunami data L/U ≈ 3.2/1.0, therefore a threshold of 1.0 roughly means a winding angle of π per typical length. We did not observe any loss of features when using this threshold. <ref type="figure" target="#fig_3">Fig. 4 and 11</ref> show the savings in computing time for ω = 0.0 (no filtering), 0.1, and 1.0.</p><p>Software. The vortex extraction software has been implemented as a module on top of ParaView <ref type="bibr" target="#b5">[6]</ref>.</p><p>It can be downloaded from the URL http://graphics.ethz.ch/ research/visualization/sphvis.php. The temporal interpolation code has been implemented as a separate ParaView filter so that it can be reused in conjunction with other filters and is being contributed to the core of the ParaView software package. It can be found under Filters→ Temporal→ Temporal Interpolator (Particles).</p><p>All benchmarks were run on an Intel Q6600 quad core processor with 3 GB of RAM running Linux.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Dam breaking simulation data set</head><p>Our first test data set is an SPH simulation of the SPHERIC dam break case <ref type="bibr" target="#b6">[7]</ref>. It has 670,575 fluid particles and 87 time steps, and the cubic spline kernel has been used. Solid boundaries are modeled with solid particles, while the air contains no particles.</p><p>Qualitative comparison of vortex core line methods. The well known vortex core line methods by Levy et al. and by <ref type="bibr">Sujudi and</ref> Haimes are known to often produce quite different results. In this data set, they behave remarkably similar (see <ref type="figure" target="#fig_5">Fig. 6</ref>). Interestingly, the two unsteady extensions of Sujudi-Haimes produce significantly different results, but among themselves they are quite consistent. This is an indication that the methods designed for steady flow are not appropriate for flow with strongly unsteady characteristics.   Direct vs. resampling-based extraction. As a verification of our predictor-corrector method, we compared results with those obtained from velocity data resampled on a uniform grid. In <ref type="figure" target="#fig_6">Figs. 7 and 8</ref> such a comparison is shown for a grid of roughly the same number of nodes (660,275) as there are particles. The results are consistent for all larger and stronger vortices. Feature extraction from resampled data took 1.6 seconds, which is about 50 percent higher than direct grid nodes grid spacing mean error std. dev. 86,346 0.0264 0.00409 0.00196 660,275 0.0132 0.00305 0.00148 4,351,760 0.0066 0.00217 0.00107 <ref type="table">Table 2</ref>. Error caused by resampling <ref type="figure">Fig. 7</ref>. Vortex core lines directly computed from SPH data (yellow), and from uniformly resampled data (magenta). Levy's criterion (used in both cases) extracts vortex axes in instantaneous velocity field, indicated also by streamlines (dark blue). extraction from SPH data with temporal coherence enabled. In addition, the resampling took 7.2 seconds which, in principle, could also be reduced by exploiting temporal coherence. If temporal coherence is not exploited, our method requires roughly half as much time as the resampling-based method (see <ref type="figure" target="#fig_3">Fig. 4</ref>). When comparing a resamplingbased method with a direct one, a point can be found where the resampling frequency is low enough to make the resampling-based method the faster one <ref type="bibr" target="#b13">[14]</ref>. In our case, to reach this point, the grid must be chosen even coarser than we did in the above experiment. That is, there would be fewer sampling points than particles, and consequently the quality of the result would be inferior to that in <ref type="figure">Fig. 7</ref>. For a quantitative assessment of the quality of a feature point, we applied correction steps (Section 3.3) and measured the length of the total correction. As can be seen from <ref type="table">Table 5</ref>.2 the mean error is roughly a quarter of the grid spacing, and it is therefore very costly to reduce it. This allows us to conclude that resampling is useful only for previewing purposes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Tsunami data set</head><p>We tested our algorithm also on a second data set, an SPH simulation of the creation of a tsunami <ref type="bibr" target="#b18">[19]</ref>. In this simulation, a wedge is sliding downward which is idealizing a section of earth falling. The number of fluid particles is 58,674 (such low numbers are not uncommon in hydrodynamics, in contrast to astrophysics). The number of time steps is 227, and the kernel is a quadratic function within a support radius of 2h. This data set exhibits a vortex structure above the wedge, moving downward with the wedge while deforming. Again, we observe a clear difference between the features obtained with a steady and an unsteady criterion (see <ref type="figure" target="#fig_8">Fig. 9</ref>) throughout most of the time steps. The steady criterion (method by Levy et al.) reports a single vortex, however, its middle part is neither in agreement with the unsteady variant nor with the λ 2 isosurface. The unsteady criterion <ref type="bibr">(Fuchs et al.)</ref> reports only the two end pieces of that feature, which is consistent with both the steady criterion and the λ 2 isosurface. That the feature does not follow the λ 2 isosurface along the edge of the wedge could be an effect of the low number of particles. But it is also important to notice that λ 2 cannot be taken as a ground truth for vortex detection.   . LIC images of the tsunami velocity field at t=7.0s (the middle time step of <ref type="figure" target="#fig_8">Fig. 9</ref>) at the symmetry plane of the domain. Velocities are as seen from a static observer (left), an observer moving with the Levy feature curve (middle), and an observer moving with the wedge and thus with the hypothetical vortex indicated by the λ 2 isosurface (right).</p><p>Since both the Levy feature curve and the λ 2 isosurface are quasisymmetric near the symmetry plane of the domain (and of the wedge), we checked both of these features for being consistent with Robinson's vortex definition <ref type="bibr" target="#b17">[18]</ref> according to which spiraling flow behavior must be seen by an observer moving with the vortex core (which is within <ref type="figure">Fig. 11</ref>. Total time (seconds) for feature extraction from the Tsunami data set, under the same conditions as for the dam data in <ref type="figure" target="#fig_3">Fig. 4</ref>. Because there are a lot of small velocity magnitudes, filtering candidates based on ω is essential.</p><p>the symmetry plane). The LIC images in <ref type="figure" target="#fig_9">Fig. 10</ref> show that spiraling flow exists at the intersection of both the feature curve and the isosurface, but only if the observer moves at a speed different from that of the core of the hypothetical vortex. As a consequence, there is no strong indication of a single connected vortex, and in that sense, the unsteady criterion gives the better results than the steady one.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSION</head><p>This paper presents a new method for finding vortex core lines in SPH data on the basis of the parallel vectors operator. We have shown how our predictor-corrector approach can make use of the SPH representation to efficiently generate high quality output. The method was then extended to detect loops in vortex core lines and to exploit temporal coherence, speeding up the extraction process significantly. The described approach is straight-forwardly extended to other mesh-free data as long as kernels are radially symmetric and given analytically such that derivatives can be efficiently evaluated. The method is also extendable to other features than vortex core lines. Height ridges, e.g., can be computed by defining the vectors v and w of Section 3 appropriately, which involves the Hessian of the given scalar field.</p><p>We also contributed a theoretical comparison of two unsteady extensions of the method of Sujudi and Haimes and an analysis of the results obtained with these variants. We found that the two criteria by Weinkauf et al. and by Fuchs et al. produce very similar results. We interpret this result in the way that in practice, Galilean invariance seems less important than the use of a criterion based on the true (unsteady) acceleration vector. Because the criterion by Fuchs et. al also performed better in terms of runtime performance than the other criteria, we can conclude that this criterion should be preferred over the others for visualizing unsteady velocity fields.</p><p>What is still a matter of future research is to give a physical interpretation of these two criteria that were derived largely by analogy. We would also like to investigate tolerant filtering not only in space, but also in time, to further reduce flickering of features in animations. One way of achieving this would be to track entire features using corrector steps on the vertices of a feature line of the previous time step. This will require careful handling of merging and splitting of features.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>Importance of cubic interpolation of particle paths. Arrows indicate positions and velocities of all particles and show a region of air under the wave rolling over. Red lines mark linearly interpolated paths of some of the particles, while green curves indicate the corresponding cubically interpolated paths.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 3 .</head><label>3</label><figDesc>The Dam breaking simulation data. The free surface is shown at time 0.2, 0.7, 1.2, and 1.7.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 .</head><label>4</label><figDesc>Total time (seconds) for full feature extraction for the dam break data set. An average over five time steps has been taken, and temporal coherence was disabled. Three levels of candidate filtering based on vortex strength ω are shown. The bars are broken up to show the time taken by the candidate selection process (bottom) and the tracing step (top). It clearly shows that for large data sets and adequate filtering, the process is bound by the amount of time taken finding candidates.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 .</head><label>5</label><figDesc>Impact of exploiting temporal coherence (criterion of Fuchs et al.). The first time step is searched fully, while for subsequent time steps temporal coherence is used. Total CPU seconds for a range of time steps of the dam breaking data.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 .</head><label>6</label><figDesc>Comparison of vortex core line criteria, Levy et al. (yellow), Sujudi and Haimes (green), Weinkauf et al. (blue), Fuchs et al. (red). Closeup of the vortex analyzed in detail in the accompanying video. The vortex chosen is one of the quasi-symmetric pair of strongest vortices. Results of the methods designed for steady / unsteady flow are pairwise similar.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 8 .</head><label>8</label><figDesc>Close-up ofFig. 7, core lines only. Results show good consistency, with the direct method (yellow) being slightly less noisy.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 9 .</head><label>9</label><figDesc>Three time steps of the tsunami simulation data set. Vortex core lines according to Levy's criterion (yellow) are connected, while those according to Fuchs et al. (red) consist of two shorter pieces. Isosurfaces of λ 2 confirm the existence of a vortex, but not the exact location of either type of core lines. The blue spheres represent (every tenth of) the SPH particles at the first of the three time steps.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 10</head><label>10</label><figDesc>Fig. 10. LIC images of the tsunami velocity field at t=7.0s (the middle time step of Fig. 9) at the symmetry plane of the domain. Velocities are as seen from a static observer (left), an observer moving with the Levy feature curve (middle), and an observer moving with the wedge and thus with the hypothetical vortex indicated by the λ 2 isosurface (right).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 1 .</head><label>1</label><figDesc>∂ u ∂t Fuchs et al. [4] a acceleration e r (∇u) single real eigenvector of velocity gradient Weinkauf et al. [27] a acceleration (∇u)a velocity gradient times acceleration -, eigenvector-free reformulation ∇p pressure gradient (∇∇p)∇p pressure Hessian times gradient Miura and Kida [12] Choices of vectors v and w for vortex core line extraction of c 1 , c 2 and c 3 intersect in a line, as is shown in Fig. 1. The tangent direction of this line is perpendicular to all three gradients ∇c i . From this we can derive procedures for predicting and for correcting feature points (subsections 3.2 and 3.3). In comparison with Van Gelder and Pang's method</figDesc><table><row><cell>v</cell><cell>w</cell></row></table><note>vanishes. In the general case, solutions of this equation are lines, not isolated points. Therefore, the zero isosurfaces</note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The authors would like to thank Jean-Christophe Marongiu for the "dam breaking" data set, Ben Rogers for the tsunami data set, Yun Jang for discussions, and the anonymous reviewers for their helpful comments. The project SemSeg acknowledges the financial support of the Future and Emerging Technologies (FET) programme within the Seventh Framework Programme for Research of the European Commission, under FET-Open grant number 226042.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">A predictor-corrector technique for visualizing unsteady flow</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">C</forename><surname>Banks</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">A</forename><surname>Singer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="151" to="163" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Visualization and analysis of SPH data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Biddiscombe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Graham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Maruzewski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Issa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ERCOFTAC Bulletin</title>
+		<imprint>
+			<biblScope unit="volume">76</biblScope>
+			<biblScope unit="page" from="9" to="12" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+	<note>SPH special edition</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Similarity-guided streamline placement with error evaluation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krolik</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1448" to="1455" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Parallel Vectors Criteria for Unsteady Flow Vortices</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Fuchs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Muigg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="615" to="626" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Smoothed particle hydrodynamic: theory and application to non-spherical stars</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Gingold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Monaghan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Monthly Notices of the Royal Astronomical Society</title>
+		<imprint>
+			<biblScope unit="volume">181</biblScope>
+			<biblScope unit="page" from="375" to="389" />
+			<date type="published" when="1977" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">ParaView Guide, A Parallel Visualization Application</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Henderson</surname></persName>
+		</author>
+		<ptr target="http://www.paraview.org" />
+		<imprint>
+			<date type="published" when="2005" />
+			<publisher>Kitware Inc</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">A volume-of-fluid based simulation method for wave impact problems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">M T</forename><surname>Kleefsman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Fekken</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">E P</forename><surname>Veldman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Iwanowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Buchner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computational Physics</title>
+		<imprint>
+			<biblScope unit="volume">206</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="363" to="393" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Investigating swirl and tumble flow with a comparison of visualization techniques</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">S</forename><surname>Laramee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Graz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings IEEE Visualization 04</title>
+		<meeting>IEEE Visualization 04</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="51" to="58" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Graphical visualization of vortical flows by means of helicity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Levy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Degani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Seginer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">AIAA Journal</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="page" from="1347" to="1352" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A numerical approach to testing the fission hypothesis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">B</forename><surname>Lucy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Astronomical Journal</title>
+		<imprint>
+			<biblScope unit="volume">82</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="1013" to="1924" />
+			<date type="published" when="1977" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Numerical simulation of the flow in a Pelton turbine using the meshless method SPH and a new simple solid boundary treatment</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Marongiu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Leboeuf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Parkinson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proc. of the Institution of Mechanical Engineers, Part A: Journal of Power and Energy</title>
+		<imprint>
+			<biblScope unit="volume">221</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="849" to="856" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Identification of tubular vortices in turbulence</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Miura</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kida</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the Physical Society of Japan</title>
+		<imprint>
+			<biblScope unit="volume">66</biblScope>
+			<biblScope unit="page" from="1331" to="1334" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Smoothed particle hydrodynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Monaghan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Reports on Progress in Physics</title>
+		<imprint>
+			<biblScope unit="volume">68</biblScope>
+			<biblScope unit="page" from="1703" to="1759" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Ray-Tracing Polymorphic Multidomain Spectral/hp Elements for Isosurface Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Nelson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Kirby</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="114" to="125" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">The &quot;Parallel Vectors&quot; Operator -A Vector Field Visualization Primitive</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization</title>
+		<meeting>IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="263" to="270" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Height Ridge Computation and Filtering for Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Pacific Vis</title>
+		<editor>I. Fujishiro, H. Li, and K.-L. Ma</editor>
+		<meeting>Pacific Vis</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="119" to="126" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">SPLASH: An interactive visualisation tool for Smoothed Particle Hydrodynamics simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Price</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Publications of the Astronomical Society of Australia</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="159" to="173" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Coherent Motions in the Turbulent Boundary Layer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Robinson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Annual Rev. of Fluid Mechanics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="page" from="601" to="639" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">SPH Modeling of Tsunami Waves</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">D</forename><surname>Rogers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Dalrymple</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advanced Numerical Models for Simulating Tsunami Waves and Runup</title>
+		<imprint>
+			<publisher>World Scientific Publishing</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="75" to="100" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Smooth surface extraction from unstructured point-based volume data using pdes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Rosenthal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Linsen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1531" to="1546" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Direct Surface Extraction from Smoothed Hydrodynamics Simulation Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Rosenthal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rosswog</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Linsen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Fourth High-end Visualization Workshop</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="50" to="61" />
+		</imprint>
+	</monogr>
+	<note>Lehmanns Media -LOB</note>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">A Higher-Order Method for Finding Vortex Core Lines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Roth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on Visualization &apos;98</title>
+		<meeting>the conference on Visualization &apos;98<address><addrLine>Los Alamitos, CA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="143" to="150" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Identification of Swirling Flow in 3D Vector Fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Sujudi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Haimes</surname></persName>
+		</author>
+		<idno>95-1715</idno>
+		<imprint>
+			<date type="published" when="1995" />
+			<publisher>AIAA</publisher>
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Tracing parallel vectors. Visualization and Data Analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sukharev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Zheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Pang</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="volume">6060</biblScope>
+			<biblScope unit="page" from="682" to="695" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Extraction of parallel vector surfaces in 3D time-dependent fields and application to vortex core line tracking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Theisel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sahner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Weinkauf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-C</forename><surname>Hege</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Seidel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization</title>
+		<meeting>IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2005-10" />
+			<biblScope unit="page" from="631" to="638" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Using PVsolve to Analyze and Locate Positions of Parallel Vectors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Pang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="682" to="695" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Cores of Swirling Particle Motion in Unsteady Flows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Weinkauf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sahner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Theisel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1759" to="1766" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

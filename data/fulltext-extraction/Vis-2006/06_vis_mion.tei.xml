@@ -1,0 +1,954 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Distributed Shared Memory for Roaming Large Volumes</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Laurent</forename><surname>Castanié</surname></persName>
+							<email>castanie@earthdecision.com</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christophe</forename><surname>Mion</surname></persName>
+							<email>christophe.mion@inria.fr.•</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Xavier</forename><surname>Cavin</surname></persName>
+							<email>xavier.cavin@inria.fr</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bruno</forename><surname>Lévy</surname></persName>
+							<email>bruno.levy@inria.fr.</email>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="institution">INRIA Lorraine (Nancy</orgName>
+								<address>
+									<country key="FR">France</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff1">
+								<orgName type="institution">INRIA Lorraine (Nancy</orgName>
+								<address>
+									<country key="FR">France</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff2">
+								<orgName type="institution">INRIA Lorraine (Nancy</orgName>
+								<address>
+									<country key="FR">France</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Distributed Shared Memory for Roaming Large Volumes</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:42+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Large volumes</term>
+					<term>volume roaming</term>
+					<term>out-of-core</term>
+					<term>hierarchical caching</term>
+					<term>distributed shared memory</term>
+					<term>hardware-accelerated volume visualization</term>
+					<term>graphics hardware</term>
+					<term>parallel rendering</term>
+					<term>graphics cluster</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>We present a cluster-based volume rendering system for roaming very large volumes. This system allows to move a gigabyte-sized probe inside a total volume of several tens or hundreds of gigabytes in real-time. While the size of the probe is limited by the total amount of texture memory on the cluster, the size of the total data set has no theoretical limit. The cluster is used as a distributed graphics processing unit that both aggregates graphics power and graphics memory. A hardware-accelerated volume renderer runs in parallel on the cluster nodes and the final image compositing is implemented using a pipelined sort-last rendering algorithm. Meanwhile, volume bricking and volume paging allow efficient data caching. On each rendering node, a distributed hierarchical cache system implements a global software-based distributed shared memory on the cluster. In case of a cache miss, this system first checks page residency on the other cluster nodes instead of directly accessing local disks. Using two Gigabit Ethernet network interfaces per node, we accelerate data fetching by a factor of 4 compared to directly accessing local disks. The system also implements asynchronous disk access and texture loading, which makes it possible to overlap data loading, volume slicing and rendering for optimal volume roaming.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Advances in the precision of data acquisition technologies (seismic captors, CT scanners, MRI, ...) and large-scale numerical simulations (FEM, CFD, ...) in all scientific domains are responsible for a constant growing size of scientific data sets. In this context, the visualization of extremely large data sets is becoming even more strategic. The large gigabyte volumes of yesterday are now commonly replaced with volumes of several tens or even hundreds of gigabytes. In scientific applications, such as in oil and gas <ref type="bibr" target="#b28">[29,</ref><ref type="bibr" target="#b7">8]</ref>, volume roaming is a common visualization technique that makes it possible to focus on a dynamic sub-volume of the entire data set, i.e. a probe. Outof-core technologies make it possible to visualize this probe interactively <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b28">29,</ref><ref type="bibr" target="#b7">8]</ref> up to a limited size. However, the minimum relevant size of the probe increases in the same proportions as the size of the data set. With volumes of tens or hundreds of gigabytes, gigabytesized probes are mandatory. Over the past ten years, the visualization community has investigated several solutions to keep up with this constantly increasing demand and PC clusters are a particularly promising one <ref type="bibr" target="#b18">[19]</ref>. They are a cost-effective yet powerful alternative to shared memory supercomputers.</p><p>We propose a hardware-accelerated parallel volume rendering system for roaming very large volumes. It is based on the out-of-core technology presented in <ref type="bibr" target="#b7">[8]</ref> for rendering on each node and uses a sort-last decomposition <ref type="bibr" target="#b25">[26]</ref>. In sort-last parallel volume rendering, the probe is decomposed spatially and the sub-parts are rendered separately by the cluster nodes at full image resolution. The images are blended together using a parallel image compositing algorithm. We use the pipelined sort-last rendering algorithm presented in <ref type="bibr" target="#b8">[9]</ref>. This fully overlapped implementation of sort-last parallel rendering allows to render a gigabyte-sized probe in real-time, without being limited by the network communications. However, simply combining these two components does not allow interactive volume roaming inside several tens or hundreds of gigabytes since many cache misses and disk accesses occur on each rendering node. To reduce disk accesses, we have implemented a software-based shared memory for clusters, similar in spirit to those in <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b1">2,</ref><ref type="bibr" target="#b12">13]</ref>. When roaming the probe, this distributed shared memory (DSM) allows data sharing between the rendering nodes through fast interconnection networks and message passing, which avoids accessing local or remote mass storage. A network connection with two Gigabit Ethernet interfaces has a bandwidth of 220 MB/s while a standard SATA 150 local disk has a bandwidth of 53 MB/s (see Section 3). Our implementation of DSM is based on a distributed hierarchical cache system (DHCS). DHCS is composed of two levels: one level in graphics memory caches data from memory and the other level in memory caches data from a series of devices (network, disk).</p><p>To our knowledge, in previous implementations of DSM for parallel visualization such as the one in <ref type="bibr" target="#b12">[13]</ref>, each node stores a sub-part of the entire data set into a static resident set and caches the other nodes resident set into a single-level network cache. Such systems neither write to graphics memory nor access the disk. One consequence of the latter is that the entire data set must fit into the total memory (RAM) of the cluster.</p><p>In contrast, in our DHCS, the memory state on each rendering node is completely dynamic. We use a single memory buffer that varies over time depending on the data needed to display the probe, as the user interacts with it. The memory pages have no pre-determined position on the cluster. As a consequence, we have no theoretical limitation in the total size of the data set that we are roaming (except the available hard drive space). Only the total size of the probe is limited: it should fit into the total graphics memory of the cluster.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.1">Related Work</head><p>The system presented in this paper for interactively roaming very large volumes is based on several common concepts in visualization: parallel volume rendering for visualizing gigabyte-sized probes, out-ofcore visualization for roaming in even larger volumes and distributed shared memory for fast data sharing between rendering nodes across fast interconnection networks.</p><p>Real-Time and Parallel Volume Rendering: There are several aspects from which we can classify the different parallel volume rendering systems: the volume rendering engine and the parallel decomposition.</p><p>Real-time volume rendering techniques <ref type="bibr" target="#b29">[30]</ref> are either based on ray casting <ref type="bibr" target="#b20">[21]</ref> or volume slicing <ref type="bibr" target="#b19">[20]</ref>. Our approach uses hardwareaccelerated trilinear interpolation with 3D texture mapping to dis-play back-to-front semi-transparent sampling slices as in Cabral et al. <ref type="bibr" target="#b4">[5]</ref>. It is based on advanced optical models for better image quality <ref type="bibr" target="#b24">[25,</ref><ref type="bibr" target="#b14">15,</ref><ref type="bibr" target="#b22">23]</ref>.</p><p>Parallel decompositions are classified as either sort-first or sort-last <ref type="bibr" target="#b25">[26]</ref> depending on what is being decomposed. In sort-first parallel volume rendering, the screen is decomposed into lower resolution tiles rendered separately while sort-last parallel volume rendering decomposes the database. Parallel sort-first decompositions have been implemented for volume rendering, either on shared memory supercomputers <ref type="bibr" target="#b27">[28]</ref> or on clusters <ref type="bibr" target="#b12">[13]</ref>. In sort-last decompositions, each part of the database is rendered separately at full resolution and a parallel image compositing algorithm blends them together in a last step. The binary swap <ref type="bibr" target="#b23">[24]</ref> and SLIC <ref type="bibr" target="#b32">[33]</ref> are two popular software compositing algorithms. We use the pipelined sort-last implementation of binary swap presented in <ref type="bibr" target="#b8">[9]</ref>. This implementation fully overlaps the computations, rendering and network communications at all steps of the parallel process.</p><p>Out-of-Core Visualization: Scientific data sets commonly have multi-gigabyte sizes; however the interpretation process often focuses on small parts of the entire data. This makes it possible to implement out-of-core and demand paging techniques to account for the limited amount of memory on the system <ref type="bibr" target="#b10">[11]</ref>. Volume roaming coupled with out-of-core visualization is widely used in the oil and gas industry <ref type="bibr" target="#b28">[29,</ref><ref type="bibr" target="#b7">8]</ref> and other scientific domains <ref type="bibr" target="#b3">[4]</ref>.</p><p>With out-of-core techniques, the overhead resulting from accessing local or remote mass storage is critical. It can be reduced with asynchronous loading using multi-threading <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b35">36]</ref>. Another approach, as in the Visapult system <ref type="bibr" target="#b2">[3]</ref> for remote and distributed visualization, is to use a network data cache such as the distributed parallel storage system (DPSS) <ref type="bibr" target="#b34">[35]</ref>.</p><p>In <ref type="bibr" target="#b16">[17]</ref>, Gao et al. propose a smart distributed data management system (DDMS) to handle large time-varying volumes. It is based on efficient data structures for fast selection of the portions of data to be fetched remotely and rendered.</p><p>In this paper, we build on top of our previous cache system <ref type="bibr" target="#b7">[8]</ref> to add fully asynchronous loading in memory and graphics memory, which makes it possible to overlap data loading, volume slicing and rendering for optimal volume roaming.</p><p>Distributed Shared Memory: The goal of distributed shared memory (DSM) as introduced by Li <ref type="bibr" target="#b21">[22]</ref> is to port the concept of shared memory used in multiprocessor supercomputers to the context of PC clusters. One challenging issue in DSM is to ensure cache coherence when allowing write access to memory, as with the ccNUMA interconnection layer of the SGI Origin for instance. Intensive research has been done to ensure cache coherence in DSM while keeping efficient write access to memory. Systems like Munin <ref type="bibr" target="#b5">[6]</ref>, Midway <ref type="bibr" target="#b36">[37]</ref>, Quarks <ref type="bibr" target="#b6">[7]</ref>, TreadMarks <ref type="bibr" target="#b0">[1]</ref>, are examples of such DSM implementations with efficient cache coherence. In our context of visualization however, data are accessed in read-only mode. As a result, expensive coherence maintenance algorithms are not necessary.</p><p>An early implementation of DSM for sort-first parallel rendering has been proposed by Green and Paddon <ref type="bibr" target="#b17">[18]</ref>. They use ray tracing for polygon rendering. This implementation widely inspired the following ones <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b12">13,</ref><ref type="bibr" target="#b11">12]</ref>. In <ref type="bibr" target="#b12">[13]</ref>, DeMarle et al. implement a sort-first parallel ray casting system for volume rendering. Sort-first parallel ray casting suffers from high data sharing between the rendering nodes. The local memory space on each rendering node is divided into a resident set and a cache. The data set is decomposed and the sub-parts are statically distributed to the resident sets. At rendering time, a node that needs data which is not in its resident set gets it through the network from the owner node and stores it in its cache for future use. This framework avoids accesses to a local or remote mass storage, which is mandatory for interactivity. However, one important limitation of their system is that the entire data set must fit into the total memory of the cluster.</p><p>In our hardware-accelerated parallel volume rendering system we rather use a sort-last decomposition, since each sub-part of the data set is rendered independently with little data sharing. However, in the context of volume roaming, we target volumes much larger than the total memory of the cluster and moving the probe may result in lots of accesses to the mass storage. The goal of a DSM in this context is to allow faster probe roaming by removing the overhead due to disk accesses. For this purpose, our implementation of DSM is quite different from the previous ones dedicated to sort-first parallel rendering. Each node has a hierarchical cache system that writes to texture memory and to a fully dynamic local memory. The latter implies an efficient mechanism to maintain on each node an up-to-date cluster memory state for fast data fetching over the network. Finally, we have no limitation on the total size of the data set we are roaming (in the limits of the hard drive space available) and only the probe is limited by the amount of available graphics memory.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1.2">Contributions and Overview</head><p>In this paper, we present a system for interactively roaming a gigabytesized probe in a total volume of several tens or hundreds of gigabytes. This system is based on an original DSM implementation for hardware-accelerated sort-last parallel volume rendering. To our knowledge, previous implementations of DSM for parallel visualization were dedicated to sort-first parallel ray tracing/casting and were not suitable for roaming volumes that do not fit into the total memory of the cluster (Section 1.1). We have focused on both tailor-made algorithms for supporting a fully dynamic memory state on the cluster (Section 2) and on a fine tuning of the parameters to get an overall throughput near the theoretical bandwidth of the hardware components (Section 3).</p><p>Our main contributions to the domain are:</p><p>• A multi-threaded fully overlapped out-of-core volume roaming system.</p><p>• A DSM based on a distributed hierarchical cache system (DHCS) with four levels of data access: graphics memory, local memory on the node, memory on the other nodes through the network and disk.</p><p>• A DSM with fully dynamic local memory states (i.e. memory pages have no pre-determined position on the cluster) and the associated mechanism to keep the cluster memory state up-todate on each node (efficient all-to-all broadcast).</p><p>The design of the system is given in Section 2. Section 2.1 gives a brief overview of the main components and their interactions while Section 2.2 focuses on our DHCS. Our overlapped implementation of data loading, volume slicing and rendering is exposed in Section 2.3. Several hardware dependent and general software optimizations are presented in Section 3. Finally, we give some experimentations in Section 4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">SYSTEM DESIGN</head><p>In this section, we present the design of the system. We first present the main components of the overall system and their interactions. Then, we focus on DHCS, which is dedicated to data management. Finally, we show how the data loading, volume slicing and rendering are fully overlapped. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Overview</head><p>The overall system is dedicated to volume roaming inside large volumes with hardware-accelerated sort-last parallel volume rendering on a cluster. A gigabyte-sized probe is decomposed into sub-parts rendered in parallel at full image resolution on the cluster nodes. The images are blended together using DViz 1 , presented in <ref type="bibr" target="#b8">[9]</ref>.</p><p>As shown in <ref type="figure" target="#fig_1">Figure 1</ref>, the system is composed of four independent components: the application, a hardware-accelerated volume renderer, DHCS and DViz. The application runs on the master node while the volume renderer, DHCS and DViz run in parallel on the slave nodes. As the user is changing the point-of-view and roaming the volume, the application broadcasts the current camera position as well as a description of their sub-part of the probe to each slave's volume renderer. Each hardware-accelerated volume renderer requests its DHCS to load the necessary data in graphics memory. After each slave has rendered its image at full resolution, DViz blends them together in parallel using a fully overlapped pipelined implementation of binary swap. The result is sent to the application on the master node that draws the final image to the screen. The remainder of this section will focus on the volume renderer and DHCS components. For a detailed description of DViz, the reader is referred to <ref type="bibr" target="#b8">[9]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Distributed Hierarchical Cache System</head><p>DHCS is the data loading component of the system. As shown in <ref type="figure" target="#fig_2">Figure 2</ref>, it is composed of two main components: a Cache Hierarchy and a GPU Loader. Following this flow chart, we will explain the mechanism of DHCS. Based on a memory and a graphics memory buffer, it implements out-of-core access to a virtual graphics memory for the volume renderer component of the overall system. The unit-sized data element in any out-of-core system is called a page <ref type="bibr" target="#b10">[11]</ref>. Since linear or slice decompositions do not exploit data locality properly in volume visualization, our page decomposition of the volume is based on unit-sized bricks <ref type="bibr" target="#b7">[8]</ref>.</p><p>Memory Management Unit: DHCS is based on a hierarchy of cache buffers: one buffer in graphics memory caches data from memory and a second buffer in memory caches data from a series of devices (network, disk). Efficient caching and data access depends on the unitary size of data elements transferred between the different buffers. As shown in Section 3, the optimal size to transfer data from disk/network to memory is larger than from memory to graphics memory. For this reason, the unit-sized data element we manipulate in memory is larger than the one in graphics memory. We introduce the notion of cluster in memory, which is a group of bricks. Ultimately, the clusters are grouped into a series of files on disk. As a result, a volume brick in DHCS is uniquely identified by its file, the position of its cluster in the file and its own position in the cluster. As shown in <ref type="figure" target="#fig_3">Figure 3</ref>, this is encoded into a 32-bit key. This unique identifier is used as an entry into hash tables that store each cache buffer state. Note that the File ID may be used for instance with file systems that do not support files larger than 4 GB. In this case, our identifier supports data sets up to 1 TB. Using only the remaining 24 bits allows to store around 16 millions of bricks per file. This represents 2 TB of data with 128 KB bricks, which is far more than the tens or hundreds of gigabytes we are targeting. The volume renderer identifies a brick by a triplet (u,v,w) that describes its position in the volume. When DHCS receives a request from the volume renderer, the first step consists in translating this triplet into its internal identifier. In the flow chart in <ref type="figure" target="#fig_2">Figure 2</ref>, this is done in the Compute Key operation. This is similar in spirit to the memory management unit (MMU) in operating systems virtual memory that translates a virtual address into a physical address <ref type="bibr" target="#b30">[31]</ref>. Note that when working in the memory cache, the page granularity is larger since we manipulate clusters instead of bricks. In this case, we do not take the brick bits into account.</p><p>Cache Hierarchy: The core component of DHCS is a hierarchical cache between texture memory, main memory, network and disk. In Internet caching systems, hierarchical caching <ref type="bibr" target="#b9">[10]</ref> defines the vertical parent-child and horizontal sibling relationships. In a parent-child relationship, a cache miss in the child is resolved by its parent, upper in the hierarchy, while a sibling horizontal relationship makes it possible to resolve a cache miss with a cache at the same level in the hierarchy. While a parent propagates a cache miss on behalf of its child, a sibling does not. Siblings are used for faster access through data redundancy among caches at the same level. In our previous implementation of out-of-core visualization <ref type="bibr" target="#b7">[8]</ref>, we used a single workstation with a basic hierarchical cache between graphics memory, memory and disk. In sort-last parallel volume rendering on a cluster however, each node renders a sub-part of the dynamic probe. As a result, volume roaming benefits from faster access to siblings at the same level in the hierarchy through the network. Our caching mechanism is illustrated in <ref type="figure" target="#fig_2">Figure 2</ref> with the GPU?, RAM? and LAN? conditions that respectively refer to a cache hit in graphics memory, memory or through the network. There is a parent-child relationship between the graphics memory and memory caches. Now, if we consider that each rendering node is running its own DHCS in parallel, the LAN? condition refers to a query of all the memory caches on the cluster and illustrates a sibling relationship. DHCS can actually be considered as a distributed hierarchical cache system. On each rendering node, a cache miss in graphics memory is propagated to the memory cache. Then, instead of directly accessing the disk, a cache miss in memory is propagated to the memory caches on the cluster (i.e. siblings). Ultimately, a miss in all the siblings causes an access to the filesystem.</p><p>Network Cache Query: In the context of interactive visualization, we cannot afford a network propagation to the siblings as in Internet caching. Instead, each node has an image of the entire memory state of the cluster. In previous implementations of DSM for visualization <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b1">2,</ref><ref type="bibr" target="#b12">13,</ref><ref type="bibr" target="#b11">12]</ref>, this image is implicitly known by the nodes since memory pages have a pre-determined position on the cluster, which yields several limitations as exposed in Section 1.1. In contrast, our memory buffer is fully dynamic and we implement an optimized all-to-all communication that maintains the network memory state up-to-date on each rendering node. This all-to-all communication is inspired by the binary swap algorithm <ref type="bibr" target="#b23">[24]</ref>. As shown in <ref type="figure" target="#fig_4">Figure 4</ref> for the case of 8 nodes, an array initially contains the keys stored in the local buffer. Then, each pair of nodes exchange a growing buffer at each step. Ultimately, each node has an array that contains all the keys stored in the memory of the cluster. This communication scheme is similar in spirit to the recursive doubling allgather operation used in many implementations of MPI <ref type="bibr" target="#b33">[34]</ref>. The only difference in our case is that we do not reorder the buffers on each node, which removes substantial memcpy operations.</p><p>The theoretical lower bound for the execution time of an all-to-all communication is:</p><formula xml:id="formula_0">T all−to−all = (P − 1)size bandwidth (1)</formula><p>where size is the size of the buffer to transfer and P is the number of nodes. In our case, we transfer the array of keys stored in local memory. This is the theoretical time with no latency, which is defined in networking as the minimum time delay it takes a packet to travel from source to destination independently on its size. In practice, the more the number of communication steps the more the algorithm is sensitive to communication latency. The classical approach is to implement a logical ring where the nodes exchange their buffer on a ring. Such strategy has a P − 1 complexity (i.e. P − 1 communication steps) and the resulting execution time is:</p><formula xml:id="formula_1">T logical ring = (P − 1)size bandwidth + (P − 1)latency (2)</formula><p>In our binary all-to-all communication, the size of the buffer transferred at each communication step increases, which decreases the complexity to log(P ) and yields the following execution time:</p><formula xml:id="formula_2">T binary = (P − 1)size bandwidth + log(P )latency (3)</formula><p>where log is the logarithm to base 10. The main advantage of this binary all-to-all broadcast over the classical logical ring is its scalability thanks to the log(P ) complexity. Note that, as shown in the next section, this all-to-all communication is fully overlapped with the rendering.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Overlapped Implementation</head><p>In this section, we focus on the rendering components of the overall system presented in <ref type="figure" target="#fig_1">Figure 1</ref>: the volume renderer and DHCS. As shown in <ref type="figure" target="#fig_2">Figure 2</ref>, we hide the data transfers overhead by overlapping them with volume slicing and rendering on each cluster node. We adopted two complementary approaches for overlapping: multithreading and asynchronous loading.</p><p>Each component of the system, the volume renderer and DHCS, is implemented in a separate thread. When the volume renderer requests its DHCS to load a series of bricks in graphics memory, all the cache levels are scanned and the necessary data loads are launched asynchronously. Async Load HDD to RAM refers to the loading from disk to memory, which can be implemented on Linux using the libaio library for asynchronous I/O. Async Load LAN to RAM refers to the loading through the network. It is implemented in a separate thread using a client-server protocol with a minimal layer on top of TCP. Finally, texture loading in the GPU is handled in another thread that runs the GPU loader component. We are based on OpenGL and this thread cannot load textures directly in the rendering context of the main application thread. We rather create a new context with resource sharing.</p><p>While DHCS is scanning the cache hierarchy and launching asynchronous data loading, the volume renderer computes the proxygeometries for rendering the bricks. In our case of hardwareaccelerated volume rendering, we compute view-aligned back-to-front slices for each brick. Then, the bricks are rendered in back-to-front order as soon as they are loaded in graphics memory. The first bricks can be rendered even if all the requests are not yet satisfied.</p><p>Note that once DHCS has launched all the asynchronous data loads, the local memory state at the end of the current frame (i.e. when data loads will be achieved) is known. This allows us to launch our binary all-to-all communication overlapped with the rendering of the volume renderer.</p><p>A sequential implementation of this system with synchronous (i.e. blocking) requests would dramatically decrease the performance as data loading at each level of the cache, cluster memory state update on each node, volume slicing and rendering would be executed serially. . Memory to graphics memory bandwidth against texture size for GL LUMINANCE, GL BGRA and GL RGBA texture formats. The internal format is GL INTENSITY for GL LUMINANCE, and GL RGBA8 for GL BGRA and GL RGBA (NVIDIA GeForce 6800 Ultra -PCI Express).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">SYSTEM OPTIMIZATION</head><p>In this section, we study some key parameters of the system for optimally consuming the hardware bandwidth.</p><p>Texture Loading: Graphics memory is the upper level of our hierarchical cache system. For this reason, this is the one that must support the larger number of write accesses. Therefore, the bandwidth sustained between memory and graphics memory has a large impact on the performance. This bandwidth is dependent on both the OpenGL texture format specified when transferring data to graphics memory <ref type="bibr" target="#b26">[27]</ref>, and on the size of data transferred (i.e. texture size). In <ref type="figure" target="#fig_5">Figure 5</ref>, we show the bandwidths we sustain using different texture formats and sizes when loading 3D textures. Note that these results highly depend on the hardware. We use a NVIDIA GeForce 6800 Ultra graphics card and a PCI Express bus. The highest bandwidth is achieved using a GL BGRA texture format and a GL RGBA8 internal format. The reason is that, for 8-bit textures, NVIDIA graphics cards match the Microsoft GDI pixel layout (i.e. pixel internally stored in the BGRA layout) <ref type="bibr" target="#b26">[27]</ref>. As a result, when transferring data which is not in the BGRA layout in host memory to graphics memory, the driver has to swizzle the incoming pixels. The internal layout is independent on the GL RGBA8 internal format that only impacts the number of bits per pixel. The second important point in <ref type="figure" target="#fig_5">Figure 5</ref> is that for this optimal format, the highest bandwidth on our NVIDIA GeForce 6800 Ultra is achieved when transferring textures of 256 KB. Texture Access: While texture loading has a great impact on the overall performance of our system, once stored in graphics memory data access is even more important. This is highly dependent on the size of the Level 1 cache (i.e. local texture cache) <ref type="bibr" target="#b29">[30]</ref> on the graphics chipset. We study the impact of changing the brick size on the frame rate for GL INTENSITY and GL RGBA8 internal formats when rendering a small 50 MB test volume. Note that we use post-classification, i.e. we convert texture intensities to colors with dependent lookups in a 1D texture in a fragment program. In case of GL RGBA8 internal format, as shown in <ref type="figure" target="#fig_6">Figure 6</ref>, we store four bricks into one single texture, each one into a texture channel (R, G, B and A). Instead of using branching into one fragment program, we use four different programs to read in either channel so that the number of instructions is the same as in the simple case of GL INTENSITY internal format. In the worst case, the overhead would be a fragment program switch after each brick, which as we tested has no impact on performance. The results are shown in <ref type="figure" target="#fig_7">Figure 7</ref>. With GL INTENSITY textures, the best frame rate on our NVIDIA GeForce 6800 Ultra is obtained with 64x32x32 bricks, which corresponds to 64 KB textures. With smaller bricks, the rendering time is CPU bound (volume slicing), and bigger ones do not fit into the texture cache anymore. Now, in case of GL RGBA8 textures, the optimal frame rate, obtained with 32x32x32 bricks, is twice slower than with GL INTENSITY textures. The rendering time is CPU bound up to 32x32x16 bricks, which already corresponds to 64 KB textures as we store four bricks per texture in this case. Bigger bricks result in textures larger than the cache, which has a large impact on performance due to our interleaving approach. Alternatively, bricks could be stored side-by-side in GL RGBA8 textures, which would account for the cache limitation but also require an additional overhead for correct border handling.</p><p>As a conclusion, we use the GL LUMINANCE format and GL INTENSITY internal format, with 64 KB pages (64x32x32 bricks). Downloading data to the GPU is faster with GL BGRA format and GL RGBA8 internal format ( <ref type="figure" target="#fig_5">Figure 5</ref>), however GL INTENSITY internal format is twice faster for rendering ( <ref type="figure" target="#fig_7">Figure 7)</ref>. The gain in rendering speed makes GL LUMINANCE format and GL INTENSITY internal format the best choice, even in roaming-type access.</p><p>Network Versus Disk Access: The discussion on texture loading and texture access exclusively concerns the top level of our DHCS, i.e. the cache in graphics memory. The following deals with network and disk access and focuses on the second level which is the cache in main memory.</p><p>As shown in <ref type="figure" target="#fig_8">Figure 8</ref>, the network bandwidth we achieve is dependent on the size of the packets sent over the network. The smaller the packet size, the more the bandwidth is sensitive to the communication latency. In our DHCS, using the same page size in main memory as in graphics memory (i.e. 64 KB) would dramatically decrease the performance, as we would send non optimal 64 KB packets over the network. For this reason, we introduce the notion of cluster in memory, which is a group of bricks. Clusters are the unit-sized data elements we manipulate in main memory (Section 2.2). For optimal DHCS be- haviour, we use 512 KB clusters (i.e. 2x2x2 bricks), which results in a 220 MB/s bandwidth using two Gigabit Ethernet interfaces. Larger clusters would unnecessarily increase the volume of communications. We compare the network bandwidth using 512 KB pages with our SATA 150 local disk bandwidth in <ref type="figure" target="#fig_9">Figure 9</ref>. Using two Gigabit Ethernet interfaces, the network is four times faster than our local disk. It is also interesting to see that Gigabit Ethernet with two network interfaces outperforms standard RAID0 solutions. As shown in <ref type="figure" target="#fig_8">Figure 8</ref>, another important aspect is the latency. <ref type="table">Table 1</ref> reports a 10 ms measured latency on our SATA 150 local disk using SiSoftware Sandra 2005 <ref type="bibr" target="#b31">[32]</ref>. In case of disks, latency is the time it takes to position the read/write head. Compared with the standard 60 µs Gigabit Ethernet latency <ref type="bibr" target="#b15">[16]</ref>, we have a factor of 150x. This is even more significant with Infiniband 4x interconnects, where the 5 µs latency yields a factor of 2000x. Either taking into account bandwidth or latency, mass storage accesses play a critical role in the overall performance, and must be avoided as much as possible.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">EXPERIMENTATION</head><p>We experiment our system on a 16-node bi dual-core AMD Opteron 275 cluster with 2 GB RAM and a NVIDIA GeForce 6800 Ultra graphics card on each node, and four Gigabit Ethernet interconnections. As shown in <ref type="figure" target="#fig_1">Figure 10</ref>, using this system, we achieve interactive roaming of a gigabyte-sized probe (1024x1024x1024, 8 bits per voxel) in a 107 GB data set (5580x5400x3840, 8 bits per voxel). The volume has been obtained by putting together 30 copies of the Visible Human <ref type="bibr" target="#b37">[38]</ref>. The video in the supplemental material of this paper demonstrates the system in action at 12 frames per second (fps) on average when roaming in the cache and using a sampling rate of 1 (sampling distance equal to the voxel size). We use two network interfaces for our DViz parallel compositor and two others for DHCS. The screen resolution is 1024x768. Transparent bricks are discarded using the value histogram technique introduced in <ref type="bibr" target="#b16">[17]</ref>, which is based on bit-wise AND operations between encoded transfer functions and encoded brick histograms.</p><p>The probe is moved in each direction across the 30 visible men. Previous manipulations have filled the network memory cache. When roaming in this cache in the downward and backward movements, respectively along the blue and green volume axes, the average frame rate is 12 fps. In this case, most cache misses in memory are satisfied through the network thanks to the DHCS, which avoids file system accesses. However, the leftward movement along the red axis produces regular freezes that correspond to the disk accesses as we reach the network cache frontier. In this particular case, the system would dramatically benefit from pre-fetching strategies. Note also that the spatial decomposition of the probe plays a critical role in the overall performance of the roaming. We use a symmetric decomposition that yields a constant behavior, independently on the direction of the movement.</p><p>Finally, the last part in the video demonstrates the brute-force rendering performance resulting from the combination of our parallel compositor DViz and our volume rendering engine when rendering a static probe. For rendering a gigabyte-sized probe, we achieve 12-13 fps on average, which decreases to 8-9 fps when zooming-in. Note that either at 13 or 8 fps, we are not limited by the parallel compositing (the upper bound of DViz at this resolution is 45 fps) but rather by the rasterization on the GPU.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">CONCLUSION AND FUTURE WORKS</head><p>We have presented a system for interactively roaming very large volumes with hardware-accelerated sort-last parallel volume rendering on clusters. This system is based on a fully dynamic implementation of a read-only DSM using a distributed hierarchical cache system (DHCS) with four levels of data access: graphics memory, local memory on the node, memory on the other nodes through the network and disk. The cluster memory state is maintained on each node using an efficient binary all-to-all broadcast. Compared to previous implementations of DSM for visualization, we are not limited by the total amount of memory on the cluster. We exposed the algorithmic aspects of DHCS as well as some hardware oriented optimizations to get an overall throughput near the components theoretical bandwidth.</p><p>In the future, our system may benefit from better load balancing when transferring data between the nodes. Thanks to the binary allto-all communication, each node in the current implementation knows what the other nodes can provide. We have a local load balancing to distribute the requests over the cluster. A global load balancing needs that each node not only knows what the other nodes can provide but also what they request. This implies an additional all-to-all communication that cannot be overlapped with rendering and data loading as the other one, which introduces an overhead. A short-term solution in case of huge network load would be to access the disk. Another important aspect to be implemented is pre-fetching. Indeed, in our experimentation, the leftward movement along the red axis when no buffer yet exists would benefit from pre-fetching to hide the file system accesses. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Manuscript received 31</head><label>31</label><figDesc>March 2006; accepted 1 August 2006; posted online 6 November 2006. For information on obtaining reprints of this article, please send e-mail to: tvcg@computer.org.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 1 .</head><label>1</label><figDesc>Main components of the system and their interaction.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 2 .</head><label>2</label><figDesc>Flow chart of the rendering on each cluster node with the volume renderer for actual rendering and DHCS for data access. DHCS is decomposed into two main components: a Cache Hierarchy and a GPU Loader.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 3 .</head><label>3</label><figDesc>DHCS uses a 32-bit key as a unique brick identifier.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 4 .</head><label>4</label><figDesc>Binary all-to-all communication in the case of 8 nodes P i .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 5</head><label>5</label><figDesc>Fig. 5. Memory to graphics memory bandwidth against texture size for GL LUMINANCE, GL BGRA and GL RGBA texture formats. The internal format is GL INTENSITY for GL LUMINANCE, and GL RGBA8 for GL BGRA and GL RGBA (NVIDIA GeForce 6800 Ultra -PCI Express).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 6 .</head><label>6</label><figDesc>Interleaving four bricks intensities into one single GL BGRA texture (stored in GL RGBA8 internal format).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 7 .</head><label>7</label><figDesc>Frame rate against the brick size in voxels for GL INTENSITY and GL RGBA8 internal formats when rendering a 50 MB test volume (NVIDIA GeForce 6800 Ultra -PCI Express).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 8 .</head><label>8</label><figDesc>Gigabit Ethernet bandwidth against the packet size for one and two interfaces.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 9 .</head><label>9</label><figDesc>Gigabit Ethernet bandwidth (512 KB pages) compared to disk bandwidth. SATA 150 is our local disk measured with SiSoftware Sandra 2005 [32] and the 2x RAID0 solutions are standard RAID0 configurations provided by Sandra for comparison.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 10 .</head><label>10</label><figDesc>Roaming a gigabyte-sized probe (1024x1024x1024, 8 bits per voxel) inside a 107 GB data set (30 copies of the Visible Human: 5580x5400x3840, 8 bits per voxel) on a 16-node PC cluster. Interactive roaming along the main axes of the volume at 12 fps on average (top). Zooming in high-quality pre-integrated volume rendering (middle) enhanced with accurate lighting on the vertebrae (bottom). The rendered bricks are shown in blue (middle and bottom, left). Transparent bricks are discarded using bit-wise AND operations between encoded transfer functions and encoded brick histograms.</figDesc></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="1">http://www.loria.fr/∼cavin/dviz</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>We would like to thank Alain Filbois from INRIA Lorraine-CRVHP for his precious help to generate the video. This work was partially supported by Earth Decision and grants from the INRIA and the Region Lorraine (Pôle de Recherche Scientifique et Technologique "Intelligence Logicielle"/CRVHP).</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Amza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">L</forename><surname>Cox A</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dwarkadas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Keleher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yu</forename><forename type="middle">W</forename><surname>Raja-Mony R</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zwaenepoel</forename><forename type="middle">W</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">TreadMarks: Shared Memory Computing on Networks of Workstations. Computer</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="18" to="28" />
+			<date type="published" when="1996-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Distributing Data and Control for Ray Tracing in Parallel</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Badouel D</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bouatouch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="69" to="77" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Using High-Speed WANs and Network Data Caches to Enable Remote and Distributed Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Bethel W</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tierney B</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gunter</forename><forename type="middle">D</forename><surname>Lau S</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Supercomputing Conference</title>
+		<meeting>Supercomputing Conference</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">OpenGL Volumizer: A Toolkit for High Quality Volume Rendering of Large Data Sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Bhaniramka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Symposium on Volume Visualization</title>
+		<meeting>IEEE Symposium on Volume Visualization</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="45" to="54" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Accelerated Volume Rendering and Tomographic Reconstruction Using Texture Mapping Hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cam</forename><forename type="middle">N</forename><surname>Cabral B</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Foran</forename><forename type="middle">J</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Symposium on Volume Visualization</title>
+		<meeting>IEEE Symposium on Volume Visualization</meeting>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="91" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Implementation and Performance of Munin</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carter</forename><forename type="middle">J B</forename><surname>Bennett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">K</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Zwaenepoel</forename><forename type="middle">W</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 13th ACM Symposium on Operating Systems Principles</title>
+		<meeting>the 13th ACM Symposium on Operating Systems Principles</meeting>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="152" to="164" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Distributed Shared Memory: Where We Are and Where We Should Be Headed</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carter</forename><forename type="middle">J B</forename><surname>Khandekar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kamb</forename><forename type="middle">L</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Workshop on Hot Topics in Operating Systems</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="119" to="122" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Roaming Large Volumes to Couple Visualization and Data Processing for Oil and Gas Exploration</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Castani L</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Lvy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bosquet</forename><forename type="middle">F</forename><surname>Volumeexplorer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization Conference</title>
+		<meeting>IEEE Visualization Conference</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">COTS Cluster-Based Sort-Last Rendering: Performance Evaluation and Pipelined Implementation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Cavin X</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Mion</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization Conference</title>
+		<meeting>IEEE Visualization Conference</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A Hierarchical Internet Object Cache</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Chankhunthod A</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">B</forename><surname>Danzig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Neerdaels</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">F</forename><surname>Schwartz M</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">J</forename><surname>Worrell K</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the USENIX Annual Technical Conference</title>
+		<meeting>the USENIX Annual Technical Conference</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="153" to="164" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Application-Controlled Demand Paging for Out-of-Core Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Cox</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ellsworth D</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization Conference</title>
+		<meeting>IEEE Visualization Conference</meeting>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="235" to="244" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Memory Sharing for Interactive Ray Tracing on Clusters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Demarle D</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gribble</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Parker</forename><surname>Boulos S</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Parallel Computing</title>
+		<imprint>
+			<biblScope unit="volume">31</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="221" to="242" />
+			<date type="published" when="2005-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Distributed Interactive Ray Tracing for Large Volume Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Demarle D</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Parker S</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hartner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gribble</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hansen C</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Symposium on Parallel and Large-Data Visualization and Graphics</title>
+		<meeting>IEEE Symposium on Parallel and Large-Data Visualization and Graphics</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="87" to="94" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Accelerating Demand Paging for Local and Remote Out-of-Core Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ellsworth</forename><forename type="middle">D</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+		<respStmt>
+			<orgName>NASA Ames Research Center</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">High-Quality Pre-Integrated Volume Rendering Using Hardware Accelerated Pixel Shading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Engel K</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ertl T</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Eurographics/SIGGRAPH Workshop on Graphics Hardware</title>
+		<meeting>Eurographics/SIGGRAPH Workshop on Graphics Hardware</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">The High Performance Data Center: The Role of Ethernet in Consolidation and Virtualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Networks</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Inc</surname></persName>
+		</author>
+		<ptr target="http://www.force10networks.com/products/pdf/wpdatacenterconvirt.pdf" />
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Distributed Data Management for Large Volume Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Johnson R</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Atchley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kohl</forename><forename type="middle">J A</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization Conference</title>
+		<meeting>IEEE Visualization Conference</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="183" to="189" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Exploiting Coherence for Multiprocessor Ray Tracing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Green</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Paddon D</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="12" to="26" />
+			<date type="published" when="1989-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Designing Graphics Clusters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Houston M</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Parallel Rendering Workshop -IEEE Visualization Conference</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Fast Volume Rendering Using a Shear-Warp Factorization of the Viewing Transform</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lacroute</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACM SIGGRAPH Conference</title>
+		<meeting>ACM SIGGRAPH Conference</meeting>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="page" from="451" to="457" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Display of Surfaces from Volume Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="page" from="29" to="37" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Shared Virtual Memory on Loosely Coupled Multiprocessors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Li</forename><forename type="middle">K</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1986" />
+		</imprint>
+		<respStmt>
+			<orgName>Department of Computer Science, Yale University</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">High-Quality Lighting and Efficient Pre-Integration for Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">B</forename><surname>Lum E</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ma</forename><forename type="middle">K L</forename><surname>Wilson B</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Eurographics/IEEE Symposium on Visualization</title>
+		<meeting>Eurographics/IEEE Symposium on Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="25" to="34" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Parallel Volume Rendering Using Binary-Swap Image Composition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">L</forename><surname>Ma K</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S</forename><surname>Painter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Krogh</forename><forename type="middle">M F</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="59" to="68" />
+			<date type="published" when="1994-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Optical Models for Direct Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Max</forename><forename type="middle">N</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="99" to="108" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">A Sorting Classification of Parallel Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Molnar S</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Cox</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ellsworth D</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Fuchs H</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="23" to="32" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Fast Texture Downloads and Readbacks Using Pixel Buffer Objects in OpenGL</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Nvidia Corporation</surname></persName>
+		</author>
+		<ptr target="http://developer.nvidia.com/object/fasttexturetransfers.html" />
+		<imprint>
+			<date type="published" when="2005-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Interactive Ray Tracing for Volume Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Parker</forename><forename type="middle">S</forename><surname>Parker M</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">P</forename><surname>Sloan P</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Shirley</forename><forename type="middle">P</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="238" to="250" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Octreemizer: A Hierarchical Approach for Interactive Roaming Through Very Large Volumes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Plate</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Tirtasana</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Carmona R</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Eurographics/IEEE Symposium on Visualization</title>
+		<meeting>Eurographics/IEEE Symposium on Visualization</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Real-Time Volume Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Rezk-Salama C</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Engel K</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kniss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Lefhon A</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM SIG-GRAPH</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">Operating System Concepts, Seventh Edition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Silberschatz A</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Gagne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Galvin</forename><forename type="middle">P</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<publisher>John Wiley &amp; Sons, Inc</publisher>
+			<biblScope unit="volume">921</biblScope>
+			<pubPlace>Hoboken</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Sisoftware Sandra</surname></persName>
+		</author>
+		<ptr target="http://www.sisoftware.co.uk/" />
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Scheduled Linear Image Composition for Parallel Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Stompel A</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">L</forename><surname>Ma K</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">B</forename><surname>Lum E</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Patchett</forename><forename type="middle">J</forename><surname>Slic</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Symposium on Parallel and Large-Data Visualization and Graphics</title>
+		<meeting>IEEE Symposium on Parallel and Large-Data Visualization and Graphics</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="33" to="40" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Improving the Performance of Collective Operations in MPICH</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Thakur</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 10th European PVM/MPI Users&apos; Group Conference (Euro PVM/MPI 2003)</title>
+		<meeting>the 10th European PVM/MPI Users&apos; Group Conference (Euro PVM/MPI 2003)</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="257" to="267" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">A Network-Aware Distributed Storage Cache for Data Intensive Environments</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tierney</forename><forename type="middle">B</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Crowley B</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Holding</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hylton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Drake</forename><forename type="middle">F</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE High Performance Distributed Computing Conference</title>
+		<meeting>IEEE High Performance Distributed Computing Conference</meeting>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">An Interactive Out-of-Core Rendering Framework for Visualizing Massively Complex Models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wald</forename><forename type="middle">I</forename><surname>Dietrich A</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Slusallek</forename><forename type="middle">P</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Eurographics Symposium on Rendering</title>
+		<meeting>Eurographics Symposium on Rendering</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="81" to="92" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Software Write Detection for Distributed Shared Memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="middle">J</forename><surname>Zekauskas M</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bershad</forename><forename type="middle">A B N</forename><surname>Sawdon W</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Symposium on Operating System Design and Implementation</title>
+		<meeting>the Symposium on Operating System Design and Implementation</meeting>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="87" to="100" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">National Library of Medecine. The Visible Human Project</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">I H U S</forename></persName>
+		</author>
+		<ptr target="http://www.nlm.nih.gov/research/visible/visiblehuman.html" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,778 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">POP: A Hybrid Point and Polygon Rendering System for Large Data</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Baoquan</forename><surname>Chen</surname></persName>
+							<email>fbaoquan@cs.umn.edu</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Minh</forename><forename type="middle">Xuan</forename><surname>Nguyen</surname></persName>
+							<email>mnguyeng@cs.umn.edu</email>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Computer Science and Engineering</orgName>
+								<orgName type="institution">University of Minnesota at Twin Cities</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff1">
+								<address>
+									<settlement>San Diego</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">POP: A Hybrid Point and Polygon Rendering System for Large Data</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:44+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Rendering system</term>
+					<term>Spatial data structures</term>
+					<term>Level of detail algorithms</term>
+					<term>hybrid rendering systems</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Figure 1: POP system chooses a different number of points and triangles based on viewing location (red for points; blue for triangles).</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Computer graphics systems have traditionally used triangles as rendering primitives. Scenes consisting of large amounts of triangles (millions or even billions) are common for some applications, however, they cannot be interactively rendered by the current commodity graphics hardware due to the expensive setup and rasterization costs of triangles. Two approaches have been experimented by graphics practitioners. The first approach is to reduce the num-ber of triangles by resorting to a number of techniques, such as selecting appropriate level-of-detail, visibility culling, and utilizing view-dependent techniques, etc. The second approach is to propose simpler primitives with less setup and rasterization cost. A point represents one kind of simple primitive. Over the past decade, several researchers have proposed to use points as display primitives <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b4">5,</ref><ref type="bibr" target="#b17">18]</ref>. Recently, this research direction has attracted increasing interest because of the processing power increase of CPUs. Grossman and Dally <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b28">29]</ref> have developed a complete graphics system using points as both modeling and rendering primitives. More recently, two other point based graphics systems, QSplat <ref type="bibr" target="#b24">[25]</ref> and Surfel <ref type="bibr" target="#b22">[23]</ref>, were introduced. All these systems convert other graphics primitives (e.g., polygons) into a uniform point representation and take advantage of their simplicity to speedup the rendering. Both QSplat and Surfel employ a level-of-detail representation of points so that points of appropriate level can be selected based on their screen projection for maximum speedup.</p><p>While these point systems have been proven to be effective in accelerating the rendering of objects with a large number of small triangles and high surface details viewed at distance, they have some problems which are inherent to point representation. <ref type="bibr" target="#b0">(1)</ref> Once objects are represented in point representation, their resolution is fixed. When objects are viewed very closely, even the highest resolution points may be projected to larger than one pixel; therefore, interpolation between adjacent points must be done to ensure smooth shading. This is difficult to perform due to the lack of connectivity information between points, resulting in either a blocky image if no interpolation is performed at all (e.g., in QSplat <ref type="bibr" target="#b24">[25]</ref>) or an image with artifacts if interpolation is approximately done in screen space (e.g., in Surfel <ref type="bibr" target="#b22">[23]</ref>). (2) For large, flat surfaces, point rendering becomes less efficient than polygon rendering when the gain of incremental rasterization of polygon rendering outweighs the extra setup required. Specifically, using large textured polygons provides better image quality at lower rendering cost than using a large number of textured points. In this paper we present a hybrid approach, coded POP, in which both points and polygons are used to represent scenes. Points or triangles are chosen during the rendering to guarantee the highest image quality while delivering the maximum rendering speedup. Switching between points and triangles is determined on-the-fly based on their screen projection size. <ref type="figure">Figure 1</ref> shows three images of the same model viewed at different distances using different numbers of points and triangles. We build up a tree structure similar to QSplat, but the leaf nodes are triangles instead. While QSplat works best with models consisting of triangles of approximately equal size, POP works well for any triangular model. Overall, the POP system is an extension of previous point rendering systems which makes three contributions by:</p><p>1. employing a hybrid of point and polygon representations to take advantage of the simplicity offered by points and quality offered by triangles, 2. utilizing frame coherence to further accelerate rendering speed, <ref type="bibr" target="#b2">3</ref>. presenting a hybrid of forward and backward orders to deliver effective antialiasing for texture mapping.</p><p>We also employ other traditional methods to speedup the rendering, such as visibility culling and level-of-detail. Some of the previous work is reviewed in the next section.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Previous Work</head><p>There have been many methods developed for representing and accelerating rendering of large data. Rusinkiewicz and Levoy <ref type="bibr" target="#b24">[25]</ref> have given an excellent review on this. Here we give a short review on topics that are related to our method: level-of-detail control, visibility culling, and point sampling and rendering. Specifically, we review QSplat <ref type="bibr" target="#b24">[25]</ref> and Surfel <ref type="bibr" target="#b22">[23]</ref>, two methods on which we build our system.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Level-of-Detail (LOD) Representation and Control:</head><p>For large data sets, primitives are often projected to less than one pixel size. To accelerate rendering, primitives are first 'prefiltered' into a multi-level representation, and then at the run-time, primitives at certain levels are selected and rendered. This avoids always rendering the full resolution data, hence, obtaining acceleration. Levels can be selected based on both viewing configuration and illumination parameters <ref type="bibr" target="#b31">[32,</ref><ref type="bibr" target="#b10">11,</ref><ref type="bibr" target="#b11">12]</ref>. Different primitives utilize different schemes to perform such 'prefiltering.' For polygon meshes, this prefiltering operation corresponds to mesh simplification by collapsing edges or removing vertices. For irregular meshes, examples like progressive meshes use a base mesh together with a series of vertex split operations <ref type="bibr" target="#b9">[10]</ref> to build up continuous LOD meshes. For semi-regular meshes, a subdivision scheme can be implemented to create multi-resolution meshes <ref type="bibr" target="#b8">[9]</ref>. Wavelet transformation is another tool to build up multiresolution mesh <ref type="bibr" target="#b1">[2]</ref>. For rectilinear points, i.e., volumes, multi-resolution can be easily built up by low-pass filtering <ref type="bibr" target="#b25">[26,</ref><ref type="bibr" target="#b16">17]</ref>. Multi-resolutions can be generated on other data representations, such as Layered-Depth-Images <ref type="bibr" target="#b2">[3]</ref>, Surfel <ref type="bibr" target="#b22">[23]</ref>, and scattered points <ref type="bibr" target="#b24">[25]</ref>. We will review more on QSplat and Surfel later in this section.</p><p>Visibility Culling: Culling away primitives that do not contribute to the final image before sending them for display represents a valid approach to accelerating rendering without any image quality loss. Visibility culling typically includes backface culling, frustum culling, and occlusion culling. For backface culling, Kumar and Manocha have presented an algorithm for hierarchical backface culling based on cones of normals <ref type="bibr" target="#b14">[15]</ref>. For frustum culling, Samet has employed an octree data structure to perform hierarchical frustum culling <ref type="bibr" target="#b26">[27]</ref>. For occlusion culling, Zhang et al. <ref type="bibr" target="#b32">[33]</ref> have utilized a hierarchical occlusion map to discard primitives that are blocked by a closer geometry group. When the scene is highly structured, e.g., architectures, more specialized occlusion culling algorithms can be utilized for more effective culling <ref type="bibr" target="#b30">[31]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Point Representation and Rendering:</head><p>Compared to polygons, points are simpler to render. The use of points as rendering primitives can be dated as far back as 1974 when Catmull <ref type="bibr" target="#b0">[1]</ref> observed that geometric subdivision may ultimately lead to points. Particles were subsequently used for objects that could not be rendered with geometry, such as clouds, explosions, and fire <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b23">24]</ref>. Later, Levoy and Whitted <ref type="bibr" target="#b17">[18]</ref> used points to model objects for the special case of continuous, differentiable surfaces. Cline et. al. <ref type="bibr" target="#b4">[5]</ref> proposed the "dividing cubes" algorithm for volumetric iso-surface display -cells intersecting an iso-surface are subdivided until subcells project to less than one pixel and then the subcellls are rendered as points. Over the last two decades, volume rendering has become an effective tool to visualize medical data, such as MRI, CT, etc., which consist of sampled points on rectilinear grids. Volume graphics <ref type="bibr" target="#b13">[14]</ref>, using this data format to model and render graphics objects, represents another point rendering system. As volumes store points in 3D rectilinear grids, for surface models, this is very inefficient. More recently, image-based rendering has become popular because complex scenes are represented with 2D sprites with ( <ref type="bibr" target="#b29">[30,</ref><ref type="bibr" target="#b27">28]</ref>) or without ( <ref type="bibr" target="#b3">[4]</ref>) depths or 3D/4D plenoptic modeling <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b15">16,</ref><ref type="bibr" target="#b21">22]</ref>, and the rendering time is approximately proportional to the number of pixels in the source and/or output images. However, all these methods use view-dependent samples/points to represent an object or scene. View-dependent samples are ineffective for dynamic scenes with motion of objects, changes in material properties, and changes in position and intensities of light sources. People have thus researched using viewindependent samples to model a scene. Max uses point samples obtained from orthographic views to model and render trees <ref type="bibr" target="#b19">[20]</ref>. More recently, Grossman and Dally <ref type="bibr" target="#b7">[8]</ref> describe a point sample representation for fast rendering of complex objects. Chang et al. <ref type="bibr" target="#b2">[3]</ref> presented the LDI tree, a hierarchical space-partitioning data structure for image-based rendering.</p><p>The most recent QSplat and Surfel systems employ viewindependent object models that can be illuminated and rendered from arbitrary points of view. They both utilize a data hierarchy to represent and render a scene. But they employ different schemes to build up the hierarchy. Surfel samples the model on multiresolution rectilinear grids. Points from the same resolution grid are stored in a compact format, called layered depth cubes (LDCs) <ref type="bibr" target="#b18">[19]</ref>. LDCs for different resolutions together form an LIC tree (similar to LDI tree <ref type="bibr" target="#b2">[3]</ref>). Points from the same level have the same size. On the other hand, QSplat builds up a hierarchical representation from the input mesh directly. Rather than explicitly sampling the mesh, QSplat takes the mesh vertices as the initial input points and generates a hierarchical data structure (quad-tree) from them. After that, the mesh topology, i.e., connectivity, is discarded. As points from the same level do not necessarily have the same size, QSplat has to explicitly record the point size (or bounding sphere size) for each node. For both QSplat and Surfel, each node records other attributes such as colors, normals, etc. After obtaining data hierarchy, both QSplat and Surfel traverse the tree and determine appropriate nodes for display. They all perform some sort of block culling to accelerate the rendering. Surfel also does fast incremental forward warping as points from the same level are on a rectilinear grid.</p><p>Both Surfels and QSplat intend to use a uniform point representation to represent different kinds of objects. Surfel's point sampling is ideal for modeling objects with very high shape and shade complexity (i.e., small triangles), but it is less efficient in representing large flat surfaces with slowly changing shading attributes. When objects are moved close enough to the view point, the splats of points become visible. For QSplat, the image will appear blocky due to its splified splatting. Surfel's two-pass rendering using visibility splatting plus image reconstruction in screen space can produce higher image quality, but is expensive due to the lack of hardware support. In this paper, we present a hybrid of point and polygon representations to represent and render arbitrary polygonal models. We directly build up data hierarchy from the input mesh similar to QSplat, but we take original triangles as leaf nodes. Triangles are represented and rendered as points when they are small on screen to obtain speedup; but they remain as triangles when their projection on screen become large enough. Also, we perform pretexturing for triangles and points when building up the data hierarchy. This hybrid representation facilitates high quality and efficient texture mapping.</p><formula xml:id="formula_0">V 1 V 2 V 3 V 4 V 0 V 1 V 2 V 3 V 4 V 0 V 1 V 2 V 3 V 4 V 0 V 2 V 3 V 0 V 3 V 4 V 0 V 1 V 2 V 0 V 4 V 1 V 0 (a) (b)</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">POP System</head><p>POP uses triangles as leaf nodes and computes points as intermediate nodes. During the rendering, the tree is recursively traversed and appropriate nodes are chosen for display. Depending on the viewing position, nodes chosen may be either points or triangles.</p><p>As POP is built mainly on top of QSplat, we refer readers to the QSplat paper for details of the system. Here we emphasize issues new to our approach, but may repeat some issues for completeness.  <ref type="figure" target="#fig_0">Figure 2</ref> illustrates the tree difference between QSplat ( <ref type="figure" target="#fig_0">Figure  2a</ref>) and POP ( <ref type="figure" target="#fig_0">Figure 2b</ref>). QSplat takes every vertex as the leaf node and its bounding sphere radii are computed so that all bounding spheres of the connecting vertices touch (or overlap) each other. One problem of this representation is that when objects move close to the view point, the leaf nodes's splats project to larger than one pixel so that the generated image becomes blocky. Instead, POP computes bounding spheres of triangles and uses triangles as the leaf nodes. As triangles maintain connectivity between vertices, color and other attributes can be smoothly interpolated inside the triangle, therefore increasing image quality.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Building up Data Hierarchy</head><p>Although bounding sphere hierachies have been used for accelerating ray tracing, computing tight bounding spheres remains a very important step in pre-processing because the bounding spheres are used to compute the termination condition of the run-time tree traversal. An overestimated bounding sphere may cause the program to unnecessarily descend the tree and send more primitives, while an underestimated bounding sphere may degrade the image quality. Let us look at the bounding sphere computation for both leaf triangle nodes and intermediate point nodes.</p><p>For the leaf triangle nodes, as a triangle defines a plane, the radius of its bounding sphere is equal to the radius of the bounding circle on the plane. We consider two scenarios: (1) when all three angles of the triangle are less than or equal to 90 (e.g., 4v0v1v4 and 4v0v3v2 in <ref type="figure" target="#fig_0">Figure 2</ref>), we have the bounding circle pass through all vertices; (2) when one of the angles is larger than 90 (e.g., 4v0v2v1 and 4v0v4v3 in <ref type="figure" target="#fig_0">Figure 2</ref>), we have the diameter of the circle coincide with the longest edge of the triangle.</p><p>For intermediate point nodes, the bounding spheres are computed from their child nodes' bounding spheres. First, we need to check whether the bounding sphere of one child node may enclose bounding spheres of all other child nodes. If this is the situation, we simply use that child node's bounding sphere as the bounding sphere for the current node. When the input mesh has triangles of various size, this may happen very frequently. Otherwise, we compute the bounding sphere according to different scenarios based on the number of child nodes:</p><p>1. Two child nodes: the center of the bounding sphere is on the connection edge between the centers of two child nodes and the radius is computed as r = d+r 1 +r 2 2 , where d is the distance between two child node centers; r1; r 2 are radii of bounding spheres of two child nodes.</p><p>2. Three child nodes: we first connect three child node centers as a triangle and find the center of the triangle using the same scheme described above for leaf triangles; the radius is the radius of the triangle plus the maximum of the radii of three child bounding spheres.</p><p>3. Four child nodes: the centers of four nodes form a tetrahedron in 3D space. We enumerate four cases with each case corresponding to a triangle face of the tetrahedron. For each case, we take the corresponding triangle and find its center and radius as above; then the center of the tetrahedron will be on the line which is perpendicular to the base triangle and passes through its center. Once we have obtained bounding spheres for all four cases, we take the one with the minimum radius as the final bounding sphere.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Rendering Algorithm</head><p>Similar to QSplat, POP recursively traverses down the hierarchical tree and chooses suitable nodes for display. If the node is completely outside the view frustum or back-facing, it is simply culled away; otherwise, its bounding sphere's screen projection ( or splat size) is evaluated. If the splat size is larger than the threshold area, its children are recursively evaluated; otherwise, it is drawn immediately. If the node is a leaf node, a triangle is drawn; otherwise, a point is drawn by splatting. As an option, we pay extra attention to silhouette. When the normal of the node is almost perpendicular to the viewing direction, we use triangles. The pseudo code of this operation is illustrated in the following as function RENDERnode.</p><p>Variable threshold is for defining the threshold of screen projection size. To guarantee high quality image, it is usually set as one pixel.</p><p>One of the major rendering expenses is the tree traversal. As for each node, we have to perform a number of operations, such as frustum and backface culling and splat size checking. We can improve the performance by traversing fewer nodes. Rather than always starting from the root node for the traversal, we desire to utilize the coherence between adjacent frames to minimize the number of nodes needed to be traversed. When displaying a frame, we set a flag for all the displayed nodes as well as the culled nodes. When displaying the next frame, we start from those nodes whose flags are set; depending on the current splat size of the node, we traverse the tree either up or down to find the most appropriate nodes for display. As there is usually considerable coherence between adjacent frames, the nodes displayed in two adjacent frames are either the same or very close in the tree, hence we minimize the number of nodes traversed. The coherence traversal algorithm RENDER-COHERENCYnode is described in the following pseudo code. There are two flag variables in the code. Variable </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Computing Splat Size</head><p>One major computation in traversing the data tree is computing the splat size of each node based on its bounding sphere. To precisely compute the splat size is not only expensive but also unnecessary because the bounding sphere itself is an approximation. This approximation sometimes appear too conservative. ure 3a, a thin, long triangle is oriented in the viewing direction, and its projection size on screen is very small (the left line segment, purposely drawn off the viewing plane for clarity). However, its bounding sphere has a uniform size in every direction, so its projection on screen (the right line segment) may be overestimated. A possible solution is to use a bounding ellipse instead, but this would cause extra computation. Furthermore, the consequence of this over estimation is that we switch to triangle rendering earlier than necessary. It may slow down the rendering somewhat, but does no harm to the image quality.</p><p>Computing splat size based on a bounding sphere's precise location is still expensive. We want to optimize this computation by computing the splat size based only on a bounding sphere's z coordinate in eye space. Illustrated in 2D, <ref type="figure" target="#fig_2">Figure 3b</ref> explains our approach. When a node is on the z axis, the maximum projection length of its bounding circle can be approximated as the projection length of the circle's vertical diameter. In the following, we only consider the projection of the radius. For sphere A, its radius R's projection length rA can be computed as rA = d z R, where d is the distance between the eye (E) and the viewing plane; z is the z coordinate of sphere A. Now we want to compute the projection of the same size sphere B at the same z coordinate but away from the z axis. Let the angle between EOA and EOB be . The length of EOB is then z cos . The projection of sphere B's radius on a viewing plane is then computed as r1 = d z cos R = d cos z R. Its projection on the vertical plane at that point is then r2 = r 1 cos = d z R, which is drawn as the blue line segment. Then rB = r 2 cos , where rB is the projection of sphere B's radius on the viewing plane, such that, r2 r B. In our implementation, we choose to use r2 to approximate the splat size of sphere B. The consequence of this approximation is that we underestimate the splat size so that we terminate the tree traversal earlier than when it should be, resulting in sending larger points for display. The error increases as sphere B moves further away from the z axis. However, as the nodes move away from the projection center, they become less important, therefore our error tolerance increases.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">High Quality Rendering</head><p>When the splat size threshold is increased to over one pixel, holes may appear between points. POP has implemented two rendering methods for hole filling. The first method is to draw every splat of a certain size using a constant color, similar to QSplat <ref type="bibr" target="#b24">[25]</ref>. This approach can leverage graphics hardware support, hence it is the most efficient. However, splats with constant color makes the image blocky. (see <ref type="figure">Figure 4d</ref>.) The second rendering method that POP has implemented is visibility splatting plus image reconstruction in screen space as in Surfel <ref type="bibr" target="#b22">[23]</ref>. Even for a large threshold, this method provides smooth rendering. Straightforward implementation of Surfel rendering has to resort to software implementation since these operations are not directly supported by graphics hardware. We have modified visibility splatting for limited hardware support. Here, every point node is drawn twice. The first time it is drawn with its full splat size using the background color; the second time it is drawn with only one pixel splat size using its own color. Of course, the triangle nodes are still drawn with only one pass. <ref type="figure">Figure 4b</ref> depicts the rendered image after visibility splatting. The background color on the object indicates holes to be filled in the image reconstruction step. Since we have not recorded for every hole pixel the distance to the nearest visible point due to our hardware supported visibility splatting, we cannot adapt filter size for hole pixel reconstruction as is being done in Surfel rendering. Instead, we use a uniform sized reconstruction filter. The size of the filter is simply specified the same as the threshold value of the splat size for rendering. <ref type="figure">Figure 4c</ref> is the final image after image reconstruction, which appears almost indistinguishable from the image generated using much smaller threshold value (see <ref type="figure">Figure 4a)</ref>.</p><p>Due to the lack of connectivity information, image reconstruction on screen space is approximate because the points contributing to a certain pixel are solely determined by their adjacency to the pixel. This approach results in artifacts in generated images; although usually not apparent for smoothly shaded objects, they can be visible for texture mapped models. To eliminate this artifact, we have to ensure polygon rendering whenever the node's splat size goes beyond one pixel so that accurate interpolation can be performed. This can be achieved by specifying the splat size threshould as one pixel. <ref type="figure">Figure 5</ref> compares the texture mapping results using different thresholds. <ref type="figure">Figure 5a</ref> uses a threshold of two pixels and a Guassian filter for image reconstruction. Artifacts show up for the hole pixels. <ref type="figure">Figure 5b</ref> uses a threshold of one pixel, therefore no image reconstruction is needed. Nodes with a splat size larger than one pixel are rendered using triangles. The compared images are produced using a purely software approach and the antialiasing is done using the supersampling method as in Surfel <ref type="bibr" target="#b22">[23]</ref>. While points are rendered by forward projection, tex- </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Data Structure</head><p>The general data structure of POP is very similar to that of QSplat, but because we keep triangles at the lowest level of the hierarchy tree, this will make the data structure almost always twice as big as that of QSplat. This is because each object model can be considered a planar graph (or at least with a small genius), so by Euler formular for planar graphs (or graphs with small genius), the number of faces of that graph will be at most twice the number of vertices plus a constant. To overcome this, at a level node of the hierarchical structure, we keep more than one adjacent triangles (at most four). Doing this has immediately reduced the number of leave nodes twice on average (as in practice) and thus the number of leave nodes is roughly equal to the number of vertices, making the hierarchical data structure of similar size to QSplat. Besides the hierarchical data structure, we have to store the vertices and the faces explicitly to redraw the mesh when the lowest level of the hierarchy is reached. To store vertices, each vertex is quantized using the quantized compression method in <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b24">25]</ref>. For faces, no compression is implemented for now. They are simply stored as a linear list of indices to vertices. Each leaf node will keep a single index to this list and the number of indices it needs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Implementation and Results</head><p>We have implemented POP on an 800MHZ Pentium III PC with 256MB memory and nVIDIA's GeForce2 GTS graphics card. We have experimented on Happy Buddha (1,087,716 triangles, 543,652 vertices) and Hand (654,666 triangles, 327,323 vertices) from Stanford and Georgia Tech. The preprocessing time averages 52 seconds for Buddha and 30 seconds for Hand. We have performed comparison mainly with QSplat using simplified splatting. The visibility splatting we have implemented is far from interactivity even though some hardware support has been leveraged. The QSplat system is obtained from the original authors. Because POP and QSplat are implemented in two different systems, the lighting condition and the viewing location etc. may not be identical for the following comparison, but we have tried to make them as comparable as possible. Also because QSplat software uses different way of measuring frame rate from our system, for the sake of fair comparison, we instead record and compare the number of primitives that these two systems use to generate images.</p><p>It is confirmed that POP can generate a superior image quality to QSplat at lower cost. <ref type="figure" target="#fig_4">Figure 6</ref> compares the image generated by QSplat <ref type="figure" target="#fig_4">(Figure 6(b1)</ref>) with the images generated by POP ( <ref type="figure" target="#fig_4">Figure  6(a1, c1, d1)</ref>) using different splat size thresholds. When POP generates comparable image quality <ref type="figure" target="#fig_4">(Figure 6(d1)</ref>) to QSplat, it uses only around half of the number of primitives that are used by QSplat, therefore, the rendering is twice faster.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Conclusions and Future Work</head><p>In this paper, we have presented a hybrid rendering system, POP, which uses both points and polygons. POP takes advantage of the simplicity of point rendering for distant objects as well as the quality of triangle rendering for close objects. Our experiments have proven that we can deliver higher image quality than similar systems such as QSplat at a lower rendering cost. In addition, building a data hierarchy directly on triangles makes POP applicable to any arbitrary triangular models. POP also facilitates a hybrid of forward and backward order texture mapping for high quality.</p><p>Although the basic idea of POP is a simple extension over the previous point rendering systems, such as QSplat and Surfel, this extension implies an important message: rather than seeking out a uniform representation, it may be more valid to develop mechanisms to seamlessly integrate different representations for efficient and high quality rendering. An immediate future work in this research direction is to extend and integrate the existing advanced data compression methods, such as geometry compression, and furthermore, to design more effective hybrid representation, for more efficient data representation and smoother transition between levels as well as high quality rendering for an even wider viewing range. Possibilities include (1) combining surface LOD methods with the hybrid approach, (2) integrating a subdivision scheme into this hybrid representation for an even smoother close-up view, (3) designing and incorporating additional point attributes, such as differentials <ref type="bibr" target="#b12">[13]</ref> and Bidirectional Reflectance Distribution Functions (BRDFs), for more effectively conveying the geometric shape and rendering properties. Moreover, high quality and efficient antialiasing for texture mapping remains a challenging problem and is worth more research effort. The limitation of the current implementation is that the data hierarchy is precomputed therefore eliminating an immediate support for dynamic scenes. We are interested in designing schemes to make our hybrid approach applicable to dynamic scenes. Our future work also includes techniques that will make rendering more efficient. We are working on designing occlusion culling techniques for our hybrid rendering system. Occlusion culling is important for large scenes with high depth complexity. Finally, we plan to extend our method to other applications, such as volume surface display. Following Cline et al's "dividing cube" practice <ref type="bibr" target="#b4">[5]</ref>, we can use points to represent volume cells which project to less than a certain threshold area (e.g., one pixel), but for cells larger than the threshold, we then construct triangular surfaces for their display. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 :</head><label>2</label><figDesc>Bounding sphere and hierarchy used by (a) QSplat and (b) POP.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>f l a g 1 1 else if node:splatsize threshold then draw a single point for node else for each child of node do</head><label>11</label><figDesc>indicates the node that is either displayed or discarded (invisible node) in the previous frame (set in both RENDERnode and RENDER-COHERENCYnode); variable f l a g 2 indicates the node which is traversed by upward traversal. RENDER-COHERENCYnode if node:flag1 = = 1 then if node visible and node:splatsize threshold then node:flag1 = 0 RENDERnode else if node is a leaf then draw a triangle for node if node is not visible then node:flag1 = 1 skip node else if node is a leaf then draw a triangle for node node:flag1 =</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Illustrated in Fig-Splat size computation. (a) Using a bounding sphere rather than a bounding ellipse may be too conservative; (b) geometry for approximating bounding sphere at arbitrary 3D location.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 4 :Figure 5 :</head><label>45</label><figDesc>POP rendering with different methods: (a) simplified splatting (threshold = 0.9), (b) visibility splatting (threshold = 4.7), (c) reconstructed image of (b), (d) simplified splatting (threshold = 4.7). Texture mapped POP rendering using (a) two-pixel threshold and Guassian filter for image reconstruction and (b) onepixel threshold and their zoom-ins of the marked rectangles. Artifacts appear in the image generated by image reconstruction while not for texture mapped polygonal rendering. ture mapping of triangles can be considered as backward projection because pixels' colors are computed in texture domain. Therefore, our hybrid point and polygon rendering also facilitates a hybrid processing order, easing high quality texture mapping.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>(Figure 6 :</head><label>6</label><figDesc>a1) thres=1.0, 272,047 pts, 255,708 tris, 1.62 fps (a2) (b2) (b1) 317,557 pts (c1) thres=2.0, 267,567 pts, 48,143 tris, 2.84 fps (c2) (d2) (d1) thres=3.4, 147,263 pts, 7,348 tris, 5.43 fps POP (a1, c1, d1) generates superior image quality to QSplat (b1) as triangles other than points are rendered for the front part of the object. (a2), (b2), (c2) and (d2) are zoom-ins of the marked rectangles of (a1), (b1), (c1) and (d1), respectively.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>The input of POP is general triangular models. The triangle sizes can vary, meaning they do not have to be in approximately uniform size as QSplat favors. These triangles are taken as leaf nodes. For each triangle, a bounding sphere is computed together with other information, such as color, normal and other attributes. The normal is computed as the average of the triangle's three vertices' normals. The color represents the color of the whole triangle. If texture map-ping, this color is computed by convoluting (or averaging) all texels inside the triangle. After we get the point representation, we start to build up a quad tree to represent the hierarchy, similar to QSplat. For each intermediate node in the tree, the attributes (e.g., normal, color, etc.) are computed as the average of these attributes of its child nodes. The bounding sphere is set to tightly bound the child nodes.</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Acknowledgement</head><p>We would like to acknowledge Grant-in-Aid of Research, Artistry and Scholarship from the Office of the Vice President for Research and Dean of the Graduate School of the University of Minnesota.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">A subdivision algorithm for computer display of curved surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1974" />
+		</imprint>
+		<respStmt>
+			<orgName>Univ. of Utah</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Ph.D thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Interactive multiresolution surface viewing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Certain</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Popović</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Derose</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Duchamp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Salesin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Stuetzle</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH 96 Conference Proceedings, Annual Conference Series</title>
+		<editor>H. Rushmeier</editor>
+		<meeting><address><addrLine>New Orleans, Louisiana</addrLine></address></meeting>
+		<imprint>
+			<publisher>Addison Wesley</publisher>
+			<date type="published" when="1996-08" />
+			<biblScope unit="page" from="4" to="09" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">LDI tree: a hierarchical representation for image-based rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C.-F</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Bishop</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lastra</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;99 Proc</title>
+		<imprint>
+			<date type="published" when="1999-08" />
+			<biblScope unit="page" from="291" to="298" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Quicktime VR -an image-based approach to virtual environment navigation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">E</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics (SIGGRAPH 95)</title>
+		<imprint>
+			<date type="published" when="1995-08" />
+			<biblScope unit="page" from="29" to="38" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Two algorithms for the three-dimensional reconstruction of tomograms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ludke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Crawford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">C</forename><surname>Teeter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Medical Physics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="320" to="327" />
+			<date type="published" when="1988-05" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Geometry compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Deering</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;95 Proc</title>
+		<imprint>
+			<date type="published" when="1995-08" />
+			<biblScope unit="page" from="13" to="20" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">J</forename><surname>Gortler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">G</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Szeliski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">F</forename><surname>Cohen</surname></persName>
+		</author>
+		<title level="m">The lumigraph. Computer Graphics (SIGGRAPH 96)</title>
+		<imprint>
+			<date type="published" when="1996-08" />
+			<biblScope unit="page" from="43" to="54" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Point sampled rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Grossman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Dally</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Eurographics Rendering Workshop</title>
+		<meeting>Eurographics Rendering Workshop</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Multiresolution signal processing for meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Guskov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Sweldens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Schröder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics Proceedings, Annual Conference Series</title>
+		<editor>A. Rockwood</editor>
+		<meeting><address><addrLine>Los Angeles</addrLine></address></meeting>
+		<imprint>
+			<publisher>Addison Wesley Longman</publisher>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="325" to="334" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Progressive meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Annual Conference Series</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="page" from="99" to="108" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+	<note>Computer Graphics</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">View-dependent refinement of progressive meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH 97 Conference Proceedings, Annual Conference Series</title>
+		<editor>T. Whitted</editor>
+		<imprint>
+			<publisher>Addison Wesley</publisher>
+			<date type="published" when="1997-08" />
+			<biblScope unit="page" from="0" to="89791" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Smooth view-dependent level-of-detail control and its application to terrain rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;98</title>
+		<editor>D. Ebert, H. Hagen, and H. Rushmeier</editor>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="35" to="42" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kalaiah</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Varshney</surname></persName>
+		</author>
+		<title level="m">Differential point rendering. Proc. Eurographics Rendering Workshop</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Also in Japanese</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Nikkei Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">7</biblScope>
+			<biblScope unit="page" from="130" to="137" />
+			<date type="published" when="1993-07" />
+		</imprint>
+	</monogr>
+	<note>Computer</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Hierarchical back-face computation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Manocha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Garrett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lin</surname></persName>
+		</author>
+		<idno>3-211-82883-4</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics Rendering Workshop</title>
+		<editor>X. Pueyo and P. Schröder</editor>
+		<meeting><address><addrLine>New York City, NY; Wien</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="1996-06" />
+			<biblScope unit="page" from="235" to="244" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Light field rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;96 Conference Proceedings</title>
+		<imprint>
+			<date type="published" when="1996-08" />
+			<biblScope unit="page" from="31" to="42" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Gaze-directed volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Whitaker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 1990 Symposium on Interactive 3D Graphics)</title>
+		<meeting>1990 Symposium on Interactive 3D Graphics)</meeting>
+		<imprint>
+			<date type="published" when="1990-03" />
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="217" to="223" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">University of North Carolina at Chapel Hill</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Whitted</surname></persName>
+		</author>
+		<idno>TR 85-022</idno>
+		<imprint>
+			<date type="published" when="1985" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+	<note>The use of points as a display primitive</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Image-based rendering for non-diffuse synthetic scenes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lischinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Rappoport</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Rendering Techniques &apos;98, Eurographics</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="301" to="314" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Hierarchical rendering of trees from precomputed multi-layer Z-buffers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Rendering Techniques&apos;96</title>
+		<imprint>
+			<date type="published" when="1996-06" />
+			<biblScope unit="page" from="165" to="174" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Rendering trees from precomputed Z-buffer views</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ohsaki</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Eurographics Workshop on Rendering</title>
+		<meeting>Eurographics Workshop on Rendering</meeting>
+		<imprint>
+			<date type="published" when="1995-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Plenoptic modeling: An image-based rendering system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Mcmillan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Bishop</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH 95 Conference Proceedings</title>
+		<imprint>
+			<date type="published" when="1995-08" />
+			<biblScope unit="page" from="39" to="46" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Surfels: Surface elements as rendering primitives</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zwicker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Baar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;00 Proc</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="335" to="342" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Particle systems -A technique for modeling a class of fuzzy objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">T</forename><surname>Reeves</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;83 Proc</title>
+		<imprint>
+			<date type="published" when="1983-07" />
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="page" from="359" to="376" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">QSplat: A multiresolution point rendering system for large meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rusinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;00 Proc</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="343" to="352" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Sampling and anti-aliasing of discrete 3D volume density textures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Sakas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gerth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics &apos;91</title>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="87" to="102" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Applications of spatial data structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Samet</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1990" />
+			<publisher>Addison-Wesley</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Per-object image warping with layered impostors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Schaufler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Rendering Techniques &apos;98, Eurographics</title>
+		<editor>G. Drettakis and N. Max</editor>
+		<meeting><address><addrLine>Wien New York</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer-Verlag</publisher>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="145" to="156" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Ray tracing point sampled geometry. Rendering Techniques</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Schaufler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">W</forename><surname>Jensen</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="319" to="328" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Layered depth images</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">W</forename><surname>Shade</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">J</forename><surname>Gortler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Szeliski</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;98 Proc</title>
+		<imprint>
+			<date type="published" when="1998-07" />
+			<biblScope unit="page" from="231" to="242" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Visibility preprocessing for interactive walkthroughs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Teller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">H</forename><surname>Séquin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics: Proceedings of SIGGRAPH&apos;91</title>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="page" from="61" to="69" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Adaptive real-time level-of-detail-based rendering for polygonal models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Xia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>El-Sana</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Varshney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="171" to="183" />
+			<date type="published" when="1997-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Manocha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Hudson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hoff</surname></persName>
+		</author>
+		<title level="m">Visibility culling using hierarchical occlusion maps. SIGGRAPH &apos;97 Proc</title>
+		<imprint>
+			<date type="published" when="1997-08" />
+			<biblScope unit="page" from="77" to="88" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

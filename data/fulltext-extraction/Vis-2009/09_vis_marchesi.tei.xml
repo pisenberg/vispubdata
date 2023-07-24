@@ -1,0 +1,575 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">High-Quality, Semi-Analytical Volume Rendering for AMR Data</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stéphane</forename><surname>Marchesin</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Guillaume</forename><surname>Colin De Verdière</surname></persName>
+						</author>
+						<title level="a" type="main">High-Quality, Semi-Analytical Volume Rendering for AMR Data</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:53+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<abstract>
+				<p>Fig. 1. Close-up of an AMR dataset showing a meteorite falling into the sea rendered using our system.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION AND MOTIVATION</head><p>Adaptive mesh refinement (AMR) is a mesh refinement strategy aimed at reducing the cost of numerical simulations while maintaining high accuracy results. This design allows both simple programming thanks to identical cell shapes and implicit connectivity, and an efficient use of processing resources thanks to adaptive local refinement. Due to its simplicity and computational efficiency, this scheme is widely used in the numerical simulation field. <ref type="figure" target="#fig_0">Figure 2</ref> shows an example of such a mesh in two dimensions. As an AMR mesh can be viewed (locally) as a tree, we define the AMR cell level as the level of cell size in the AMR tree, 0 being the biggest cells at the top of the tree, and higher levels being the smaller cells. We define an AMR patch as a cuboid of homogeneous cells, i.e. where all AMR cells have the same level. In this paper, we focus on the specific case of AMR meshes carrying vertex-centered data (as opposed to cell-centered data). In order to analyze the data resulting from AMR simulations, visualization tools are wanted. In particular, volume rendering is a powerful exploration method for 3D data. As of today, volume rendering of AMR data presents three major challenges:  structures. However, direct adaptation of these structures to the GPU is difficult, and can result in a waste of memory or suboptimal performance. As we are interested in interactive visualization, such data structures should allow an efficient implementation. In particular, using additional cells to achieve simpler mesh traversal is not always desirable since it decreases the performance of the system. 2. An interpolation method is required inside the cells to reconstruct a continuous scalar function from the discrete AMR data. This implies defining an interpolant function inside the cells, not only for simple hexahedral cells, but also for cells lying at the border between patches of different levels. In the case of hexahedral cells, the most widespread choice for an interpolation function inside a given cell is the trilinear reconstruction. However, one still needs to restore the continuity at the borders between cells of different levels. This is commonly achieved by splitting cells into tetrahedra or pyramids, though this leads to a more complex mesh, and also needs an additional interpolation scheme per new cell type. This is further complicated by the requirement that different interpolation schemes must be coherent across shared cell faces. 3. High accuracy cell rendering techniques are highly sought after.</p><p>By linearly interpolating the signal over each integration interval, techniques like preintegration have historically been of great help in improving the visual quality of volume rendered scenes. However, because of insufficient sampling, these techniques can miss some isovalues. <ref type="figure" target="#fig_1">Figure 3</ref> depicts such a situation where a range of isovalues present in in the reconstructed data is missed. This is an important source of artifacts when using preintegrated volume rendering as it leads to holes and cracks in the isosurfaces. Therefore, volume rendering methods that feature a higher rendering accuracy are required. In this paper, we give solutions to those three core issues pertaining to AMR volume visualization. We present a hybrid CPU and GPU-based AMR mesh representation and traversal technique. We introduce a method suitable for restoring continuity along faces shared by AMR cells of different levels. Basing our work on a trilinear interpolation scheme inside AMR cells, we show how to improve the volume rendering quality with a sampling scheme that suits the discrete data and the reconstruction function in order to avoid artifacts. By ensuring that no isovalue is missed, our method greatly improves the visual quality of our final renderings while retaining interactive performance. Furthermore, we extend our cell rendering technique to handle volume shading.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORKS</head><p>Unstructured volume rendering is commonly achieved using cell projection techniques. Among these techniques, Shirley et al. <ref type="bibr" target="#b17">[18]</ref> introduce the projected tetrahedra, which is one of the first methods taking advantage of graphics hardware to accelerate unstructured volume rendering. This algorithm splits the footprint of a tetrahedron in screen space into a number of triangles, and then sends these triangles to the graphics processor for rasterization. Max et al. <ref type="bibr" target="#b11">[12]</ref> show that for the simple case of a tetrahedron using barycentric interpolation for signal reconstruction inside the cell, the signal variation over rays passing through this tetrahedron is linear. Therefore, using linear interpolation of the scalar values inside the tetrahedron while sampling at the cell faces results in exact rendering, and this is commonly known as preintegrated volume rendering as presented by Roettger et al. <ref type="bibr" target="#b16">[17]</ref>. Their method first computes the segments for all possible triplets of entry scalar values, exit scalar values and integration lengths and stores them in a 3D table called the preintegration table. Then, the authors adapt the projected tetrahedra algorithm to lookup into this table for each pixel using the current entry and exit scalars, and the integration length. Using floating point preintegration tables and rendering buffers, Kraus et al. <ref type="bibr" target="#b7">[8]</ref> show that it is possible to achieve better accuracy in the final renderings. Furthermore, the authors use a logarithmic scale for accessing the length component of the preintegration table, resulting in higher accuracy for the smallest lengths. Preintegration has been extended to adaptive sampling in the context of volume rendering by Roettger et al. <ref type="bibr" target="#b15">[16]</ref> and Ledergerber et al. <ref type="bibr" target="#b9">[10]</ref>, however the authors are not able to guarantee hole-free isosurfaces. Lum et al. <ref type="bibr" target="#b10">[11]</ref> extend the preintegration techniques to volume shading by linearly interpolating the shading across each integration interval. Since the original projected tetrahedra technique was proposed, different improvements have been introduced to mitigate the computational and storage requirements of using a 3D table. In particular, analytical approximations were proposed by Roettger et al. <ref type="bibr" target="#b16">[17,</ref><ref type="bibr" target="#b14">15]</ref>, Guthe el al. <ref type="bibr" target="#b3">[4]</ref> and Moreland et al. <ref type="bibr" target="#b12">[13]</ref>. However, these techniques remain approximations of the volume rendering integral. In order to speedup the 3D preintegration table computation and therefore make it suitable for real time transfer function changes, one can use the method developed by Lum et al. <ref type="bibr" target="#b10">[11]</ref>. By precomputing portions of the volume rendering integral, the table computational complexity is reduced, which results in a speedup by two orders of magnitude.</p><p>Although the case of tetrahedral cells is well covered in the literature, for more complex cell types exact rendering is not straightforward to achieve. In such cases, the following approximation is commonly used: a continuous function is reconstructed inside the cell using the reconstruction filter, and this function is sampled regularly inside the cell. However, this wastes resources and can still miss some isovalues passing through the cell, which creates artifacts and holes in the isosurfaces.</p><p>In the field of isosurface visualisation, it has been shown by Parker et al. <ref type="bibr" target="#b13">[14]</ref> that analytical techniques can be used to find the exact position of an isosurface inside a trilinearly interpolated hexahedral cell. This technique is more accurate than polygonal reconstruction, and in particular results in better topology for the isosurfaces.</p><p>In the field of adaptive mesh refinement (AMR) visualization, Weber et al. achieve high quality volume rendering <ref type="bibr" target="#b19">[20]</ref> using cell projection and multiple integration steps inside each cell. Kähler et al. demonstrate how to exploit 3D graphics hardware to accelerate the volume rendering of AMR data <ref type="bibr" target="#b4">[5]</ref>. For this purpose, the authors show a method for packing AMR data into a 3D texture in an efficient fashion. By converting sparse datasets into AMR data, Kähler et al. extend their visualization technique to the volume rendering of sparse volume datasets <ref type="bibr" target="#b6">[7]</ref>. The authors also discuss packing strategies allowing fitting multiple bricks into a single 3D texture. More recently, Vollrath et al. achieved GPU-based volume visualization of AMR data <ref type="bibr" target="#b18">[19]</ref> with specific data structures: using a page table and using an octree. AMR visualization techniques were also extended to time-dependent datasets by Kähler et al. <ref type="bibr" target="#b5">[6]</ref> and Gosink et al. <ref type="bibr" target="#b2">[3]</ref>. However, all these papers use a rendering stage involving data resampling, which we want to avoid in order to provide the highest possible visual quality. Therefore, the framework we present in this paper is centered around the idea of avoiding data resampling in order to ensure high quality pictures, and in particular crack-free isosurfaces.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">CELL RENDERING</head><p>We now describe our AMR cell volume rendering technique. First we demonstrate how to achieve high quality, semi-analytical preintegration of a single hexahedral cell, then we show that this technique can be extended to shaded volume rendering. Finally, we show how the first two subsections apply to AMR meshes by handling the case of adjacent cells of different AMR levels.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Single cell rendering</head><p>Our cell rendering technique can be decomposed into three stages: first we reconstruct the analytical function across the current viewing ray. Second, we carefully choose the sampling points over this analytical function according to its properties. Third, we apply the transfer function. We now describe these three stages in more detail. </p><formula xml:id="formula_0">s(x, y, z) =s 000 • (1 − x) • (1 − y) • (1 − z) + s 100 • x • (1 − y) • (1 − z)+ s 010 • (1 − x) • y • (1 − z) • +s 001 • (1 − x) • (1 − y) • z+ s 101 • x • (1 − y) • z + s 011 • (1 − x) • y • z+ s 110 • x • y • (1 − z) + s 111 • x • y • z (1)</formula><p>where s i jk is the sample value at the cell corner (i, j, k). Let us consider a single ray parametrized by t traversing a hexahedral cell. We can express the Cartesian coordinates (x, y, z) of a point over this ray as a function of t:</p><formula xml:id="formula_1">x = x 0 + t • v x y = y 0 + t • v y z = z 0 + t • v z (2)</formula><p>where (x 0 , y 0 , z 0 ) are the entry coordinates of the ray in the cell, and</p><formula xml:id="formula_2">(v x , v y , v z )</formula><p>are the differences between the exit and entry coordinates. By replacing the x, y and z coordinates with their parametrization over the ray in the trilinear interpolation formula, we can now compute s(x, y, z) over the ray as a function of the parameter t:</p><formula xml:id="formula_3">s(t) = a • t 3 + b • t 2 + c • t + d, t ∈ [0, 1]<label>(3)</label></formula><p>with the a, b, c and d coefficients as follows:</p><formula xml:id="formula_4">a = (s 100 − s 000 + s 010 + s 001 + s 111 − s 110 − s 011 − s 101 ) • v x • v y • v z (4) b = (−x 0 • v y • v z − v x • y 0 • v z − v x • v y • z 0 + v x • v z ) • s 101 + (x 0 • v y • v z + v x • y 0 • v z + v x • v y • z 0 ) • s 111 + (v y • v z − x 0 • v y • v z − v x • y 0 • v z − v x • v y • z 0 ) • s 011 + (−v x • v z + v x • v y • z 0 − v y • v z + x 0 • v y • v z + v x • y 0 • v z ) • s 001 + (−v x • v z + v x • y 0 • v z + v x • v y • z 0 − v x • v y + x 0 • v y • v z ) • s 100 + (−v x • y 0 • v z − x 0 • v y • v z + v x • v y − v x • v y • z 0 ) • s 110 + (v x • v y + v y • v z − v x • v y • z 0 + v x • v z − x 0 • v y • v z − v x • y 0 • v z ) • s 000 + (v x • v y • z 0 − v y • v z − v x • v y + x 0 • v y • v z + v x • y 0 • v z ) • s 010 (5) c = (−x 0 • y 0 • v z + x 0 • v z + v x • z 0 − v x • y 0 • z 0 − x 0 • v y • z 0 ) • s 101 + (v x • y 0 • z 0 + x 0 • v y • z 0 + x 0 • y 0 • v z ) • s 111 + (y 0 • v z − x 0 • v y • z 0 − v x • y 0 • z 0 + v y • z 0 − x 0 • y 0 • v z ) • s 011 + (x 0 • y 0 • v z + v z − y 0 • v z − v y • z 0 − x 0 • v z − v x • z 0 + x 0 • v y • z 0 + v x • y 0 • z 0 ) • s 001 + (v x • y 0 • z 0 + x 0 • y 0 • v z + x 0 • v y • z 0 − v x • z 0 − v x • y 0 − x 0 • v z − x 0 • v y + v x ) • s 100 + (x 0 • v y + v x • y 0 − x 0 • y 0 • v z − x 0 • v y • z 0 − v x • y 0 • z 0 ) • s 110 + (−v x • y 0 + x 0 • v y • z 0 − y 0 • v z − x 0 • v y + x 0 • y 0 • v z + v y + v x • y 0 • z 0 − v y • z 0 ) • s 010 + (−x 0 • v y • z 0 − v z + v x • y 0 − x 0 • y 0 • v z − v x • y 0 • z 0 − v y + y 0 • v z + v x • z 0 + v y • z 0 + x 0 • v y − v x + x 0 • v z ) • s 000 (6) d = (x 0 • z 0 − x 0 • y 0 • z 0 ) • s 101 + (y 0 • z 0 − x 0 • y 0 • z 0 ) • s 011 + (−x 0 • z 0 − y 0 • z 0 + x 0 • y 0 • z 0 + z 0 ) • s 001 + (−x 0 • z 0 + x 0 + x 0 • y 0 • z 0 − x 0 • y 0 ) • s 100 + (x 0 • y 0 − x 0 • y 0 • z 0 ) • s 110 + (−y 0 • z 0 − x 0 • y 0 + y 0 + x 0 • y 0 • z 0 ) • s 010 + (−y 0 − z 0 − x 0 • y 0 • z 0 + x 0 • z 0 + y 0 • z 0 − x 0 + x 0 • y 0 + 1.0) • s 000 + s 111 • x 0 • y 0 • z 0<label>(7)</label></formula><p>Therefore, when using trilinear interpolation, the reconstructed signal over a ray traversing a hexahedron is a third degree polynomial in t. Ray sampling. The next step consists in sampling the ray at the relevant values. In the context of ray casting, the sampling over the ray is usually homogeneous. Doing so is suboptimal when small structures are present in the dataset, as such a sampling could easily miss these structures. A naive solution would consist in analytically integrating the function over the interval, however for high frequency transfer functions this could quickly become inefficient. The alternative of preintegrating over the whole interval is not technically feasible either, as it would require a 5-dimensional preintegration table (4 scalar values which uniquely define the third degree polynomial along with the interval length). Instead, in order to avoid missing isovalues during the sampling stage, we sample at the entry and exit faces of the hexahedron, and also at the local extrema of the reconstructed function as shown on <ref type="figure" target="#fig_3">Figure 4</ref>. As we know the analytical form of the reconstructed function s(t), we can compute its derivative s ′ (t) analytically. Since s ′ (t) is a quadratic function, it has at most two roots, and s(t) has at most two local extrema r 1 and r 2 . We compute the extrema of s(t), prune those that lie outside the cell and finally sort them along the ray. At this point we have reconstructed monotonic intervals for s(t) over the ray inside a given cell. Transfer function application. The last stage is the application of the transfer function. Since the transfer function can be arbitrary, missing a single value in the previous stage can result in missing or discontinuous isosurfaces. We now begin with the standard volume rendering equation where I is the final intensity, c() is the color transfer function and τ() is the opacity transfer function. If we have two extrema and both those extrema lie within [0, 1], we get: </p><formula xml:id="formula_5">I = L 0 c(s(t))e − t 0 τ(s(u))du dt = r 1 0 c(s(t))e − t 0 τ(s(u))du dt + r 2 r 1 c(s(t))e − t 0 τ(s(u))du dt + L r 2 c(s(t))e − t 0 τ(s(u))du dt<label>(8)</label></formula><formula xml:id="formula_6">I ≈ r 1 0 c((1 − t) • s(0) + t • s(r 1 ))e − t 0 τ((1−u)•s(0)+u•s(r 1 ))du dt + r 2 r 1 c((1 − t) • s(r 1 ) + t • s(r 2 ))e − t 0 τ(s((1−u)•s(r 1 )+u•s(r 2 )))du dt + L r 2 c((1 − t) • s(r 2 ) + t • s(L))e − t 0 τ((1−u)•s(r 2 )+u•s(L))du dt ≈ C(s(0), s(r 1 ), r 1 ) + (1 − α(s(0), s(r 1 ), r 1 ))C(s(r 1 ), s(r 2 ), r 2 − r 1 ) + (1 − α(s(0), s(r 1 ), r 1 )) • (1 − α(s(r 1 ), s(r 2 ), r 2 − r 1 )) •C(s(r 2 ), s(L), L − r 2 ) (9) with C(a, b, l) = 1 0 c((1 − t) • a + t • b)le − t 0 τ((1−t)•a+t•b)ldu dt α(a, b, l) = 1 − e − 1 0 τ((1−t)•b+t•a)ldt<label>(10)</label></formula><p>Since over each monotonic interval, the ranges of s(t) and of its piecewise linear approximation are identical, we will not miss any isovalue when using piecewise linear approximations over these intervals. We are thereby able to ensure that all the volume features are present and have accurate topology according to the trilinear interpolation. As the topology is consistent from one frame to another, the only remaining kind of artifacts is wobbling of the surfaces and structures inside the cells as the viewpoint changes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Extension to volume shading</head><p>We now demonstrate how to extend our approach to achieve local Phong shading with directional light sources; this process is described for the case of diffuse shading but straightforwardly generalizes to specular shading by using the half vector instead of the light vector. By analyzing the behaviour of the gradient inside the cell, we reconstruct a shading function over the ray and show how to use it to achieve high quality volume shading.</p><p>Shading computation. The gradient ∇s(x, y, z) of the scalar function (as shown in Equation 1) can be obtained analytically by computing the partial derivatives of s(x, y, z). <ref type="figure">Diffuse shading d(x, y, z)</ref> is defined for any point of the cell as the dot product of this gradient with the light vector L(lx, ly, lz):</p><formula xml:id="formula_7">d(x, y, z) = ∇s(x, y, z) • L = lx • ∂ s ∂ x + ly • ∂ s ∂ y + lz • ∂ s ∂ z = lx • (−s 000 − s 011 • y • z + s 101 • z − s 101 • z • y − s 010 • y − s 100 • z − s 100 • y − s 001 • z + s 000 • z + s 000 • y + s 111 • y • z − s 000 • y • z + s 010 • y • z + s 110 • y − s 110 • y • z + s 100 + s 100 • y • z + s 001 • z • y) + ly • (−s 000 − s 011 • z • x − s 101 • x • z − s 010 • z − s 010 • x − s 100 • x − s 001 • z + s 010 + s 000 • z + s 000 • x + s 111 • x • z − s 000 • x • z + s 010 • x • z + s 110 • x − s 110 • x • z + s 100 • x • z + s 001 • z • x + s 011 • z) + lz • (−s 000 − s 011 • y • x + s 101 • x − s 101 • x • y − s 010 • y − s 100 • x − s 001 • y − s 001 • x + s 000 • y + s 000 • x + s 111 • x • y − s 000 • x • y + s 010 • y • x − s 110 • x • y + s 100 • x • y + s 001 + s 001 • x • y + s 011 • y)<label>(11)</label></formula><p>We again use the parametrization described in Equation 2 and obtain:</p><formula xml:id="formula_8">d(t) = e • t 2 + f • t + g<label>(12)</label></formula><p>where e, f and g can be trivially computed as previously done in Subsection 3.1 for a, b, c and d. For a parametrized ray inside a cell, the gradient variation over this ray is thus a quadratic form in t.</p><p>Ray sampling. In order to capture all the variations of the diffuse shading function, we sample this function at the cell faces and at the local extrema of d(t). Since d(t) is a quadratic polynomial, there is at most a single local extremum r. Therefore, if we apply shading on top of the previously described preintegration method, we only need at most one additional sampling point per cell. As in the case of scalar value integration, we thereby ensure that all extrema of the shading function are captured. We start from the volume rendering equation with diffuse shading; c() and τ() are defined as previously, and d() represents the diffuse shading coefficient.</p><formula xml:id="formula_9">I = L 0 c(s(t))d(t)e − t 0 τ(s(u))du dt = r 0 c(s(t))d(t)e − t 0 τ(s(u))du dt + L r c(s(t))d(t)e − t 0 τ(s(u))du dt<label>(13)</label></formula><p>Over each interval [t1,t2], We replace s(t) with a linear form (1 − t) • s(t1) + t • s(t2), similarly to <ref type="bibr" target="#b10">[11]</ref>. We obtain:</p><formula xml:id="formula_10">I ≈ d(s(0)) •C f ront (s(0), s(r 1 ), r 1 ) + d(s(r 1 )) •C back (s(0), s(r 1 ), r 1 ) + (1 − α(s(0), s(r 1 ), r 1 ))(d(s(r 1 )) •C f ront (s(r 1 ), s(L), L − r 1 ) + d(s(L)) •C back (s(r 1 ), s(L), L − r1))<label>(14)</label></formula><p>with</p><formula xml:id="formula_11">C back (a, b, l) = 1 0 c((1 − t) • a + t • b)te − t 0 τ((1−t)•a+t•b)ldu dt C f ront (a, b, l) = 1 0 c((1 − t) • a + t • b)(1 − t)e − t 0 τ((1−t)•a+t•b)ldu dt α(a, b, l) = 1 − e − 1 0 τ((1−t)•b+t•a)ldt<label>(15)</label></formula><p>At this point, the ranges for both the scalar and the shading functions are the same as their reconstructed counterparts over each of the integration intervals. The right of <ref type="figure" target="#fig_3">Figure 4</ref> depicts this situation: the scalar function integration requires two additional samples, and the shading function integration requires one additional sample. The corresponding piecewise linear approximation for this function is shown in green.</p><p>In that case, four integration steps over the ray are required to achieve accurate rendering. Notice that since the reconstructed scalar field is only C 0 across the cell faces, the gradient is not continuous across those faces. Therefore, shading is not continuous across the cell faces either.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Extension to AMR rendering</head><p>After explaining our method for simple hexahedral cell visualization, we now extend it to the case of AMR meshes. One specific issue is the occurrence of hybrid cells, that is, cells that share at least an edge with a cell of a different level. Such cells need to be handled as special cases to achieve continuity along cell faces and therefore avoid artifacts in the final renderings. In order to achieve this, we propagate the cell splits from the lower level cell to the higher level cell as shown on <ref type="figure" target="#fig_4">Figure 5</ref>. Two types of new points are added to the lower level cell as it is split: source split points (shown in green on <ref type="figure" target="#fig_4">Figure 5</ref>) which use the value from the higher level cell, and destination split points (shown in red on <ref type="figure" target="#fig_4">Figure 5</ref>) which use the value bilinearly interpolated inside a face shared with a cell of the same level. In both cases, this results in continuity across cell faces: either by using the neighbour's value (in the case of a source split point) or by using a new value that matches the interpolation scheme of the neighbour cell (in the case of a destination split point). After splitting we obtain cuboids, to which our hexahedral cell rendering technique straightforwardly generalizes. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">MESH CONSTRUCTION AND TRAVERSAL</head><p>Vollrath et al. <ref type="bibr" target="#b18">[19]</ref> use an homogeneous page table in order to access the AMR data in a regular fashion. However, this wastes memory and decreases performance as it fails to take into account the heterogeneity of AMR datasets at their finest granularity. Notably, this technique adds many additional cells which slows down the rendering stage, especially when high quality cell rendering methods are in use. Therefore, in this section we present a data structure that is hierarchical and does not require additional cells. Because of the difficulty in handling hierarchical structures on the GPU efficiently, we have chosen a hybrid CPU-GPU sorting approach: our hierarchical structure is made of AMR patches (an AMR patch is defined as an axis-aligned box of same-level cells). While this structure is traversed on the CPU, patches can be sorted and rendered completely on the GPU thanks to their regularity. We now present our mesh construction and traversal technique.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Mesh construction</head><p>Assuming a function homogeneity() that returns the ratio of homogeneity of cell levels (1 if all the cells share the same level, 0 if all the cells have different levels) inside a given box, our hierarchy building algorithm is described in Algorithm 1. The dataset is recursively processed to create a KD-tree <ref type="bibr" target="#b0">[1]</ref>. If a node has an homogeneous patch attached, it is made into a leaf node, otherwise it is split recursively again.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Algorithm 1 Mesh construction algorithm</head><p>Procedure </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Mesh traversal</head><p>Once the data structure is built, the list of AMR patches is traversed hierarchically on the CPU in back to front order, and each patch is sent to the GPU for rendering. The GPU is then in charge of traversing the cells inside a given patch. Although this traversal is trivial in the most common case (and can be achieved using a simple back-to-front loop in each dimension), we have to take perspective into account. <ref type="figure" target="#fig_5">Figure 6</ref> depicts a situation where the position of the observer O (facing a single AMR patch, orthogonally to the green cell) requires further subdivision of the data into sub-patches. On the left of the figure, the arrows depict the back-to-front rendering order dependency between the cells. On the right of the picture, we show a proposed traversal order that follows these dependencies. By subdividing the patch as shown on this figure, we are thereby able to ensure perspective-correct sorting of the cells in all cases.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">IMPLEMENTATION</head><p>We have implemented our AMR volume rendering method on the GPU using OpenGL. In order to improve the accuracy of the preintegration table, it is stored in a 16 bit per component 256 × 256 × 32 RGBA texture, and we use logarithmic table access for the length of the preintegration interval which allows greater precision at small lengths <ref type="bibr" target="#b7">[8]</ref>. For better blending accuracy, a 16 bit floating point offscreen buffer is used <ref type="bibr" target="#b7">[8]</ref>; once the whole picture is rendered, it is copied to the front buffer. We now detail the implementation of our hybrid CPU-GPU AMR structure traversal. The whole rendering pipeline is visible on <ref type="figure">Figure 7</ref>. Initially, the mesh is stored as a KDtree with AMR patches at the leaf nodes. The KD-tree hierarchy is traversed on the CPU in a back-to-front fashion, by choosing the appropriate order at each internal node. Once a leaf node is found, a series of consecutive indices is sent to the vertex shader, where the number of indices matches the number of cells of the current patch.</p><p>Each of these indices is then modified inside the vertex shader according to the current observer position to generate proper cell ordering as shown in Subsection 4.2. This new index is used to access a vertex texture holding cell data.</p><p>The cell data is then passed to the geometry shader, which checks that the cell is visible according to the current transfer function using a look-up table as introduced in <ref type="bibr" target="#b8">[9]</ref>. The look-up table is a 2D table built in a way similar to the preintegration tables but holding Boolean values: for each pair of values s1 and s2, if there exists at least an opacity which is non-zero for scalar values in [s1, s2] the table holds a 1, otherwise the table contains a 0. In order to know whether a cell is visible or not, we compute the minimum and maximum of the 8 cell corner values. Since the variation of the scalar value inside a cell is bounded by these two values, we can use them to determine if the whole cell is visible. Therefore, these two values are used as table lookup indices and a resulting visibility value is fetched. If the cell is deemed visible, the geometry shader then instantiates its 6 faces. The back faces are culled by the standard OpenGL pipeline. The front faces are then rasterized, and each pixel executes a fragment shader.</p><p>The fragment shader is depicted as Algorithm 2. First, the ray exit point is computed. Then, the polynomial coefficients for signal and shading reconstruction are calculated as shown in Subsections 3.1 and 3.2. Then the local extrema of the scalar polynomial or of both polynomials are found and added to a list of points. Points outside [0, 1] are pruned and the remaining points are sorted. These sorted points are subsequently used as bounds for preintegration intervals. Over each interval, we apply preintegration and shading interpolation using front-and back-weighted tables as in <ref type="bibr" target="#b10">[11]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">RESULTS</head><p>We now present results obtained with our method. Performance measurements and screen captures were performed on an PC with two Xeon E5345 processors, 4GB of memory and a GeForce 8800 GTX graphics card with 768MB of memory. Although 8 cores were available, only a single core was used for the computations. For these tests we used a time step of the "meteorite" dataset, which is an AMR simulation of a meteorite falling into the sea. This dataset contains 2377878 cells divided as follows: 6300 cells of level 0, 9258 cells of level 1, 112869 cells of level 2 and 2249451 cells of level 3. The pictures produced in this paper visualize the ρ attribute (density) of this dataset.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Single cell rendering</head><p>In order to assess the quality improvement of our cell rendering technique, we now present volume rendering results in the context of a single cell. For these tests, we used a single unshaded hexahedral cell and a transfer function showing multiple transparent isosurfaces. These results are visible on <ref type="figure" target="#fig_7">Figure 8</ref>. On the top left of the figure, the hexahedral cell is rendered using a single preintegration interval;  Reconstruct the shading values l1 = g +t1 * ( f +t1 * e) and l2 = g + t2 * ( f + t2 * e) at the interval boundaries. Compute the integration length l = t2 − t1 Fetch the front and back textures at (s1, s2, l) Combine these textures as described in <ref type="bibr" target="#b10">[11]</ref> Accumulate the value end for 2, 4 and 100 integration intervals are used for the top right, middle left and middle right pictures, respectively. Our adaptive technique is shown on the bottom left, and its number of integration intervals is shown on the bottom right (red means one, green means two and blue means three). These pictures show that thanks to our adaptive sampling method, it is possible to reach higher quality levels than with regular oversampling, using less samples. In particular, our technique reconstructs correct topology as can be seen when comparing it with the highly oversampled version that uses 100 intervals. Furthermore, adding more integration steps generates banding artifacts (which can be seen inside the isosurfaces), which are not present with our technique since less steps are required.</p><p>Since raycasting methods always line up the viewing ray and the integration segment, and since the piecewise linear interpolation results in the same range over each integration interval as the original function, we know that the only possible error lies along the ray. Using a stochastic maximization process over both the eight cell corner values and the ray trajectory through the cell, we tried maximizing the distortion of isovalue positions along the ray over all possible rays traversing the cell. The result corresponds neither to a singular ray nor to eight singular cell values. The biggest distortion found is approximately 0.468 ray units, meaning that any isosurface is at most 0.468 times the ray length inside the cell away from its real (trilinearly interpolated) position.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Quality results</head><p>This section introduces results pertaining to image quality. The left column of <ref type="figure" target="#fig_9">Figure 10</ref> shows a comparison of the same AMR dataset rendered without (top) and with shading (bottom). It can be seen from these pictures that shading greatly helps understanding the internal structure of the data. Notably, the shape of the structures resulting from the meteorite splashing into the water is easier to infer from our shaded rendering. When viewing the full dataset, we obtain the following framerates: 3.77 fps for unshaded volume rendering, and 3.62 fps for shaded rendering.</p><p>The middle and right columns of <ref type="figure" target="#fig_9">Figure 10</ref> compare two pairs of renderings with the same viewpoints using 2 integration steps per cell (top) and our adaptive technique (bottom). Both rendering methods run at the same framerate. In the middle column, artifacts are visible in the top row which disappear when using our adaptive sampling technique. In the right column, erroneous holes appear in the thin yellow isosurface which our adaptive sampling technique removes. <ref type="figure" target="#fig_8">Figure 9</ref> compares renderings obtained when taking the local ex- trema of the shading function into account (on the left), and when omitting those extrema (on the right). Although these pictures exhibit small differences, these differences are not relevant enough to enable this feature except when very high quality images are to be generated. Finally, <ref type="figure">Figure 1</ref> presents a close-up of the meteorite splashing into the water as seen from above.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Performance results</head><p>This subsection introduces performance results obtained when visualizing the full AMR dataset. <ref type="table">Table 1</ref> exemplifies our results from a performance viewpoint, using different optimizations. Without the look-up table, performance is low, at less than a single frame per second. Thanks to the use of the look-up table, lots of cells are culled and therefore the load on the rendering stage decreases. This increases the framerate to approximately 3.48 frames per second. Our last optimization is the introduction of our hybrid CPU-GPU mesh traversal mechanism which further increases the framerate to 3.62 frames per second. For later performance measurements, both the look-up table and the CPU-GPU mesh traversal optimizations are used. Performance results when changing the target resolution are given on <ref type="table">Table 2</ref>. These results show that the performance remains interactive at high screen resolutions (including 2048 × 2048), for two reasons: first, cell-projection based techniques have an advantage over raycasting techniques as they are able to cull cells and also can share computations among multiple pixels of the same cell. Second, as the resolution decreases, our system becomes limited by the throughput of the mesh traversal and geometry generation stages; we expect this problem to be lifted by the next generation of GPUs. intervals, and our semi-analytic adaptive sampling technique with and without taking the shading extrema into account. The performance difference between the cell rendering techniques, albeit small, exists in these results. Such a small performance variation can be explained by the fact that the AMR mesh traversal and geometry generation phases, which are common to all the rendering methods, take a fair amount of time. These results show that our adaptive sampling technique has approximately the same performance as using two integration intervals per cell, whereas the quality is much higher as shown in Subsections 6.1 and 6.2. Thanks to its adaptivity, our cell rendering method uses fewer integration steps on average for the same quality, and therefore generates less preintegration table accesses during rendering than oversampling-based cell rendering. This in turn reduces the memory bandwidth pressure, which is usually the limiting factor for volume rendering. This more than offsets the computational intensity of calculating the polynomial coefficients and evaluating the extrema with our technique. This explains why, although our method has higher computational requirements than raw oversampling, its final performance is higher.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Optimization</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION AND FUTURE WORKS</head><p>We have shown that very high quality volume rendering was possible in interactive time for moderately-sized AMR datasets using our system. However, a number of issues remain open. First, we intend to mathematically prove the maximal distortion inside a hexahedral cell instead of exhibiting an empirical maximum. Second, as we are interested in bigger datasets, we would like to experiment with techniques allowing further scalability. This could be achieved by adding levelof-detail support to our AMR rendering system, or by parallelizing our system in order to increase the performance without sacrificing the quality. Third, we would like to traverse the whole AMR mesh from within the geometry shader. Although we already had unsuccessful experiments with this (because geometry shaders have performance issues when a high number of vertices is to be output), we hope that future generations of graphics hardware will lift this limitation and finally allow traversing the mesh on the GPU only. This will enable the development of new AMR traversal algorithms on the GPU. Finally, we would like to adapt our accurate cell rendering algorithm to structured datasets. Although such datasets can be seen as AMR datasets with a single patch, and therefore our method would be usable as-is, we think that the nature of structured datasets should be taken into account in order to optimize the traversal algorithms. Therefore, we expect that our semi-analytical cell rendering technique could be generalized to classical volume raycasting methods and achieve the high quality results we demonstrated together with interactive performance. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>AMR mesh example with three different cell levels.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 .</head><label>3</label><figDesc>A scalar signal approximated with 3 piecewise linear functions. The hashed area depicts the range of scalar values that are not covered by preintegration.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>Signal reconstruction. Trilinear signal reconstruction inside a hexahedral cell is a weighted sum of the eight scalar values s i jk at the eight vertices of the cell. For a given point (x, y, z) inside a hexahedral cell of normalized coordinates in [0, 1] 3 , the trilinear interpolation of the signal s(x, y, z) is defined as follows:</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 .</head><label>4</label><figDesc>Sampling schemes for a ray inside a cell. On the left, shading is not used. The cell is shown in blue, the reconstructed scalar values are depicted in black and their piecewise linear approximations are shown in red; the interval is split at t 1 and t 2 . On the right, shading is used. The reconstructed quadratic shading function incurs an additional sampling point t 3 .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 .</head><label>5</label><figDesc>Propagating cell splits towards higher level cells in different configurations generates cuboids.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 .</head><label>6</label><figDesc>Traversing a single row of an AMR patch (top) and a single slice (bottom).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 7 .Algorithm 2</head><label>72</label><figDesc>Our AMR volume rendering pipeline. The buffers are shown in orange, programmable functionality (vertex shaders, geometry shaders, fragment shaders) is shown in green and fixed OpenGL functionality is depicted in blue. Fragment shader computation Find the exit point of the ray Compute the a,b,c,d cubic coefficients as per Subsection 3.1 Compute the e, f ,g quadratic coefficients as per Subsection 3.2 T = Ø if (a!=0 and b!=0) then ∆ = 4 * b 2 − 12 * a * c T = T ∪ { −2 and b!=0) then T = T ∪ { −c 2 * b } end if end if if (e!=0) then T = T ∪ { − f 2 * e } end if for each point t in T do if (t ≤ 0 or t ≥ 1) then T = T \ {t} end if end for T = T ∪ {0, 1} Sort the points in T for each two consecutive points (t1,t2) in T do Reconstruct the scalar values s1 = d + t1 * (c + t1 * (b + t1 * a)) and s2 = d + t2 * (c + t2 * (b + t2 * a)) at the interval boundaries.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 8 .</head><label>8</label><figDesc>Comparison of classical, single-step preintegration (top left), oversampled preintegration using 2 (top right), 4 (middle left) and 100 (middle right) regular integration intervals for all pixels and our technique (bottom left). The number of integration steps for the adaptive method is shown on the bottom right (red means 1 step, green means 2 steps and blue means 3 steps). The increase of image quality due to our method can be easily spotted in the middle left portion of all images.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 9 .</head><label>9</label><figDesc>Volume rendering comparison with the full AMR dataset when using the shading function extrema (left) and when omitting the extrema (right).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 10 .</head><label>10</label><figDesc>Left: reference pictures computed using a 1024 × 1024 viewport without shading (top, 3.77 fps) and with shading (bottom, 3.62 fps). Middle and right: close-up on two parts of the datasets with 2 preintegration steps per cell (top) and our adaptive technique (bottom).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>1. A view-order cell traversal technique is needed. On the CPU, thisproblem can be solved easily and efficiently with existing data</figDesc><table /><note>• Stéphane Marchesin and Guillaume Colin de Verdière, CEA, DAM, DIF, F-91297, Arpajon, France. E-mail: marchesi@ocre.cea.fr, guillaume.colin-de-verdiere@cea.fr. Manuscript received 31 March 2009; accepted 27 July 2009; posted online 11 October 2009; mailed on 5 October 2009. For information on obtaining reprints of this article, please send email to: tvcg@computer.org .</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 3 Table 3 .</head><label>33</label><figDesc>Rendering performance with different preintegration schemes at a 1024 × 1024 screen resolution.</figDesc><table><row><cell></cell><cell>shows</cell></row><row><cell>Resolution</cell><cell>Performance</cell></row><row><cell>256 × 256 512 × 512 1024 × 1024 2048 × 2048</cell><cell>3.95 fps 3.83 fps 3.62 fps 3.50 fps</cell></row><row><cell cols="2">Table 2. Rendering performance with shading at different screen reso-</cell></row><row><cell>lutions.</cell><cell></cell></row><row><cell></cell><cell>2,3 and 4</cell></row></table><note>the respective performance visualizing the complete dataset with dif- ferent algorithms for cell rendering: preintegration using 1,</note></figure>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Multidimensional binary search trees used for associative searching</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jon</forename><forename type="middle">Louis</forename><surname>Bentley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Commun. ACM</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="509" to="517" />
+			<date type="published" when="1975" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Interactive high-quality volume rendering with flexible consumer graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics State of The Art Report</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Query-driven visualization of time-varying adaptive mesh refinement data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Luke</forename><surname>Gosink</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><forename type="middle">C</forename><surname>Anderson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">Wes</forename><surname>Bethel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenneth</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Visualization and Computer Graphics (Proceedings Visualization / Information Visualization)</title>
+		<imprint>
+			<date type="published" when="2008-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">High-quality unstructured volume rendering on the pc platform</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Roettger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andreas</forename><surname>Schieber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wolfgang</forename><surname>Strasser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM SIGGRAPH/EUROGRAPHICS conference on Graphics hardware</title>
+		<meeting>the ACM SIGGRAPH/EUROGRAPHICS conference on Graphics hardware</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="119" to="125" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Texture-based volume rendering of adaptive mesh refinement data. The Visual Computer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ralf</forename><surname>Kähler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hans-Christian</forename><surname>Hege</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="page" from="481" to="492" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Visualization of time-dependent remote adaptive mesh refinement data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ralf</forename><surname>Kähler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steffen</forename><surname>Prohaska</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Andrei</forename><surname>Hutanu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hans-Christian</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page">23</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Interactive volume rendering of large sparse data sets using adaptive mesh refinement hierarchies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ralf</forename><surname>Kähler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mark</forename><surname>Simon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hans-Christian</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="341" to="351" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Projecting tetrahedra without rendering artifacts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wei</forename><surname>Qiao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VIS &apos;04: Proceedings of the conference on Visualization &apos;04</title>
+		<meeting><address><addrLine>Washington, DC, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="27" to="34" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Acceleration techniques for gpu-based volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kruger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VIS &apos;03: Proceedings of the 14th IEEE Visualization 2003 (VIS&apos;03)</title>
+		<meeting><address><addrLine>Washington, DC, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="page">38</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Volume mls ray casting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Ledergerber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gaël</forename><surname>Guennebaud</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miriah</forename><surname>Meyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Moritz</forename><surname>Bächer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hanspeter</forename><surname>Pfister</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1372" to="1379" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">High-quality lighting and efficient pre-integration for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eric</forename><surname>Lum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brett</forename><surname>Wilson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kwan-Liu</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The Joint Eurographics-IEEE TVCG Symposium on Visualization</title>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Area and volume coherence for efficient visualization of 3D scalar functions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nelson</forename><surname>Max</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pat</forename><surname>Hanrahan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roger</forename><surname>Crawfis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics</title>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="27" to="33" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">A fast high accuracy volume renderer for unstructured data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenneth</forename><surname>Moreland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Edward</forename><surname>Angel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VV &apos;04: Proceedings of the 2004 IEEE Symposium on Volume Visualization and Graphics (VV&apos;04)</title>
+		<meeting><address><addrLine>Washington, DC, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Interactive ray tracing for volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Parker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Parker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarden</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter-Pike</forename><surname>Sloan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Charles</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Shirley</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="238" to="250" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">A two-step approach for interactive preintegrated volume rendering of unstructured grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Roettger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VVS &apos;02: Proceedings of the 2002 IEEE symposium on Volume visualization and graphics</title>
+		<meeting><address><addrLine>Piscataway, NJ, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Press</publisher>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="23" to="28" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Smart hardware-accelerated volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Roettger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Daniel</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Ertl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wolfgang</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VISSYM &apos;03: Proceedings of the symposium on Data visualisation 2003</title>
+		<meeting><address><addrLine>Aire-la-Ville, Switzerland, Switzerland</addrLine></address></meeting>
+		<imprint>
+			<publisher>Eurographics Association</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="231" to="238" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Hardware-accelerated volume and isosurface rendering based on cell-projection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Röttger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Thomas</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VIS &apos;00: Proceedings of the conference on Visualization &apos;00</title>
+		<meeting><address><addrLine>Los Alamitos, CA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="109" to="116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">A polygonal approximation to direct scalar volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Shirley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Allan</forename><surname>Tuchman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VVS &apos;90: Proceedings of the 1990 workshop on Volume visualization</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM Press</publisher>
+			<date type="published" when="1990" />
+			<biblScope unit="page" from="63" to="70" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Employing Complex GPU Data Structures for the Interactive Visualization of Adaptive Mesh Refinement Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Vollrath</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schafhitzel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Workshop on Volume Graphics &apos;06</title>
+		<meeting>the International Workshop on Volume Graphics &apos;06</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">High-quality volume rendering of adaptive mesh refinement data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Gunther</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Oliver</forename><surname>Weber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Terry</forename><forename type="middle">J</forename><surname>Kreylos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Ligocki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Hans</forename><surname>Shalf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bernd</forename><surname>Hagen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kenneth</forename><forename type="middle">I</forename><surname>Hamann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kwan-Liu</forename><surname>Joy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VMV &apos;01: Proceedings of the Vision Modeling and Visualization Conference</title>
+		<imprint>
+			<publisher>Aka GmbH</publisher>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="121" to="128" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

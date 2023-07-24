@@ -1,0 +1,834 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Visibility Culling for Time-Varying Volume Rendering Using Temporal Occlusion Coherence</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jinzhu</forename><surname>Gao</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Han-Wei</forename><surname>Shen</surname></persName>
+							<email>hwshen@cis.ohio-state.edu</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jian</forename><surname>Huang</surname></persName>
+							<email>huangj@cs.utk.edu</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">James</forename><forename type="middle">Arthur</forename><surname>Kohl</surname></persName>
+							<email>kohlja@ornl.gov</email>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="institution">The Ohio State Univ. Oak Ridge National Lab</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff1">
+								<orgName type="institution">The Ohio State Univ</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff2">
+								<orgName type="department">The Univ. of Tennessee</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff3">
+								<orgName type="department">Oak Ridge National Lab</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Visibility Culling for Time-Varying Volume Rendering Using Temporal Occlusion Coherence</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:32+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>I.3.1 [Computer Graphics]: Parallel processing-; I.3.7 [Computer Graphics]: Three-Dimensional Graphics and Realism-visible line/surface algorithms visibility culling</term>
+					<term>time-varying data visualization</term>
+					<term>volume rendering</term>
+					<term>plenoptic opacity function</term>
+					<term>large data visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Typically there is a high coherence in data values between neighboring time steps in an iterative scientific software simulation; this characteristic similarly contributes to a corresponding coherence in the visibility of volume blocks when these consecutive time steps are rendered. Yet traditional visibility culling algorithms were mainly designed for static data, without consideration of such potential temporal coherency. In this paper, we explore the use of Temporal Occlusion Coherence (TOC) to accelerate visibility culling for time-varying volume rendering. In our algorithm, the opacity of volume blocks is encoded by means of Plenoptic Opacity Functions (POFs). A coherence-based block fusion technique is employed to coalesce time-coherent data blocks over a span of time steps into a single, representative block. Then POFs need only be computed for these representative blocks. To quickly determine the subvolumes that do not require updates in their visibility status for each subsequent time step, a hierarchical &quot;TOC tree&quot; data structure is constructed to store the spans of coherent time steps. To achieve maximal culling potential, while remaining conservative, we have extended our previous POF into an Optimized POF (OPOF) encoding scheme for this specific scenario. To test our general TOC and OPOF approach, we have designed a parallel time-varying volume rendering algorithm accelerated by visibility culling. Results from experimental runs on a 32-processor cluster confirm both the effectiveness and scalability of our approach.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>It has become increasingly common for scientists to model complex physical phenomena using large-scale computer simulations. The dynamic nature of such physical simulations typically generates massive time-varying volumetric datasets. One example is the Richtmyer-Meshkov Turbulent Simulation <ref type="bibr" target="#b21">[22]</ref> at Lawrence Livermore National Laboratory. This simulation is designed to study instabilities at the interface between two gases of different densities, and produces datasets containing hundreds of time steps, each being 7.5 gigabytes in size. Astrophysics simulations of supernovae <ref type="bibr" target="#b20">[21]</ref> performed at Oak Ridge National Laboratory have generated several terabytes of data per run and will produce even larger datasets in the near future. Although past research has explored a variety of techniques for visualizing large-scale datasets, with both static and time-varying data <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b25">26,</ref><ref type="bibr" target="#b18">19,</ref><ref type="bibr" target="#b8">9]</ref>, major challenges remain to efficiently store, process and visualize such massive datasets at interactive rates, especially with the increasingly high resolutions required.</p><p>A central obstacle to efficient time-varying data visualization stems from the ever-widening disparity between the available I/O, memory and computing bandwidth, and the rapidly increasing amount of data to be visualized. Various aspects of data coherence could be exploited to reduce the amount of data that pass through the visualization pipeline. Coherence in both space and time can be applied as a means of acceleration. Often, large datasets are partitioned into spatial blocks. Here we refer to all blocks residing in the same spatial location over time as a set of "co-spatial" blocks. A number of different types of coherence can be leveraged among cospatial blocks. Many existing algorithms focus on coherence in raw data values among co-spatial blocks. If a set of co-spatial blocks do not vary over time, then much I/O and computing overhead can be saved.</p><p>Previous research <ref type="bibr" target="#b14">[15,</ref><ref type="bibr" target="#b16">17,</ref><ref type="bibr" target="#b10">11,</ref><ref type="bibr" target="#b3">4]</ref> has suggested that a considerable portion of a large dataset is often invisible due to the spatial occlusion. We hypothesize that the visibility of a set of co-spatial blocks could also be correlated over time. In fact, we observe that an invisible block at time step t often remains invisible at time step t + t ( t is a small integer value), especially when the view angle doesn't change significantly over the course of the entire rendering sequence. An obvious approach to capitalize on visibility culling in time-varying volume rendering might be to apply a standard static data visibility culling scheme repeatedly to each individual time step. However, this simplistic approach will likely incur unnecessary visibility estimation overhead for subsequent time steps, without utilizing the visibility coherence. A modified scheme is required to apply minimal re-computation of the visibility from time step to time step. Such extensions to culling algorithms should also maintain high efficiency in the context of accelerating existing parallel solutions. In this paper, we present our work to develop an efficient visibility culling framework for scalable parallel volume rendering of large-scale time-varying datasets.</p><p>The remainder of this paper is organized as follows. The related work of visibility culling and time-varying data visualization are briefly discussed in Section 2. The overview and details of our visibility culling scheme for time-varying volume rendering and the experimental results are presented in Sections 3 through 7. In Section 8, we summarize our contributions and discuss future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Much research has been explored in algorithms for visibility culling and time-varying data visualization, but primarily in separate contexts. Integrating visibility culling to accelerate time-varying data October 10-15, Austin, Texas, USA IEEE Visualization 2004 0-7803-8788-0/04/$20.00 ©2004 IEEE visualization has not been widely studied. Below we briefly review some related research work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Visibility Culling</head><p>Visibility culling, also known as occlusion culling, is an effective technique for reducing unnecessary rendering computation by eliminating invisible portions of data before visualization. Visibility acceleration has become widely used in many polygon rendering applications; a thorough survey can be found in <ref type="bibr" target="#b1">[2]</ref>.</p><p>As pioneered in work on early ray termination <ref type="bibr" target="#b14">[15]</ref>, visibility culling has been applied both in direct volume rendering and isosurface extraction, especially when dealing with large-scale datasets. Law and Yagel <ref type="bibr" target="#b13">[14]</ref> presented a ray-front scheme that employs visibility culling. In the image-aligned sheet-based splatting algorithm <ref type="bibr" target="#b10">[11]</ref>, both individual and groups of voxels can be culled away when the corresponding screen footprint is covered by fully opaque pixels. Guthe and Strasser <ref type="bibr" target="#b7">[8]</ref> applied visibility test to multiresolution volume rendering which also allows the change of transfer function. Livnat and Hansen <ref type="bibr" target="#b16">[17]</ref> introduced a view-dependent algorithm for isosurface extraction. Parker et al. <ref type="bibr" target="#b23">[24]</ref> developed a highly efficient ray-casting system to visualize view-dependent isosurfaces in volume datasets without explicit extraction of the surfaced triangles. Later, Liu et al. <ref type="bibr" target="#b15">[16]</ref> described a progressive viewdependent isosurface extraction algorithm. This approach determines visible voxels by casting a small number of viewing rays and then propagating the visibility information up from these "seed" voxels to obtain the full visibility information for the volume. All of these visibility acceleration methods are very effective for datasets exhibiting sufficient opaqueness.</p><p>Beyond accelerating the sequential visualization algorithms using visibility heuristics, a few methods have been developed to accelerate parallel visualization. Huang et al. <ref type="bibr" target="#b11">[12]</ref> developed a visibility-assisted parallel splatting algorithm for volume datasets with moderate to heavy occlusion. To accelerate parallel isosurface extraction, Gao and Shen <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b5">6]</ref> proposed a progressive visibility culling method that efficiently eliminates invisible isosurface triangles, achieving satisfactory parallel speedups. Recently, Gao et al. <ref type="bibr" target="#b3">[4]</ref> proposed a highly-scalable visibility culling method based on Plenoptic Opacity Functions (POFs), which will be discussed in more detail as part of our design overview in Section 3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Time-Varying Volume Visualization</head><p>Efficient algorithms for time-varying data visualization have become increasingly important to the visualization community. A number of algorithms have been developed that enable high interactivity and improve data understanding.</p><p>A wealth of literature exists on the compression of time-varying data. Blocks at different time steps can be compressed using Wavelet Transforms <ref type="bibr" target="#b30">[31]</ref>. In a hierarchical manner, Discrete Cosine Transforms, Vector Quantization, 3-D Wavelet Transforms and MPEG compression schemes <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b6">7,</ref><ref type="bibr" target="#b28">29]</ref> have all been explored. Hierarchical compression schemes have been applied to capitalize on inter-block dependencies, and to eliminate insignificant frequency coefficients that correspond to minor features in the data. Exploiting data coherence, Shen and Johnson <ref type="bibr" target="#b26">[27]</ref> proposed a differential volume rendering strategy that was shown to reduce rendering time and storage space by upwards of 90% for two test data sets. Shen et al. <ref type="bibr" target="#b25">[26]</ref> introduced a time-space partitioning (TSP) tree structure to capture both spatial and temporal coherence in timevarying data sets. Sutton and Hansen <ref type="bibr" target="#b29">[30]</ref> presented a temporal Branch-on-Need tree structure for efficient time-varying isosurface extraction. Using quite a different compression approach, Neophytou and Mueller <ref type="bibr" target="#b22">[23]</ref> converted a 4-D dataset from a regular grid into a Body-Centered Cartesian grid and achieved better efficiency.</p><p>Other research on time-varying data visualization includes the tracking of features in a time-varying dataset <ref type="bibr" target="#b27">[28,</ref><ref type="bibr" target="#b12">13]</ref>, highperformance parallel algorithms <ref type="bibr" target="#b24">[25,</ref><ref type="bibr" target="#b18">19]</ref> and various alternative methods <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b0">1,</ref><ref type="bibr" target="#b31">32]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">ALGORITHM OVERVIEW</head><p>Our design goal is to utilize Temporal Occlusion Coherence (TOC), that is, the temporal coherence in terms of a block's capability to occlude other blocks behind it along the viewing direction, to accelerate volume rendering of time-varying datasets. This work exploits a visibility culling scheme based on Plenoptic Opacity Functions (POF) <ref type="bibr" target="#b3">[4]</ref>. This scheme was introduced to encode volume blocks' occluding capabilities, which we will refer to as opacities, from all external viewpoints. After the POF-encoding preprocessing step is completed, efficient visibility culling can be performed at run time. A framework using POF was shown to achieve highly scalable parallel volume rendering. Here we further develop the concept of POF to accelerate the visibility culling for time-varying data visualization.</p><p>Due to the potentially overwhelming size of the time-varying data, it is desirable to determine the minimal possible set of visible blocks. A mathematically sound mechanism is needed to efficiently encode the opacity of representative blocks, in an effective but conservative manner. The POF scheme is generally a viable technique for this purpose, however, it can be overly conservative for certain cases, which could hamper the achievable acceleration. Even a moderate increase in the amount of false positives, where an invisible block is classified as visible during visibility estimation, could result in a considerable increase in I/O and rendering time. Our initial study of this work shows that the original POF scheme needs to be optimized to minimize such over-conservativeness. We call our new scheme Optimized Plenoptic Opacity Function (OPOF). We have carefully extended our original POF concept to construct an OPOF scheme; this new scheme is still conservative but encodes the opacity distribution of any block with a much tighter lower bound. Significant improvements in culling performance have been observed in experiments using OPOFs (see Section 7).</p><p>To determine the temporal coherence of the opacity among cospatial blocks, we need a means for effective detection of opacity variations for each block over time. Traditionally, researchers have analyzed the differences in raw data values to search for temporal coherence. However, opacity also depends on the specific transfer functions utilized. In our algorithm, we attempt to find the opacity variations among co-spatial blocks. If the opacity variations are below a user-specified threshold for two co-spatial blocks at neighboring time steps, then we classify these blocks as temporally coherent. For each set of co-spatial blocks, a set of contiguous time spans defines the temporal coherence. For each time span, the cospatial blocks are fused into a representative block, and an OPOF is computed for this representative block.</p><p>Using pre-computed OPOFs at each time step, the opacity of each representative block can easily be computed at run time. Clearly, there can be a high coherence in occluding capability among representative blocks residing in local spatial vicinities. To further accelerate the visibility estimation process, a hierarchical TOC tree is constructed during pre-processing. Using the TOC tree, those blocks whose opacity has changed versus the previous time step can be quickly identified. This allows us to perform visibility estimation only for the blocks whose visibility has been affected by those blocks.</p><p>To demonstrate the viability of our approach, we present a parallel time-varying volume rendering system that leverages both TOC and OPOF in the visibility acceleration. In Sections 4, 5 and 6, we discuss OPOF, block fusion and TOC tree construction, respectively, in detail for our time-varying volume rendering system.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>POF Table</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>B</head><p>Rendering Process</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Frame Buffer</head><p>Block's screen footprint S Pixel with minimal opacity <ref type="figure">Figure 1</ref>: For each view (upper-left), the opacity channel of a volume block B is rendered into a frame buffer. Suppose the pixel shaded with blue has the minimal opacity among all non-empty pixels. This minimal opacity value is stored into the entry shaded with green in a 2D table indexed by θ and φ (bottom). The same process is done for all sample views around block B.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">OPTIMIZED PLENOPTIC OPACITY FUNCTION (OPOF)</head><p>In <ref type="bibr" target="#b3">[4]</ref>, we proposed a Plenoptic Opacity Function (POF) scheme, which encodes the minimal occluding capability, or the opacity, of a volume block under all possible external views. For a given view, considering all the rays intersecting a block, the minimal opacity value accumulated within the block is defined as its opacity under this view. The computational process for computing a POF is briefly illustrated in <ref type="figure">Figure 1</ref>. A 2-D POF table <ref type="figure">(Figure 1, bottom)</ref>, parameterized by the angular part of spherical coordinates, θ and φ , is built as follows. For any sample view (θ i ,φ i ) ( <ref type="figure">Figure 1</ref>, upperleft), an opacity image S of a block B is rendered. The lowest value among all pixels inside S shows the minimal occluding capability of B, which is stored at the location corresponding to (θ i ,φ i ) in the POF table. To be more space-efficient, a discrete POF table can be encoded by a polynomial or spline, as long as the process remains conservative. The POF can fully capture the view dependent variation of a block's opacity under all possible external views, so the opacity of the block for any specific view can always be obtained by simply evaluating the POF. By accumulating the opacities only at the block level, visible blocks can be quickly identified at run time.</p><p>Our original POF scheme has proven to be very effective when used in large-scale parallel volume rendering. However, using the minimum opacity of a block as the overall opacity can sometimes be too conservative, potentially producing false positives. For instance, with blocks of uniform voxel values, the minimum opacity will most likely be found at the corners of the block. <ref type="figure">Figure 2</ref> shows an example 32 × 32 × 32 block with uniform voxel values all mapped to an opacity of 0.1, rendered at a (45, 45) viewing angle. The minimal opacity of the block is 0.1, found at the corners, yet the opacities at the center are significantly higher. In a large-scale simulation, such homogeneous blocks commonly exist, especially when the size of each block is relatively small. In fact, for the Richtmyer-Meshkov Turbulent data set <ref type="bibr" target="#b21">[22]</ref>, which has a 1024 × 1024 × 960 spatial resolution and a block size of 32 × 32 × 32, about 70% of all blocks have very small internal variations in their voxel values. For those blocks, the minimum accumulated opacity will be too conservative. This resulting opacity estimation will produce a suboptimal culling rate for such time-varying datasets. An optimized opacity encoding scheme is necessary to alleviate this overconservativeness.</p><p>We have developed an optimized algorithm based on the original POF scheme, called Optimized Plenoptic Opacity Function (OPOF) scheme (Refer to Section 7 and <ref type="figure" target="#fig_10">Figure 11</ref> for the comparison of culling effect between POF and OPOF). This revised scheme is based on the following observation: in a homogeneous block, the opacity accumulated at each pixel is related to the length of the corresponding ray segment inside the block. Here, we refer to this length as the thickness of a pixel. By computing the thickness for all pixels in the block's screen projection S, we obtain a thickness mask D. We can also compute an opacity mask O, by accumulating the opacities along the ray segments inside each block. According to <ref type="bibr" target="#b19">[20]</ref>, the opacity along a viewing ray is computed as α = 1 − e − d 0 τ(t) dt , where τ(t) is the extinction coefficient defined along the viewing ray and α is the resulting opacity. Assuming uniform voxel values along the corresponding ray segment, for every pixel p inside the block's screen projection S, the resulting opacity becomes α p = 1 − e −D p τ where α p and D p represent the opacity and the thickness at the pixel p. The term e −D p τ can be approximated by the first two terms of its Taylor expansion: 1 − D p τ, thus α p can be approximated by D p τ. Therefore, the opacity of a ray segment can be approximated by a linear function of its thickness.</p><p>Of course, not all volume blocks are uniform. To account for this case, we compute the ratio between the opacity mask and the thickness mask on per pixel basis. The minimal ratio is used to encode the opacity of the block to remain conservative. The minimal ratios from all sample views are stored in an OPOF for runtime visibility estimation. This process is illustrated in <ref type="figure">Figure 3</ref>.</p><p>To estimate the opacity of a block at run time, we first compute its thickness mask D, which is the same for all blocks if orthographic projection is used. Then, after looking up the ratio τ from its pre-computed OPOFs, a conservative opacity mask O can be easily computed from D as: O p = D p τ for every pixel p inside the block's screen projection S. This opacity mask serves as a conservative but tighter estimate of the block's opacity. In the worst case, where the block's raw data distribution is irregular and therefore causes the resulting opacity to be unrelated to the thickness, then the opacity computed will reduce to the minimal opacity as used in the original POF algorithm. This case still remains conservative.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">COHERENCE BASED BLOCK FUSION</head><p>Having constructed a viable and efficient scheme to encode the opacity of volume blocks, we must now develop a mechanism for extracting the temporal coherence of blocks' opacity. In this section, we describe the details of our metric for identifying this temporal occlusion coherence between consecutive time steps for cospatial blocks. This metric relies on a coherence-based block fusion method that combines coherent co-spatial blocks into a single representative block. We also discuss a hierarchical data structure, a Temporal Occlusion Coherence (TOC) tree, that enables efficient querying of these representative blocks as time progresses.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Opacity Enhanced Temporal Difference Metric</head><p>To determine whether data coherence exists between co-spatial blocks for two consecutive time steps, a difference metric is defined. For the purpose of visibility culling, the difference metric need only measure the variance in the blocks' opacity which depends on the raw data as well as the underlying opacity transfer function. To distinguish this metric from traditional temporal data coherence, we refer to such a categorization as temporal occlusion coherence. For a given opacity transfer function, we define the distance between two scalar raw data values as:</p><formula xml:id="formula_0">Dis(v 1 , v 2 ) = |Opa(v 1 ) − Opa(v 2 )|<label>(1)</label></formula><p>where Opa(v) is the opacity for the data value v. The distance is defined as the difference between corresponding opacity values. Let B i (t) represent the i th block at t th time step. The difference between B i (t 1 ) and B i (t 2 ) can be defined as:</p><formula xml:id="formula_1">Di f f (t 1 ,t 2 ) = ∑ (x,y,z)∈B i (Dis(b i (x, y, z,t 1 ), b i (x, y, z,t 2 ))) 2 N<label>(2)</label></formula><p>where b i (x, y, z,t) is the data value at the location (x, y, z) in B i (t) and N is the number of voxels that are non-empty in either B i (t 1 ) or B i (t 2 ).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Block Fusion</head><p>Based on the difference metric defined above, we can fuse two data blocks, B i (t) and B i (t ) into a new representative data block B i, <ref type="bibr">[t,t ]</ref> , if Di f f (t,t ) is below a certain small difference threshold, such as 0.001. In particular, the fusion operation performs the following:</p><formula xml:id="formula_2">b i,[t,t ] = { b i,t i f (Opa(b i,t ) ≤ Opa(b i,t )) b i,t Otherwise (3) Bi Bi Bi Bi …...</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Time</head><p>Step </p><formula xml:id="formula_3">B i (t 1 ), B i (t 1 + 1) ... B i (t 2 )</formula><p>are fused into a representative block based on Di f f (t,t + 1).</p><p>where b i,t represents the data value at location (x, y, z) in the i th block at t th time step. The new fused block will keep the raw value associated with the lower opacity for each (x, y, z) coordinate.</p><p>Our algorithm fuses together as many blocks as possible to construct coherent time spans. This is achieved by performing the block fusion incrementally. <ref type="figure" target="#fig_1">Figure 4</ref> illustrates the process. Starting from the block at the first time step t 1 , we calculate the difference between co-spatial blocks at time step t 1 and t 1 + 1. If the difference Di f f (t 1 ,t 1 + 1) is smaller than our threshold, then we fuse these two blocks together. The resulting fused block will then be applied to continue the coherence test with subsequent blocks. After time step t 2 , if the temporal difference rises above our difference threshold, then the fusion process is terminated for that particular fused block, and a new round of block fusion will begin from time step t 2 + 1. The complete fused block is the representative block, denoted as B [t 1 ,t 2 ] , for the coherent time span t 1 through t 2 . We assume that the opacity of this block throughout the coherent time span is invariant for any given view. Therefore, only a single OPOF need be computed for the representative block</p><formula xml:id="formula_4">B [t 1 ,t 2 ]</formula><p>, offering an additional savings in OPOF computation and storage.</p><p>As mentioned in Section 4, a conservative opacity mask for each block can be easily computed at run time, based on the thickness mask D, which is same for all blocks in the volume if an orthogonal projection is used. After constructing the opacity mask for each representative block, the visibility estimation can then be done by front-to-back compositing.</p><p>As discussed in <ref type="bibr" target="#b3">[4]</ref>, an initial opacity transfer function can be decomposed into several basis functions. These bases, together with their scaling factors, can be used to generate a family of transfer functions. Using this methodology, visibility estimation can be performed even when the transfer function changes at run time. To handle this case, the above computational steps must be applied to each basis function. The coherent time spans determined for each basis are likely to be different. The runtime computation of an opacity mask for any transfer function in the family will be similar to the opacity calculation described in <ref type="bibr" target="#b3">[4]</ref>. That is, the opacity value of a pixel p in the overall opacity mask is:</p><formula xml:id="formula_5">α p = 1 − p ∏ i=1 (1 − α p,i ) k i<label>(4)</label></formula><p>where α p is the opacity value at pixel p in the final opacity mask, and α p,i is the opacity value at pixel p in the opacity mask computed  for the i th basis function.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Temporal Occlusion Coherence Tree Construction</head><p>Block fusion allows for utilizing temporal coherence. At each time step, it is only necessary to perform a visibility check for a volume block if those other blocks that affect its visibility have experienced a change in their opacities. Even so, this search through the whole spatial volume, for representative blocks that have expired, can still be optimized for better efficiency. In the spatial domain, it is expected that neighboring blocks in a local vicinity will have similar coherent time spans. Hence, to enable an efficient search, a hierarchical Octree structure is computed spatially. At each tree node, the coherent time spans of the corresponding co-spatial (meta)-blocks are stored. This tree is referred to as Temporal Occlusion Coherence (TOC) tree. The coherent spans stored in the tree nodes are computed in a bottom-up manner. The leaf nodes correspond to the true volume blocks in the partitioned volume. The coherent time spans on the leaf nodes are the result of the block fusion process. On each internal node, the coherent time span can be calculated from the time spans of all child nodes as shown in <ref type="figure" target="#fig_2">Figure 5</ref>.</p><p>At run time, the TOC tree is traversed for each new time step t +1 in a top-down manner. When visiting each tree node, our algorithm checks t and t + 1 to verify that they belong to the same coherent time span. If not, then the search descends to the next lower level to check this condition for each of the child nodes. When a leaf node is reached, if the two time steps still do not belong to the same coherent time span, the corresponding block is marked as having had its opacity changed, thereby affecting the visibility of all other blocks behind it along the viewing direction. Upon traversing the TOC tree in this way, all volume blocks whose opacities have changed will have been identified. Then the algorithm commences the visibility check for all volume blocks whose visibility is affected by a marked block. The visibility of other blocks remains the same as in the previous time step t. This approach significantly reduces the visibility estimation cost if data at two consecutive time steps are highly coherent.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">PARALLEL TIME-VARYING VOLUME RENDERING WITH OPOF ASSISTED VISIBILITY CULLING</head><p>The data flow for the pre-processing and run-time phases of our parallel time-varying volume rendering algorithm with visibility acceleration is illustrated in <ref type="figure" target="#fig_3">Figure 6</ref>. Data distribution, block fusion and OPOF pre-computation are the three major tasks performed at the pre-processing stage. The data at each time step is first partitioned into volume blocks, which are then distributed to processors along a space-filling curve. As discussed in <ref type="bibr" target="#b3">[4]</ref>, such static data distribution allows the run-time algorithm to achieve a balanced workload, without the need for dynamic data redistribution. Controlled by a  user-supplied difference threshold, our algorithm fuses co-spatial blocks into a set of representative blocks with coherent time spans. Based on the fusion results, a TOC tree is constructed to manage the coherent time intervals for every spatial partition. The tree is used to reduce the run-time visibility estimation cost. Finally, an OPOF is pre-computed for each representative block and stored for run-time usage. Due to the negligible storage required for OPOFs, we can afford to replicate a copy of the entire OPOF results for all blocks on every node, reducing run-time communication cost. Our run-time time-varying volume rendering algorithm performs both the visibility estimation and parallel volume rendering. The goal of the visibility estimation is to identify all visible blocks before starting the parallel rendering. By doing this, our algorithm avoids the global synchronization that is needed in other multi-pass algorithms <ref type="bibr" target="#b4">[5]</ref>. Workload balancing is also easier as the exact rendering load is known in advance. Similarly to the method used in <ref type="bibr" target="#b3">[4]</ref>, our visibility culling scheme is done in parallel as follows. First, the bounding box of the whole volume's screen projection is partitioned into image tiles of equal size, where the number of tiles equals the number of processors. Each processor is assigned one tile and is responsible for identifying which visible block's screen footprints overlap with the tile, as well as compositing the final image for the assigned tile. Then, for a given view (θ , φ ), all volume blocks' bounding boxes are checked in a front-to-back order. Only those blocks whose screen footprints overlap with the assigned tile need be tested for visibility. An opacity buffer, of a size equal to the tile size, is used to store an accumulated opacity value for each pixel in the tile. To test the visibility of each volume block, the screen footprint of the block is computed based on the opacity buffer queried. If all values inside a screen footprint are beyond a pre-defined threshold of opaqueness, say 0.95, then the volume block is identified as invisible. Otherwise, the volume block is visible, and its opacity, computed from the thickness buffer and the block's OPOF, will be composited into the opacity values in the block's screen footprint. The visibility estimation tests are done in parallel to further reduce the cost. At the end of visibility estimation, a global communication is done so that all processors know the indices of all visible blocks. Each processor then starts to load and render the visible blocks locally, as pre-assigned during the data distribution. The partial image rendered for each block is sent to all processors whose tiles overlap with the partial image. When the rendering process finishes, each processor composites all the partial images it has received to generate the final image for its tile.  Finally, a host processor collects these image tiles to form the final image.</p><p>Utilizing temporal occlusion coherence, we can effectively reduce the visibility estimation time over the course of a time-varying volume visualization. For the first time step, visibility must be estimated for every block, in the front-to-back order as described above. After that, however, for each subsequent time step the visibility estimation is only needed for those blocks whose visibility status may have changed, as determined via the temporal occlusion coherence tree described in Section 5.3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">RESULTS</head><p>In this section, we present and analyze experimental results obtained using a time-varying volume rendering system with TOCaccelerated visibility culling. A software ray casting algorithm was implemented to perform volume rendering and the image size was set to be 512 × 512. Our testing platform is a PC cluster with 32 2.4GHz Pentium IV Xeon processors, with an interconnection by Dolphin Networks. Our primary testing dataset came from a Richtmyer-Mevhkov Instability (RMI) simulation at Lawrence Livermore National Laboratory. At each of the 274 time steps, the simulation produced 7.5GB of data with a spatial resolution of 2048 × 2048 × 1920. Due to the storage limitation, we chose 64 time steps from the data set, starting with the 4th time step and picking one out of every four time steps, with each spatial dimension downsampled to half of its original resolution. The total size of this selection is 60GB. Each of the experiments assumes a fixed viewing direction until all time steps have been visualized. To further demonstrate the benefit of OPOF, as compared to our previous POF approach, we also ran experiments using a static volume dataset, the 512 × 512 × 1728 Visible Woman. During pre-processing, each dataset was partitioned into 32 × 32 × 32 data blocks, which were then evenly distributed to 32 processors along a space filling curve.  <ref type="formula">7 10 13 16 19 22 25 28 31 34 37 40 43 46 49 52 55 58 61 64   Time</ref>Step Percentage of coherent blocks 0.00001 0.0001 0.001 <ref type="figure">Figure 9</ref>: Percentage of the blocks that utilize temporal occlusion coherence at each time step for three difference thresholds.</p><p>We tested visibility acceleration for the RMI dataset from a set of sample views. Under a sample view from which the temporal evolvement of the data is clearly shown, without leveraging visibility culling, 64 time steps of the RMI dataset required approximately 7.6 minutes to complete on 32 processors, including the time for both parallel rendering and parallel I/O. Utilizing our TOCaccelerated visibility culling framework, we reduced the total time to less than 1.5 minutes (about 1.4 seconds per time step on average), or an 80% reduction in the rendering and I/O costs for this test view. <ref type="figure" target="#fig_4">Figure 7</ref> shows the average culling effects, as measured by the average number of blocks rendered under 18 sample views, spaced 20 degrees apart, for each time step. On average, 50% of nonempty blocks were culled away for most time steps. A few sample images of the RMI dataset are shown in <ref type="figure" target="#fig_5">Figure 8</ref>.</p><p>Temporal occlusion coherence typically exists to some degree in all time-varying datasets, which is captured by a threshold in our algorithm. To demonstrate the existence of such coherence, <ref type="figure">Figure 9</ref> shows the percentage of blocks that exhibit temporal occlusion coherence at each time step, for three difference thresholds. It can be seen that the tighter the difference threshold, the less coherence is observed.</p><p>The occlusion coherence determined during block fusion must be efficiently accessible at runtime, to achieve the full potential of visibility acceleration. Using a TOC tree to heuristically analyze and fuse spatial coherence among neighboring blocks, visibility is checked only for those pixels whose occlusion accumulation is affected by the advent of a new time step. The runtime cost of visibility estimation is proportional to the number of pixels covered by the screen footprints of incoherent blocks. The overhead of TOC tree usage was negligible, at about 0.25 seconds for construction and 1.8MB total storage, for the RMI dataset with a difference threshold of 0.001. In <ref type="figure" target="#fig_8">Figure 10</ref>, we compare the number of affected pixels at each time step, with or without using the temporal occlusion coherence. Without using the temporal occlusion coherence, all pixels need be checked to update the blocks' visibility. When the temporal occlusion coherence is used, the total time for visibility determination throughout the entire time sequence was reduced from from 2.4 seconds to 1.1 seconds, using 32 processors.</p><p>As an additional benefit of temporal occlusion coherence, we need only compute one OPOF for each representative block. Although the use of OPOFs is highly efficient at runtime, OPOF precomputation still incurs some overhead, especially for very large time-varying datasets. The actual pre-computation overhead from using OPOF depends on the user-chosen difference thresholds. Table 1 compares OPOF computation time (in seconds), storage cost (in Mbytes) and the resulting number of visible blocks under a given view, for five difference thresholds. With a difference threshold of 0, essentially no temporal coherence is considered and the best    culling effects can be achieved, but at high pre-computation cost. However, even with a very small non-zero difference threshold, both computation time and storage space are used more efficiently. Note that although an increased difference threshold can save time and storage overheads with OPOF, it can ultimately have an adverse effect on culling performance if the threshold is chosen to be too large. This is because each fusion operation ensures conservativeness. The occluding capability of the new block after a fusion operation is always lower or equal to that of any original block. The higher the threshold, the more the fusion operations that are executed. The aggregate effect of a large number of fusion operations is a culling that is too conservative, which means more blocks will be considered as visible. For instance, in our experiment, using thresholds as high as 0.001 offers great culling results, but using 0.01 causes a dramatic increase in the number of blocks determined as visible, most of which are clearly false positives. Thus, we believe 0.001 is a good choice for this particular dataset. Using OPOF, our run-time visibility culling algorithm can achieve better culling effects than our previous POF-assisted visibility culling algorithm. In <ref type="figure" target="#fig_10">Figure 11</ref>, we compare the culling effect of an early-ray termination type of culling algorithm with methods using POF and OPOF, from 18 sample views spaced 20 degrees apart around the test dataset. (Note that early-ray termination represents the theoretical limit of occlusion culling performance, although it cannot be used efficiently in practice with large-scale parallelism, due to overwhelming runtime communication for very large datasets.) All three algorithms are coarse-grained and cull away volume blocks directly, not individual voxels. For this comparison, both the Visible Woman data set and a single time step of the RMI dataset were used. By adjusting the opacity transfer function, the regions of interest, such as the skin in the Visible Woman data, were made highly opaque, but in the RMI dataset very low opacity values were used. It can be seen that, for both datasets, using OPOF can achieve culling results very close to the benchmark algorithm, while POF sometimes produces somewhat more false positives, especially for highly transparent datasets like RMI.</p><p>With our space-filling curve mechanism of data distribution, and  an efficient TOC framework, our parallel time-varying volume rendering algorithm achieved balanced workload and good scalability. <ref type="figure">Figure 12</ref> shows the number of total blocks rendered by each of 32 processors throughout 64 total time steps. During the rendering of each time step, our parallel renderer consistently achieved above 80% CPU utilization on a 32-processor PC cluster.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">CONCLUSION AND FUTURE WORK</head><p>In this paper, we have introduced an algorithm based on temporal occlusion coherence that is able to perform coarse-grained visibility culling for large-scale time-varying volume rendering with effectiveness, efficiency and parallel scalability. There are three essential components to this algorithm: OPOF encoding of opacities, block fusion to determine temporal occlusion coherence, and a TOC tree data structure to facilitate highly-efficient runtime visibility deter-  <ref type="figure">Figure 12</ref>: The number of total blocks rendered by each processor throughout 64 time steps. mination. A parallel time-varying volume rendering algorithm accelerated by visibility culling was implemented to demonstrate the effectiveness of these components.</p><p>In the future, we plan to investigate the fully interactive exploration of time-varying datasets, allowing both runtime variation of spatial viewpoints and time tick, which we expect to be very useful to real world production scientific users. In addition, many existing techniques such as TSP-tree, hardware acceleration, multiresolution rendering and compression-accelerated rendering should all be incorporated into our system to improve its performance.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 :Figure 3 : 2 -</head><label>232</label><figDesc>Illustration of conservative POF computations: (a) A uniform block is rendered from a sample view, and (b) Scalar plot of POF as a height field showing the values in the opacity buffer. D examples of the thickness mask D, the opacity mask O, the ratio mask τ (τ p = O p /D p for each pixel p) and the encoded opacity mask O (O p = D p MIN(τ p )) for a block during the OPOF computation. A red star points out the minimal ratio MIN(τ p ). Note that the thickness values and opacity values are selected only for illustration purpose.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 4 :</head><label>4</label><figDesc>An example of block fusion.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 5 :</head><label>5</label><figDesc>An example of a TOC tree (a binary tree is used for illustration purposes). The numbers represent the ids of time steps separating adjacent coherent time spans.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 6 :</head><label>6</label><figDesc>The data flow of our parallel time-varying volume rendering algorithm accelerated by visibility culling.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 7 :</head><label>7</label><figDesc>Average number of non-empty blocks rendered for 18 sample views, with or without visibility culling, at each time step.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 8 :</head><label>8</label><figDesc>Rendering results of: (a) 8 th time step (8671 visible blocks, 6377 invisible blocks), (b) 36 th time step (12138 visible blocks, 6200 invisible blocks) and (c) 63 th time step (12878 visible blocks, 7388 invisible blocks), under the view (225, 45).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure 10 :</head><label>10</label><figDesc>Comparison of the number of pixels checked for visibility estimation in each of 64 time steps, with or without the TOC tree.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Figure 11 :</head><label>11</label><figDesc>The culling effects of three algorithms -Optimal, POF and OPOF -from 18 sample views during rotation around the Y axis, using: (a) Visible Woman data set (42,193 nonempty blocks), and (b) One time step of RMI data set (20,266 nonempty blocks).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 1 :</head><label>1</label><figDesc>OPOF computation time (in seconds), storage cost (in MBytes) and number of visible blocks (under one sample view) for five difference thresholds.</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Hypervolume visualization: A challenge in simplicity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Bajaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Pascucci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Rabbiolo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Schikore</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE/ACM Symposium on Volume Visualization&apos;98</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="95" to="102" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">3D Visibility: analytical study and applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Frédo</forename><surname>Durand</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999-07" />
+			<pubPlace>Grenoble I</pubPlace>
+		</imprint>
+		<respStmt>
+			<orgName>Université Joseph Fourier</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Adaptive, multiresolution visualization of large data sets using a distributed memory octree</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">A</forename><surname>Freitag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Loy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SC99: High Performance Networking and Computing</title>
+		<meeting>SC99: High Performance Networking and Computing<address><addrLine>Portland, OR</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM Press and IEEE Computer Society Press</publisher>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Visibility Culling Using Plenoptic Opacity Functions for Large Data Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Kohl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization &apos;03</title>
+		<meeting>IEEE Visualization &apos;03</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="341" to="348" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Parallel view-dependent isosurface extraction using multi-pass occlusion culling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">2001 IEEE Symposium in Parallel and Large Data Visualization and Graphics</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Hardware-assisted view-dependent isosurface extraction using spherical partition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Joint EUROGRAPHICS-IEEE TCVG Symposium on Visualization</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="267" to="276" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Real-time Decompression and Visualization of Animated Volume Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Straber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;01</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="349" to="356" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Advanced Techniques for High-Quality Multi-Resolution Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Graphics</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="51" to="58" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Interactive Rendering of Large Volume Data Sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wand</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gonser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Straber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization &apos;02</title>
+		<meeting>IEEE Visualization &apos;02</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="53" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Interactive Visualization Methods for Four Dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Cross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;93</title>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="196" to="203" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Fastsplats: Optimized splatting on rectilinear grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;00</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="219" to="227" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">A parallel splatting algorithm with occlusion culling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Sadayappan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">3rd Eurographics Workshop on Parallel Graphics and Visualization</title>
+		<meeting><address><addrLine>Girona, Spain</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="125" to="132" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Volume Tracking Using Higher Dimensional Isocontouring</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Ji</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Wenger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;03</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Multi-frame thrashless ray casting with advancing ray-front</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Law</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface &apos;96</title>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="70" to="77" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Efficient ray tracing of volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="245" to="261" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Progressive view-dependent isosurface propagation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Finkelstein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Li</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Vissym&apos;01</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">View dependent isosurface extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;98</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="175" to="180" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Texture Hardware Assisted Rendering of Time-varying Volume Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Lum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Clyne</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;01</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="263" to="270" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">High performance visualization of timevarying volume data over a wide-area network status</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">M</forename><surname>Camp</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Supercomputing Conference &apos;00</title>
+		<meeting>Supercomputing Conference &apos;00</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="59" to="59" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Optical models for direct volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">The Impact of Improved Weak Interaction Physics in Core-Collapse Supernovae Simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><forename type="middle">E B</forename><surname>Messer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Liebendoerfer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">R</forename><surname>Hix</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mezzacappa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">W</forename><surname>Bruenn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ESO/MPA/MPE Workshop</title>
+		<meeting>the ESO/MPA/MPE Workshop</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Very High Resolution Simulation of Compressible Turbulence on the IBM-SP System</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">A</forename><surname>Mirin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">H</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">C</forename><surname>Curtis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">P</forename><surname>Dannevik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">M</forename><surname>Dimits</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Duchaineau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">E</forename><surname>Eliason</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">R</forename><surname>Schikore</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">E</forename><surname>Anderson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">H</forename><surname>Porter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">R</forename><surname>Woodward</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">J</forename><surname>Shieh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">W</forename><surname>White</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Supercomputing Conference &apos;99</title>
+		<meeting>Supercomputing Conference &apos;99</meeting>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Space-time points: 4d splatting on efficient grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Neophytou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE/ACM Symposium on Volume Visualization&apos;02</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="97" to="106" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Interactive ray tracing for isosurface rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Parker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Shirley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P.-P</forename><surname>Sloan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;98</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="233" to="238" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Scirun: A scientific programming environment for computational steering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">G</forename><surname>Parker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM/IEEE Supercomputing&apos;95</title>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">A fast volume rendering algorithm for time-varying fields using a time-space partitioning (tsp) tree</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L.-J</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization&apos;99</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="371" to="377" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Differential volume rendering: A fast volume visualization technique for flow animation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;94</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="180" to="187" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Tracking and visualizing turbulent 3d features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Silver</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Feature based volumetric video compression for interactive playback</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Sohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Bajaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Siddavanahalli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE/ACM Symposium on Volume Visualization&apos;02</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="89" to="96" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Isosurface extraction in time-varying fields using a temporal branch-on-need tree(t-bon)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">M</forename><surname>Sutton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Hansen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;99</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="147" to="154" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Compression time rendering of time-resolved volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;95</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="168" to="174" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">High Dimensional Direct Rendering of Time-Varying Volumetric Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;03</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="417" to="424" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

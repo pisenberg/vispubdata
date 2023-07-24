@@ -1,0 +1,637 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Transform Coding for Hardware-accelerated Volume Rendering</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Student Member, IEEE</roleName><forename type="first">Nathaniel</forename><surname>Fout</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Senior Member, IEEE</roleName><forename type="first">Kwan-Liu</forename><surname>Ma</surname></persName>
+						</author>
+						<title level="a" type="main">Transform Coding for Hardware-accelerated Volume Rendering</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:44+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Volume Compression</term>
+					<term>Compressed Volume Rendering</term>
+					<term>Transform Coding</term>
+					<term>Hardware-accelerated Volume Rendering</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Hardware-accelerated volume rendering using the GPU is now the standard approach for real-time volume rendering, although limited graphics memory can present a problem when rendering large volume data sets. Volumetric compression in which the decompression is coupled to rendering has been shown to be an effective solution to this problem; however, most existing techniques were developed in the context of software volume rendering, and all but the simplest approaches are prohibitive in a real-time hardware-accelerated volume rendering context. In this paper we present a novel block-based transform coding scheme designed specifically with real-time volume rendering in mind, such that the decompression is fast without sacrificing compression quality. This is made possible by consolidating the inverse transform with dequantization in such a way as to allow most of the reprojection to be precomputed. Furthermore, we take advantage of the freedom afforded by offline compression in order to optimize the encoding as much as possible while hiding this complexity from the decoder. In this context we develop a new block classification scheme which allows us to preserve perceptually important features in the compression. The result of this work is an asymmetric transform coding scheme that allows very large volumes to be compressed and then decompressed in real-time while rendering on the GPU.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>The development of programmability in graphics hardware has been an agent of dramatic change in the field of visualization. In the past few years this area has seen an almost universal shift from volume rendering in software to volume rendering in hardware, with realtime volume rendering becoming a reality. Although somewhat limited in the beginning, advancements in available features, precision, and speed now make the GPU the standard volume rendering platform; even parallel volume rendering is now routinely performed by GPU-equipped clusters. However, one of the challenges of volume rendering on the GPU is the comparatively limited amount of available memory. Although this is a classic problem when dealing with volume data, in the context of the GPU this problem is particularly acute due to the large disparity between memory capacity and volume sizes. If we consider both the current situation and the past and present trends (as shown in <ref type="figure" target="#fig_2">Figure 1</ref>) we can conclude that this issue is not only immediately relevant but likely to be persistent as well.</p><p>Difficulties related to the sheer size of volume data innervate the entire volume processing pipeline. Extensive computing resources must be allocated for archiving and transferring volume data, especially for large multivariate time-varying volume data sets. Yet at the same time the ability to process more than one volume at a time when dealing with a multi-volume data set holds significant potential in terms of providing greater insight, as is demonstrated by techniques in multivariate and comparative visualization; for instance, quantitative classification <ref type="bibr" target="#b15">[16]</ref> is an effective visualization tool that benefits greatly from the ability to access more extensive subsets of the complete data set.</p><p>Compression is an effective approach for facilitating volume processing due to the large data sizes, limited resources, and highly redundant nature of volume data. For volumes destined to be volume rendered, the optimal configuration would be to compress at production time and to decompress at rendering time -this would allow the benefits of compression to extend throughout the entire volume processing pipeline. In particular, since the GPU offers the least available memory in the entire process it would be advantageous to store the volume in graphics memory in compressed form and decompress only as needed during rendering. We will refer to this configuration, in which the decompression is coupled to the rendering, as Compressed Volume Rendering (CVR). Unfortunately, most previous work on volume compression is in the context of software volume rendering and cannot be directly applied to CVR in hardware. This is due to the fact that the GPU presents a highly specialized computing model that is more restrictive in terms of supporting complex decoding schemes; moreover, these restrictions tend to indirectly restrain the encoding as well.</p><p>In this paper we present a transform coding approach for volume data supporting real-time GPU decompression. This is achieved by optimizing the decoder in such a way as to reduce the complexity of the inverse transform, based on vector quantization of transform coefficients. Our scheme is highly asymmetric in that we employ a complex encoding in an attempt to maximize performance relative to the decoding constraints. We consider the salient features of our work to be:</p><p>• Specification of guidelines for the design of CVR methods in the context of hardware-accelerated rendering</p><p>• Formulation of a method for fast inverse transforms from vector quantized data</p><p>• Development of a novel integrated classification and partitioning scheme designed to optimize the encoding without adding to the decoding complexity</p><p>• Evaluation of existing CVR methods supporting GPU volume rendering</p><p>The rest of the paper is organized as follows. In the next section we discuss relevant work in the area of CVR. In Section 3 we define the problem domain and identify guidelines for the design of CVR compression methods. In Section 4 we describe the proposed transform coding scheme based on these guidelines, and in Section 5 we discuss the decoding and rendering components. Section 6 offers results and comparisons, and finally in Section 7 we offer concluding remarks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">COMPRESSED VOLUME RENDERING</head><p>In this section we offer a characterization of established approaches based on the relationship between decompression and rendering. We then provide a summary of the relevant background work. Compressed Volume Rendering (CVR) is a general approach for combining volumetric compression and volume rendering such that the decompression is coupled to rendering. A characteristic trait of CVR is transient  local reconstruction; that is, a fully reconstructed volume is never produced. The advantage of this approach is in efficient use of limited memory resources, such that larger and/or more volume data is available for visualization at any given time. CVR can be divided into three classes of methods, based on the location of decompression and rendering. In software CVR, both decompression and rendering are performed in software by the CPU. With the advent of programmable graphics hardware it became possible to simultaneously decompress and render on the GPU, an approach which we call hardware CVR. Although uncommon, there are methods that decompress in software but render in hardware, and we call these methods hybrid CVR. Based on this organizational scheme we will review the relevant work.</p><p>Beginning with software CVR methods, vector quantization is a simple lossy compression method which was first applied to volume data by Ning and Hesselink <ref type="bibr" target="#b18">[19,</ref><ref type="bibr" target="#b19">20]</ref> for encoding contiguous blocks of data and associated attributes. Decompression using vector quantization consists of a table look-up from a small set of representative blocks called the codebook. In their scheme software rendering was accelerated by ray-casting only the blocks in this relatively small codebook and reusing these results for rendering the entire volume. Cochran et al. <ref type="bibr" target="#b3">[4]</ref> extended fractal coding (which is related to vector quantization) from image compression to volume compression. Rendering was not considered in this work, but fractal decompression does not allow fast random voxel access, as the decoding of blocks is an interdependent iterative process.</p><p>Transform coding, in which the data is converted into a more compact representation and then quantized, is a popular compression approach used in many well-known compression standards including JPEG and MPEG. Yeo and Liu <ref type="bibr" target="#b24">[25]</ref> extended the JPEG approach to encode volumes, applying the Discrete Cosine Transform (DCT) to 8 <ref type="bibr" target="#b2">3</ref> blocks. In decompression, on-demand decoding and macro-block caching were used to accelerate rendering. In addition, decoding of nearly homogeneous blocks was accelerated by approximation with the DC coefficient.</p><p>In subband coding, the data is decomposed into its constituent frequencies using digital filters. Several configurations of filters are possible, but of particular use are filter banks, which decompose the data into multiple levels of resolution. One such approach, called Laplacian pyramid coding, was applied to volume compression by Ghavamnia and Yang <ref type="bibr" target="#b6">[7]</ref> for software rendering, with macro-block caching to improve performance. However, pyramid schemes tend to not al-low quick access to individual voxels. The same problem exists for wavelet compression, which was first applied to volume data by Muraki <ref type="bibr" target="#b16">[17]</ref>. One way around this is to use a block-based wavelet representation where blocks of moderate size make for shallow pyramids and therefore faster voxel access. Variations of this theme were used by Ihm and Park <ref type="bibr" target="#b8">[9]</ref> as well as Kim and Shin <ref type="bibr" target="#b10">[11]</ref> with Haar wavelets and Nguyen and Saupe <ref type="bibr" target="#b17">[18]</ref> with 9/7-tap Daubechies wavelets. Alternatively, Rodler <ref type="bibr" target="#b21">[22]</ref> demonstrated efficient random access using slice-based wavelet compression (with Haar wavelets). As an example of a hybrid CVR method based on wavelets, Guthe et al. <ref type="bibr" target="#b7">[8]</ref> presented a hierarchical block-based approach with spline wavelets. Rendering was accelerated by using graphics hardware along with several optimizations, including projective classification, priority-based decompression, and block caching.</p><p>The development of hardware CVR coincides with the introduction of programmability in graphics hardware. Kraus and Ertl <ref type="bibr" target="#b11">[12]</ref> introduced adaptive texture maps, which were implemented with either texture packing or simple vector quantization. Binotto et al. <ref type="bibr" target="#b2">[3]</ref> employed a similar approach for texture packing and compression of time-varying volume data. Lefohn et al. <ref type="bibr" target="#b12">[13]</ref> demonstrated packing for dynamic volumes stored in a slice format, along with an efficient rendering scheme that allows volume rendering from a single stack of slices. For time-varying volumes Lum et al. <ref type="bibr" target="#b14">[15]</ref> take the time series of individual voxels and compress using a 1D DCT, followed by fixed resolution quantization. In rendering, paletted textures (a deprecated texture color index mechanism) were used for fast decompression. Finally, Schneider and Westermann <ref type="bibr" target="#b22">[23]</ref> proposed a block-based Laplacian pyramid compression scheme in which the high frequency bands are compressed using vector quantization. Since the pyramid is only two levels deep, decompression in graphics hardware is relatively fast.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">OVERVIEW</head><p>In one of the earliest works on combining compression and volume rendering, Ning and Hesselink <ref type="bibr" target="#b18">[19]</ref> outlined the desired characteristics of an integrated volumetric compression scheme. They determined that the compression can be slow since it is performed once offline, but the decompression should be extremely fast since it is performed many times per second during rendering. In order to achieve this, they argued that the decompression should allow fast, direct, random access to voxels. Although these guidelines were written in the context of software CVR, they are equally if not more so applicable to hardware CVR; in particular, the meaning of fast has been entirely redefined since those days, but this quality remains fundamentally important. In addition to these demands, we recognize two more desired traits that specifically target hardware CVR:</p><p>1. Compact, separable decompression: Since the ability of hardware to perform real-time volume rendering is attributable to its parallel execution model, the compression scheme should support a decomposition of the decompression into independent subunits having localized support.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Uniform decompression:</head><p>In order to support an underlying SIMD architecture, the decompression kernel should be invariant across the volume. Conditional execution should be avoided if possible in order to minimize decompression delays in this time-critical context.</p><p>The constraints associated with these objectives limit both the type and complexity of the compression methods at our disposal. Lossless methods, although appropriate in certain situations, do not meet these requirements due to relatively high rates and constrained voxel access patterns. Simple scalar or vector quantization is an option, but the performance of stand-alone quantizers is not great. Both transform coding and subband coding offer good performance, but the decoding is usually complex and violates one or more of the aforementioned requirements.</p><p>A promising alternative, however, is to take transform or subband coding methods and adapt them to the problem domain by developing variants which reduce decoding complexity. Unfortunately, the most promising compression methods (based on wavelets) achieve their superior performance via complex quantization schemes that violate the previously stated restrictions. In this work we identify transform coding as having strong potential and proceed to develop an adaptation of transform coding that supports hardware CVR. In the next section we demonstrate how the principles outlined above can guide the construction of a viable transform coding scheme to accommodate this domain.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">TRANSFORM VECTOR QUANTIZATION</head><p>A typical transform coding system (as shown in <ref type="figure">Figure 2</ref>(a)) consists of a block-wise application of an energy-compacting transform and subsequent quantization and entropy coding of the resulting coefficients. Decompression mirrors compression, so that in general the complexity of compression and decompression are on the same order, making transform coding a symmetric coding scheme. However, the unique constraints associated with CVR give rise to a highly asymmetric coding model, wherein the encoding is relatively unconstrained but the decoding must be very compact. In this context we develop a novel asymmetric transform coding scheme based on vector quantization in the transform domain. This general approach, called Transform Vector Quantization (TVQ), has been shown to achieve good results in both speech and image compression <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b1">2,</ref><ref type="bibr" target="#b20">21,</ref><ref type="bibr" target="#b9">10]</ref>. <ref type="figure">Figure 2</ref>(b) depicts the overall structure of the proposed approach. An in-depth exposition on this scheme is provided in the following sections.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">The Forward Transform</head><p>Candidate transforms for compression are numerous and include the Discrete Cosine Transform (DCT), Karhunen-Loeve Transform (KLT), Walsh-Hadamard Transform, Haar Transform, and many more. Although in terms of decorrelation the KLT is the optimal transform, the DCT is more popular in practice, primarily due to the existence of a fast version of the forward and inverse transform and the fact that the bases are data independent, neither of which applies to the KLT. Furthermore, the performance is often close to that of the KLT, at least for highly correlated data. However, in our case the advantages of the DCT are not compelling enough to supersede the optimal performance of the KLT. First, the forward transform is performed once offline, and second, the implications of vector reprojection (as described in Section 4.3) are that most of the inverse transform is also precomputed offline so that the basis is implicitly embedded in the VQ codebooks irrespective of the transform. That being the case, there is little reason not to use the optimal transform; as mentioned before, as long as it does not impact the efficiency of decoding we should attempt to optimize the encoding as much as possible.</p><p>In regards to our compression scheme, block-wise encoding is essential in that it provides independent, uniform decompression within a well-localized frame of the compressed data stream. The degree of locality depends on the block size, which is an important parameter for achieving a balance between rate, distortion, and complexity. As the block size increases the coding gain increases but so does the complexity. Since complexity in decoding is a major concern for our approach we find that modest size blocks of 4 <ref type="bibr" target="#b2">3</ref> work well in practice, and it so happens that this block size is also popular in image coding (as 8 2 blocks).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Classified Vector Quantization</head><p>Vector quantization (VQ), with its relatively complex encoding and simple decoding, is an ideal choice for an asymmetric coding model operating under the CVR constraints. In keeping with the idea that as long as the decoding is not adversely affected then the encoding should be optimized, we propose a VQ approach that incorporates a relatively complex encoding while remaining transparent to the decoder.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">Transform Domain Classification and Partitioning</head><p>In image compression it has been noted that certain types of blocks contribute more to the visual quality of the reconstructed image than others, despite having the same amount of distortion. In particular, blocks containing edges are very significant in terms of perceptual importance, but in conventional VQ these blocks do not usually have adequate representation in the codebooks because of their small proportion. Classified VQ addresses this problem by identifying such blocks and quantizing them separately, thereby assuring their presence in the code vector population. In the case of volume compression this is even more important due to the arbitrary nonlinear mapping of the transfer function, which tends to highlight object boundaries and high-gradient regions in general. In addition, classification allows customization of the codebook beyond basic training. This is an important characteristic as it allows the encoder to adapt to volumes containing different types of perceptually important features, such as object surfaces, material boundaries, and fluid interfaces.</p><p>For volume compression we propose a classification scheme that operates in the transform domain. We observe that blocks containing boundaries or strong gradients have substantial high frequency content, resulting in large high-frequency coefficients in certain regions of the transform domain. The strength and orientation of boundaries or gradient regions yield characteristic patterns in the transform domain, and these patterns can then form the basis of a classification scheme. In our approach we classify blocks based on the contribution of regions in the transform domain to the fidelity of the reconstructed block; that is, unlike previous approaches based on arbitrary coefficient thresholds our scheme is functional in nature. The basic approach is to selectively truncate transform domain regions, perform the inverse transform, and compare the reconstructed block with the original block. If the fidelity of the reconstructed block is good then the truncated region is discarded, which indirectly classifies the block by excluding blocks with features characteristic for that region. This pragmatic approach avoids the problem of trying to enumerate all the different classes of blocks; instead, blocks which share similar frequency content are grouped together, which is natural since the actual compression occurs in the frequency domain.</p><p>In order to accomplish this we propose a two-level hierarchical classification based on subdivision of the coefficient block. We begin by dividing the coefficient block into eight zones as shown in <ref type="figure" target="#fig_4">Figure 3</ref>. Each of these zones represents a unique subspace of the transform domain and may contribute more or less to the appearance of the reconstructed block, depending on the values of the coefficients. These eight zones are then grouped into three larger regions called partitions in order to differentiate blocks based on gross frequency content: low, midrange, and high. The constituency within the partitions of particular frequency bands is analogous to the application of filters, which leads us to refer to these partitions as lowpass, bandpass, and highpass, respectively. Each partition represents a class of blocks, according to the ability of a block to be faithfully represented by the zones within that partition. In practice the zones not included in the candidate partition are effectively truncated to zero, and if the block can still be reconstructed with minimal distortion then the block passes the membership test for that partition.</p><p>Since the second and third partitions contain multiple zones a secondary classification into subclasses can be devised in order to further delineate different types of blocks. This segregation serves not only to preserve perceptually important blocks but also achieves compression by discarding insignificant coefficients. If we include zero blocks (which are trivially encoded) as a first-level class then we end up with four classes: Zero, LowPass, BandPass, and HighPass. The class BandPass is further divided into four subclasses, namely BP x , BP y , BP z , and BP xyz , where the subscripts indicate the relative positions of the zones within the partition. Likewise, the HighPass class is divided into four subclasses designated HP xy , HP xz , HP yz , and HP xyz . A geometrical depiction of these classes according to the frequency zones they are composed of is shown on the bottom row of <ref type="figure">Figure 5</ref>. This functional hierarchical classification method integrates seamlessly into our transform coding scheme after the transform and before quantization. In a way the classification drives the quantization by directing blocks to their appropriate quantizers. In addition, the type of classification described herein inherently supports the further division of classified blocks into independently coded partitions. This is not incidental, however, as the classification scheme itself is based on partitioning. The advantage of integrating the classification and partitioning becomes clear once we consider the implications of classification in the decoding. In order for the decoder to reference the correct codebook it must know the class of each block. This necessitates overhead to record the class as well as additional logic to determine and reference the appropriate codebook. However, by arranging the codebooks into larger composite codebooks according to the partitions we can render the classification completely transparent to the decoder. By having a shared codebook space for each partition, the information regarding block classification is implicitly stored in the code itself, as shown in <ref type="figure" target="#fig_5">Figure 4</ref>. This enables the decoding to be uniform in the strictest sense, such that even conditional execution based on blockspecific information is excluded. The composition process is achieved by remapping the codes in the class-specific codebooks (also called the feature codebooks) into the larger global codebook space, and by adding zero vectors to the second and third partitions.</p><p>In <ref type="figure">Figure 5</ref> we demonstrate the classification process on the Visible Male dataset (head only). We observe that there are relatively few blocks that require the bandpass and highpass partitions, but that these blocks contain perceptually important features. The classification process ensures that these features will be adequately represented in the VQ codebooks. Furthermore, the high proportion of zero and lowpass blocks implies that even without quantization significant compression can be achieved from zonal sampling in the frequency domain.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">Vector Quantization of Class Partitions</head><p>For each partition in each class, a separate vector quantizer is used to achieve lossy encoding, ensuring that each class receives adequate representation. In order to incur minimal distortion in the quantization process it is imperative that the available bits per block be allocated efficiently among the different quantizers. In our approach we break the bit allocation problem into two decisions. First, keeping in mind that the partitions will be combined into composite codebooks and that bits must be allocated in integer amounts, we determine how many bits will be allocated to each partition. This is accomplished based on the variances of the coefficients in each partition according to the method described by Shoham and Gersho <ref type="bibr" target="#b23">[24]</ref>, in which bit allocation among quantizers is determined by using the Lagrange method to minimize distortion subject to the bit constraint. The bits allocated to a partition constitute the partition's code, which in turn determines the global codebook size (b bits allow for a codebook of size 2 b ). The second part of the bit allocation procedure is to determine how to divide the code vectors in each partition among the classes that contribute to that partition. This problem is addressed by Ramamurthi and Gersho <ref type="bibr" target="#b20">[21]</ref> in the context of image compression, wherein they determined that an optimal allocation will produce equal mean distortion per codevector in all the class codebooks. In order to achieve this result they derived a closed-form solution for computing the codebook sizes, based on knowledge of the probability distribution of classes.</p><p>There exist several options for the design of the individual quantizers. The bandpass and highpass partitions are essentially decorrelated, so VQ using structured codebooks is usually sufficient. Residual correlations in the lowpass partition justify the use of clustering methods to produce the codebooks, which is somewhat more costly. Depending on the desired codebook quality, we provide three alternatives for codebook initialization: Pairwise Nearest Neighbor (PNN) <ref type="bibr" target="#b4">[5]</ref>, independent scalar quantization of each vector component, and random sampling of training vectors. Subsequent codebook training using the Linde-Buzo-Gray (LBG) method <ref type="bibr" target="#b13">[14]</ref> is performed for the lowpass codebooks but is optional for bandpass and highpass codebooks.   </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Vector Reprojection</head><p>The use of vector quantization allows us to optimize the reprojection, or inverse transform, by precomputing partial reprojections and storing these in the codebooks instead of the coefficients. Let us begin by defining the decoding process for partitioned vector quantization. In contrast to simple vector quantization, in which decoding consists of a single table look-up from a codebook, we now have P partial codebooks which together make a complete codebook. Let C p (k, r) denote the r th component of the k th code vector in codebook C p . Furthermore, let us say that the size of code vectors in codebook C p is n p . The total vector size is N, so that ∑ n p = N. Each encoded block of data will have P indices (i.e. codes), one for each codebook. For a given block, let k p denote the code corresponding to codebook C p . Now we are ready to combine reprojection with the quantization decoding. Without loss of generality we consider the reprojection in 1D given by the following equation:</p><formula xml:id="formula_0">x i = N ∑ ω=1 θ ω u ω (i) i = 1 ...N<label>(1)</label></formula><p>where u ω are the basis functions of the transform domain and θ ω are the scaling factors, or coefficients, of the basis functions. In order to combine this computation with the VQ decoder we recognize that the coefficients θ ω are sequentially distributed in the P codebooks. Given an encoded block with codes k p we can generate the sequence of coefficients θ ω by traversing the codebooks and code vectors in order:</p><formula xml:id="formula_1">{θ ω } N ω=1 = C p (k p , r j ) n p j=1 P p=1<label>(2)</label></formula><p>Substituting this sequence into Equation 1 gives us the complete equation for decompression/reprojection:</p><formula xml:id="formula_2">x i = P ∑ p=1 n p ∑ j=1 C p (k p , r j ) u Ω(p, j) (i)<label>(3)</label></formula><p>where</p><formula xml:id="formula_3">Ω(p, j) = j + p ∑ y=1 n y<label>(4)</label></formula><p>maps from code vector index to coefficient index. The key observation to make here is that the inner loop of Equation 3 is traversing the components of a single code vector in codebook C p , and that the components of a given code vector are accessed together. Since the reprojection is associative, we can precompute the part of the reprojection that involves the coefficients of a single code vector and store the intermediate calculation instead of the coefficients. These new codebooks, which we call associated codebooks, can be computed from the coefficient codebooks according to the following equation, in which C * designates an associated codebook:</p><formula xml:id="formula_4">C * (k p , i) = n p ∑ j=1 C p (k p , r j ) u Ω(p, j) (i)<label>(5)</label></formula><p>Using associated codebooks the reprojection equation is greatly simplified:</p><formula xml:id="formula_5">x i = P ∑ p=1 C * p (k p , i)<label>(6)</label></formula><p>This effectively reduces the calculation of</p><formula xml:id="formula_6">x i from O(N) in Equation 1 to O(1)</formula><p>, with a constant that depends on the number of partitions P. Equivalently, decompression of the entire block x is reduced from O(N 2 ) to O(N).</p><p>In Equation 6 the reprojection occurs vector-wise as opposed to coefficient-wise, and so we refer to this approach as vector reprojection. This technique offers very fast reprojection: to decompress a voxel given a partition of P codebooks we need only P − 1 additions and P table look-ups. In graphics hardware that amounts to P texture reads, which for modest values of P is much simpler and more efficient than attempting to perform a fast version of the inverse transform.</p><p>One disadvantage of this approach is that the size of the codebooks is increased, as we can observe by considering a single coefficient sequence. Instead of the P codebooks together forming a vector of size N, the codebooks now each contain a vector of size N. Thus the storage for associated codebooks is P times larger than for the coefficient codebooks. However, since the codebooks are considered a small constant cost and P is also small, this is not a significant problem. Overall, this method provides an effective way to achieve fast decompression and reprojection with very little overhead. The approach is applicable to any orthogonal transform (e.g. DCT, KLT) and can also be used for fast reprojection from Spherical Harmonic bases as well.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">DECOMPRESSION AND RENDERING</head><p>The close coupling of decompression and rendering also has repercussions on the volume renderer in terms of filtering. As the volume textures are encoded it is not possible to use native filtering for trilinear interpolation of volume texture samples. There are two methods for dealing with this problem: first, we can simply forego trilinear filtering and use nearest-neighbor look-ups instead. In special cases when low frequency transfer functions are used, shading is disabled, and the viewport is small relative to the volume size, this option could be acceptable. The other option is to use deferred filtering as described by Fout et al. <ref type="bibr" target="#b5">[6]</ref> . Although this requires extensive modifications to the volume renderer, the result is a fully capable volume renderer supporting smooth reconstruction and shading.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">The Decompression Kernel</head><p>Deferred filtering is a two-pass rendering approach in which the first pass consists of decompression into a volume slice cache and the second pass renders from the slice cache. The decompression kernel essentially implements Equation 6 using texture reads to access the three codebooks. A four-slice cache acts as a circular buffer to allow rendering of axis-aligned slices along the major axis. The data structures required for decompression include the 3D index volume containing the codes and the codebook textures, which can be arranged either in blocks in a 3D texture or stored as vectors in a 2D texture. In our experience the latter approach is usually faster. <ref type="figure" target="#fig_9">Figure 7</ref> shows a slab of the index volume and the codebooks (non-associated) for our test volume. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Progressive Rendering</head><p>Progressive rendering is supported by our approach and may be advantageous for extremely large data sets and for quick browsing. Hierarchical VQ <ref type="bibr" target="#b22">[23]</ref> also possesses this capability. If, instead of separately storing the codes and codebooks, we store codes with their respective codebooks then we can reconstruct approximate representations of the volume without having access to the entire compressed data set. This is a common feature in image compression schemes and allows both progressive transmission and display. Based on the proposed quantization scheme a volume can be represented at four progressive levels of approximation: DC coefficient only, DC coefficient + Lowpass partition, DC coefficient + Lowpass partition + Bandpass partition, and finally the complete version with the DC coefficient and all partitions.</p><p>In <ref type="figure" target="#fig_8">Figure 6</ref> we demonstrate this capability by showing renderings of the successive levels.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">RESULTS</head><p>In order to provide a context for the evaluation of our work we compare our approach (which we call Transform Vector Quantization, or TVQ) with analogous implementations of Vector Quantization (VQ) and Hierarchical Vector Quantization (HVQ). The VQ implementation encodes 4 <ref type="bibr" target="#b2">3</ref> blocks directly with a conventional vector quantizer. The HVQ implementation follows closely the original method as described by Schneider et al. <ref type="bibr" target="#b22">[23]</ref>, but without their codebook training method. We test these three methods on four large datasets, two of which are time-varying: QuasiGeo(256 3 , 1492 time steps, byte) and Supernova (864 <ref type="bibr" target="#b2">3</ref> , 105 time steps, float, 5 variables). The static datasets include the Visible Male (512 2 x1877, short) and Maglight(512 2 x2048, byte).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Classification</head><p>An important part of our scheme is the classification process, which we believe is especially relevant to volume compression. High-frequency transfer functions and gradient-based shading (esp. with specular highlights) are quite common in volume rendering and have a significant role in determining how reconstruction error is perceived. While some regions are very sensitive to error others can tolerate sizable error with little or no degradation in perceptual quality. To illustrate the advantage that classification offers in this type of situation, we compressed the VisMale volume with and without classified VQ, keeping the rates equal. Renderings of the reconstructed volumes are shown in <ref type="figure" target="#fig_10">Figure 8</ref>, and although the measured distortion is essentially the same, a clear difference in perceptual quality is observable.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Compression</head><p>Compression performance is usually measured by computing ratedistortion curves for representative datasets. As is common in image compression we use bits per element (i.e. bits/voxel) to measure rate and Peak Signal-to-Noise Ratio (PSNR) to measure error. Zero blocks are excluded in the calculations in order to avoid rate inflation and thereby facilitate comparisons. We vary the rate by adjusting the sizes of the codebooks. These results are shown in <ref type="figure" target="#fig_2">Figure 10</ref> for the static volumes and <ref type="figure" target="#fig_2">Figure 12</ref> for the time-varying volumes. In order to maintain acceptable quality large volumes are divided into sub-volumes (usu. of size 128 3 -256 3 ), each of which has its own set of codebooks. The extra codebooks barely increase the rate but substantially improve the quality, and with deferred filtering the rendering of separate codebook regions is accomplished transparently. The ratedistortion curves show a consistent trend in performance, with TVQ achieving a 2-4 dB increase in PSNR over HVQ. In compression literature this is considered significant. Both TVQ and HVQ significantly outperform VQ, thereby justifying their added complexity. In <ref type="figure">Figure</ref> 11 we show renderings of the Supernova using the three different methods. As opposed to the rendering environment used for the Visible Male head, wherein even the smallest amount of distortion can be seen, the Supernova is more forgiving due to both the nature of the volume and the transfer function and lighting setup. Blocking artifacts are still noticeable in the image for VQ, however. Encoding times for all three methods are dominated by codebook training. A tradeoff exists between encoding speed and codebook quality; for a volume block of 256 3 a medium quality codebook can be built in less than 10 minutes, whereas a high quality codebook can take 2-4 hours. All results in this paper were produced using high quality codebooks. Encoding times for VQ and HVQ are relatively consistent, whereas times for TVQ are variable and depend on the sizes of the class codebooks as determined by the bit allocation scheme. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Decompression</head><p>For rendering of compressed volumes we use an NVIDIA GeForce 8800 GTX with 768 MB of memory. Our implementation of deferred filtering uses a 4-slice 3D texture as the volume cache, taking advantage of the ability to render to slices of a 3D texture afforded by current hardware. In order to objectively measure differences in decompression speed for the three methods, we defined a fixed configuration for rendering which essentially consists of an orthogonal projection along the axes, matching the sampling rate in depth to the sampling rate in screen space. In an attempt to make the results data-independent, we produced synthetic volumes of equal dimensions containing random codes into random codebooks. The results of these tests are shown in <ref type="figure">Figure 9</ref>. The largest volume we could render was 2048 <ref type="bibr" target="#b2">3</ref> , as this corresponds to an index volume of 512 <ref type="bibr" target="#b2">3</ref> . For the case of a 2048 3 volume and a 2048 2 viewport we used an off-screen buffer. Although our tests indicate that rendering a volume this large is not quite interactive, we did not include optimizations such as empty space skipping, which in real volumes usually provides significant improvement. As far as decompression efficiency is concerned there is a measurable difference in the three approaches as a result of a differing number of dependent texture reads: VQ needs one, HVQ needs two, and TVQ needs three. Although on older cards the differences are significant, on current generation GPUs this difference is almost imperceptable. We suspect that this is due to larger texture caches -if the entire codebook textures are in the texture cache then an additional read could be accomplished in 1-2 cycles.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSIONS</head><p>In this paper we presented a novel volume compression method based on transform coding using the KLT and partitioned vector quantization. Perceptually important volume features such as boundaries and high-gradient regions are preserved by incorporating a block classification scheme that operates in the transform domain. Integration of this scheme with vector partitioning renders the classification transparent to the decoder. Furthermore, we developed a method to precompute most of the inverse transform, embedding the partial reprojections in the VQ codebooks. The result of these optimizations is inherent support for efficient decoding directly from compressed textures in graphics hardware. By using deferred filtering we can achieve high-quality real-time volume rendering directly from the compressed textures. The decoding for our method is slightly more expensive than previous methods such as simple VQ and hierarchical VQ, but on current generation graphics cards this difference is almost imperceptible in terms of frame rates. On the other hand, the compression performance in terms of rate-distortion is significantly better than previous methods. In summary, our method provides a relatively sophisticated compression method that exhibits good performance while hiding this complexity from the GPU.  </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>•</head><label></label><figDesc>The authors are with the Department of Computer Science, University of California, Davis. E-mail: {fout, ma}@cs.ucdavis.edu. Manuscript received 31 March 2007; accepted 1 August 2007; posted online 27 October 2007. For information on obtaining reprints of this article, please send e-mail to: tvcg@computer.org.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Published 14</head><label>14</label><figDesc>September 2007.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 1 .</head><label>1</label><figDesc>Comparison of graphics memory capacity with the sizes of both static and time-varying volume data sets (per 100 time steps).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head></head><label></label><figDesc>(a) Typical Symmetric Coding Scheme (b) Proposed Assymetric Coding Scheme Fig. 2. Comparison of a typical transform coding scheme (a) to the proposed volume transform coding scheme (b).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 3 .</head><label>3</label><figDesc>Coefficient Zones (d) Lowpass Partition (e) Bandpass Partition (f) Highpass Partition Transforming a 4 3 block (a) results in a block of frequency coefficients (b). Based on a grouping of coefficients into 8 zones (c), three partitions are defined: lowpass (d), bandpass (e), and highpass (f).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 4 .</head><label>4</label><figDesc>Classified blocks are partitioned into three subvectors for quantization. Class partitions are quantized separately and then combined with other classes, resulting in three global codebooks containing "chapters" for each relevant class.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head></head><label></label><figDesc>(a) Original (b) ZERO</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>(</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 6 .</head><label>6</label><figDesc>(a) DC (128 KB) (b) DC+LP (272 KB) (c) DC+LP+BP (416 KB) (d) DC+LP+BP+HP (560 KB) (e) Original (8192 KB) Progressive approximations of the volume can be produced by decompressing subsets of the data. Successive approximations are shown left to right beginning with the DC coefficient and adding the lowpass partition (LP), bandpass partition (BP), and highpass partition (HP).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 7 .</head><label>7</label><figDesc>The encoded volume consists of the index volume (a), which contains the DC coefficient (top left), lowpass code (top right), bandpass code (bottom left), and highpass code (bottom right), and the three codebooks (b), lowpass, bandpass, and highpass (from top to bottom).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 8 .</head><label>8</label><figDesc>(a) TVQ W/ Classification (b) TVQ W/O Classification Comparison of compression quality using TVQ with and without classification.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Fig. 9 .Fig. 10 .</head><label>910</label><figDesc>Timing results for rendering directly from volumes compressed by Vector Quantization (VQ), Hierarchical Vector Quantization (HVQ), and Transform Vector Quantization (TVQ) using a set configuration (a) for three different volume sizes: 512 3 , 1024<ref type="bibr" target="#b2">3</ref> , and 2048 3 . Rate-distortion curves for the static volume data sets.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Fig. 11 .Fig. 12 .</head><label>1112</label><figDesc>Comparison of the three CVR methods at a rate of 1.5 bits/voxel using the Supernova volume.(a) Rate-distortion curve for QuasiGeo volume (b) Rate-distortion curve for Supernova volume Rate-distortion curves for the time-varying volume data sets.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>Fig. 5. Block classes are defined according to regions in the transform domain. The proposed approach defines 10 classes: ZERO, LP, BP x , BP y , BP z , BP xyz , HP xy , HP xz , HP yz , and HP xyz . In order to illustrate the classification process we show the blocks belonging to each class for a cross section of the Visible Male head. Very few blocks belong to the bandpass and highpass classes, but these blocks carry more weight in terms perceptual importance.</figDesc><table><row><cell>c) LP</cell><cell>(d) BP x</cell><cell>(e) BP y</cell><cell>(f) BP z</cell><cell>(g) BP xyz</cell><cell>(h) HP xy</cell><cell>(i) HP xz</cell><cell>(j) HP yz</cell><cell>(k) HP xyz</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>This work has been sponsored in part by various NSF and DOE grants. The authors wish to thank the National Institute of Health, Los Alamos National Lab, TSI, and VIZLAB at Rutgers University for the data sets used in this work. We also wish to thank Jens Schneider for helpful comments and contributing code. Finally, we would like to thank the reviewers for valuable suggestions and recommendations for improvements.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Transform domain vector quantization for speech signals</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Adlersberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Cuperman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<date type="published" when="1987-04" />
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="1938" to="1941" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Adaptive discrete cosine transform coding with vector quantization for color images</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Aizawa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Harashimia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Miyakawa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Conference on Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<date type="published" when="1986-04" />
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="page" from="985" to="988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Real-time volume rendering of time-varying data using a fragment-shader compression approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Binotto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Comba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Freitas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Parallel and Large-Data Visualization and Graphics</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="69" to="75" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Fractal volume compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Cochran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Flynn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="313" to="322" />
+			<date type="published" when="1996-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">A new vector quantization clustering algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Equitz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page" from="1568" to="1575" />
+			<date type="published" when="1989-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">High-quality rendering of compressed volume data formats</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Fout</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Akiba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lefohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kniss</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Eurographics-IEEE Symposium on Visualization</title>
+		<meeting>Eurographics-IEEE Symposium on Visualization</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="77" to="84" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Direct rendering of laplacian pyramid compressed volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ghavamnia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Yang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;95</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="192" to="199" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Interactive rendering of large volume data sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wand</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gonser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;02</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="53" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Wavelet-based 3d compression scheme for very large volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Ihm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Park</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface &apos;98</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="107" to="116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A transform domain classified vector quantizer for image coding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lee</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Circuits and Systems for Video Technology</title>
+		<imprint>
+			<date type="published" when="1992-03" />
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="3" to="14" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">An efficient wavelet-based compression method for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Shin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Pacific Graphics &apos;99</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="147" to="156" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Adaptive texture maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SIGGRAPH-Eurographics Workshop on Graphics Hardware</title>
+		<meeting>SIGGRAPH-Eurographics Workshop on Graphics Hardware</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="7" to="15" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Interactive deformation and visualization of level set surfaces using graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lefohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kniss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Whitaker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;03</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="75" to="82" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">An algorithm for vector quantization design</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Linde</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Buzo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Gray</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Communications</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="84" to="95" />
+			<date type="published" when="1980-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Texture hardware assisted rendering of time-varying volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Lum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Clyne</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;01</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="263" to="270" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Scout: A hardware-accelerated system for quantitatively driven visualization and analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Mccormick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Inman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;04</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="171" to="178" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Volume data and wavelet transforms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Muraki</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="50" to="56" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Rapid high quality compression of volume data for visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Saupe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="49" to="56" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Vector quantization for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Hesselink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Volume Visualization</title>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="69" to="74" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Fast volume rendering of compressed data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Hesselink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;93</title>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="11" to="18" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Classified vector quantization of images</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Ramamurthi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Gersho</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Communications</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="1105" to="1115" />
+			<date type="published" when="1986" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Wavelet based 3d compression with fast random access for very large volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Rodler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Pacific Graphics &apos;99</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="108" to="117" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Compression domain volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;03</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="293" to="300" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Efficient bit allocation for an arbitrary set of quantizers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Shoham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Gersho</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<biblScope unit="volume">36</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="1445" to="1453" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">a) Rate-distortion curve for VisMale volume (b) Rate-distortion curve for MagLight volume</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Yeo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="29" to="43" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+	<note>Volume rendering of dct-based compressed 3d scalar data</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

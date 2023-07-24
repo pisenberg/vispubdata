@@ -1,0 +1,1199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Particle-based Sampling and Meshing of Surfaces in Multimaterial Volumes</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miriah</forename><surname>Meyer</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Ross</forename><surname>Whitaker</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Robert</forename><forename type="middle">M</forename><surname>Kirby</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Ledergerber</surname></persName>
+						</author>
+						<title level="a" type="main">Particle-based Sampling and Meshing of Surfaces in Multimaterial Volumes</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:49+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Sampling</term>
+					<term>meshing</term>
+					<term>visualizations</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Methods that faithfully and robustly capture the geometry of complex material interfaces in labeled volume data are important for generating realistic and accurate visualizations and simulations of real-world objects. The generation of such multimaterial models from measured data poses two unique challenges: first, the surfaces must be well-sampled with regular, efficient tessellations that are consistent across material boundaries; and second, the resulting meshes must respect the nonmanifold geometry of the multimaterial interfaces. This paper proposes a strategy for sampling and meshing multimaterial volumes using dynamic particle systems, including a novel, differentiable representation of the material junctions that allows the particle system to explicitly sample corners, edges, and surfaces of material intersections. The distributions of particles are controlled by fundamental sampling constraints, allowing Delaunay-based meshing algorithms to reliably extract watertight meshes of consistently high-quality.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Three dimensional images (volumes) provide an important source of information for generating realistic computer models of real-world objects. For example, biological and geophysical data is often captured using volumetric scanning methods such as magnetic resonance imaging (MRI) or ultrasound. The data from these devices is usually stored as a regular grid of values that provide information about the surface of the scanned object and its detailed internal structure. Most objects, natural or man-made, contain multiple materials with vastly different physical properties that are typically organized in complicated geometric configurations. Extracting precise geometric models of the interfaces between these materials is important both for visualization and for realistic physically-based simulations in a variety of fields, from biomedical computing and computer animation to oil-and-gas exploration and engineering.</p><p>Multimaterial volumes impose particular challenges for sampling and meshing algorithms because the boundaries between materials are typically not smooth manifolds. As a result, intersections of materials can produce sharp features such as edges and corners (see Section 3). Furthermore, the development of increasingly realistic simulations dictates additional constraints, such as a sufficient number of samples for accurately representing the geometry, compact sets of nearly-regular triangles, and consistent tessellations across material boundaries. The construction of geometric models that meet these requirements for surfaces of distinct objects is well-studied. However, generating high-quality models of objects that contain multiple materials has thus far received little attention.</p><p>This paper proposes the use of a dynamic particle system to produce well-spaced distributions of points on material interfaces in multimaterial volumes. The particles move to minimize an objective function that is designed to produce configurations of samples that are locally adaptive, geometrically accurate, and well-suited for subse- quent meshing. The set of material boundaries are described as a CWcomplex <ref type="bibr" target="#b25">[26]</ref>, and we present new, analytic representations for the different kinds of cells that form this structure. We also define projection operators that allow the particles to sample these material boundaries in a hierarchical fashion -0-cells, 1-cells, and then 2-cells. The result is a set of surface points that adapt to the underlying geometry and meet fundamental surface sampling requirements. From these surface points, Delaunay-based meshing schemes create high-quality surface meshes that are well-suited to the generation of well-shaped volumetric elements <ref type="bibr" target="#b2">[3]</ref>. The main contribution of the paper is a novel scheme for representing the nonmanifold sets formed at the material interfaces in multimaterial volume data, and a corresponding set of projection operators that allow these interfaces to be sampled with dynamic particle systems. Also presented is an algorithm for distributing sets of particle systems such that each type of interface is sampled explicitly. The resulting sets of points generate surface meshes that are well-defined subsets of a Delaunay tetrahedralization, the extraction of which is reliably produced through a simple labeling algorithm. This scheme generates high-quality meshes directly from the multimaterial representation, and thus part of the pipeline is a volume processing methodology that allows for controlled smoothing of the data for a specific downstream application prior to sampling and meshing (see Section 5.1)this is a significant difference from existing grid-based methods (see Section 2.1). We provide implementation details of the proposed algorithm, and demonstrate its effectiveness for several multimaterial volumes generated from MRI scans of real-world objects, such as the torso in <ref type="figure">Figure 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">PREVIOUS WORK</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Meshing Multimaterial Volumes</head><p>Most of the previous work on meshing multiple material data focuses on grid-based tessellation algorithms. These algorithms work on the original, labeled volumes (i.e., a regular grid that stores an integer at each node that indicates a specific material, most often the result of a segmentation of an MRI or CT scan), and focus on extensions of the marching cubes case tables <ref type="bibr" target="#b26">[27]</ref> to handle the nonmanifold surface intersections. A postprocessing step is often applied to the mesh to reduce the voxelization artifacts, as well as to reduce the overall number of triangles.</p><p>Some of the earliest work presents methods that generate nonmanifold meshes from tetrahedral elements that are created from the original rectilinear volume <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b32">33,</ref><ref type="bibr" target="#b10">11]</ref>, including the recent method of Dillard et al. <ref type="bibr" target="#b17">[18]</ref> for creating boundary meshes of polycrystal data. Surface extractions from tetrahedral elements, however, result in an <ref type="figure">Fig. 1</ref>. Multimaterial surfaces of a torso extracted from an MRI scan, with closeups of meshes generated using dynamic particle systems.</p><p>excessive number of triangles. Methods based on extracting interfaces in hexahedral cells can reduce the overall number of triangles, but they must handle an increased number of nonmanifold ambiguities <ref type="bibr" target="#b21">[22,</ref><ref type="bibr" target="#b46">47,</ref><ref type="bibr" target="#b38">39,</ref><ref type="bibr" target="#b5">6,</ref><ref type="bibr" target="#b6">7]</ref>.</p><p>While these grid-based approaches are generally robust and efficient, the first-order approximation of the material boundaries can construct incorrect topology <ref type="bibr" target="#b33">[34]</ref>. More importantly, the resolution of the underlying grid, and not the geometry of the surface, dictates the resulting mesh resolution, while the triangles are usually poorly shaped (i.e., not-regular) because the methods do not focus on the placement of the vertices. Even with smoothing and decimation, the quality is limited (see Section 6). Recently, Zhang et al. <ref type="bibr" target="#b47">[48]</ref> proposed an octree-based approach that relies on the dual contouring method <ref type="bibr" target="#b22">[23]</ref> to produce adaptive tetrahedral elements as well as to preserve sharp features. Like the other grid-based methods, however, this approach does not optimize the mesh resolution to reflect the underlying surface geometry.</p><p>Another avenue of surface meshing research focuses exclusively on the boundary of objects and the generation of well-shaped triangles. Methods such as advancing front <ref type="bibr" target="#b23">[24,</ref><ref type="bibr" target="#b39">40]</ref> or particle-based schemes <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b30">31]</ref> place samples along an implicit surface such that nearly-regular triangles are generated that adapt to the underlying geometry. A different approach is that taken by Delaunay-based methods <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b16">17]</ref>, which provide algorithms for constructing provablycorrect triangulations of a given set of surface samples. These algorithms rely on the seminal work of Amenta et al. <ref type="bibr" target="#b3">[4]</ref> that proves a sampling constraint based on the local feature size (LFS) such that the correct topology of a surface can be inferred from an unorganized set of sample points. These methods do not, however, address the challenges of meshing multimaterial surfaces or handling surfaces with sharp features.</p><p>Recently, Pons et al. <ref type="bibr" target="#b37">[38]</ref> apply a Delaunay-refinement algorithm <ref type="bibr" target="#b8">[9]</ref> to multimaterial volumes. The algorithm described in their paper builds on the work of Oudot et al. <ref type="bibr" target="#b35">[36]</ref> that requires C 2 surfaces for termination guarantees, which is not the case for multimaterial datasets as discussed in the next section. Some recent work on the description of the LFS <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b11">12]</ref> and the Delaunay-refinement algorithm <ref type="bibr" target="#b13">[14]</ref> may, however, provide some theoretical foundations that extend to multimaterial datasets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Dynamic Particle Systems</head><p>Dynamic particle systems, first introduced to the computer graphics community by Witkin and Heckbert <ref type="bibr" target="#b45">[46]</ref>, are a mechanism for producing even distributions of samples across implicitly-defined surfaces. Surface samples (called particles) are constrained to the zero-set of an implicit function, but are allowed to move along the surface (i.e., in the local tangent plane) to obtain minimal energy configurations. In this work, we use a modified version of the particle system proposed by Meyer et al. <ref type="bibr" target="#b29">[30]</ref> that locally adapts the distance between particles to create higher densities of points around surface features.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Multimaterial Representations</head><p>Work on level sets and CSG has addressed the problem of representing multimaterial data analytically. Level set methods <ref type="bibr" target="#b40">[41,</ref><ref type="bibr" target="#b34">35]</ref>, although often used for capturing and deforming a single interface, have been extended for tracking the motion of multimaterial datasets <ref type="bibr" target="#b27">[28,</ref><ref type="bibr" target="#b48">49]</ref>, while implicit representations of multimaterials have also been developed for handling CSG operations <ref type="bibr" target="#b36">[37]</ref>. These algorithms describe the multimaterial datasets using a functional model of the materials. In this paper we extend the model so that a dynamic particle system can explicitly capture different types of multimaterial junctions to produce high-quality triangle meshes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">TOPOLOGY OF MULTIMATERIAL INTERFACES</head><p>We represent interfaces in a multimaterial dataset using a model that describes each material with a smooth, volumetric indicator function, f i <ref type="bibr" target="#b27">[28,</ref><ref type="bibr" target="#b36">37]</ref></p><formula xml:id="formula_0">. A set of N indicator functions F = { f i | f i : V → ℜ} repre- sents n materials. A material label i is assigned to a point x ∈ V if (and only if) f i (x) &gt; f j (x) ∀ j = i.</formula><p>Looking at the simple case when only two materials exist in the dataset, for all points x where f 1 (x) − f 2 (x) &gt; 0 the model will assign a label of 1, while assigning a label of 2 otherwise -we note that this description corresponds to the conventional formulation of an implicit surface. In the multimaterial model, the set of points x, where f 1 (x) − f 2 (x) = 0, forms the interface, or junction, between these two materials.</p><p>In the case of an arbitrary number of materials in the dataset, the configurations of interfaces become somewhat more complex. The boundaries that separate materials are no longer manifold, and can form sharp corners and edges. The topology of these junctions, however, can be characterized by certain generic configurations (see <ref type="figure">Figure</ref> 2). The term generic, from the field of singularity theory, refers to the cases where the set of functions F are in general position. This situation is analogous to the finite-dimensional spaces considered in discrete geometryi.e., three points in general position cannot lie on a line, and if they do, a general position can be restored through very small perturbations. In this work we typically consider only generic configurations, which is justified by our reliance on measured data that inherently contains some level of noise, as well as our use of a data processing pipeline that ensures a degree of smoothness in the indicator functions (see Section 5.1).</p><p>We characterize each material interface in terms of the number of material indicator functions that are maximal (and equal) at that junction. For V ⊂ ℜ 2 , 2-junctions and 3-junctions occur generically, as shown in <ref type="figure" target="#fig_1">Figure 2</ref> (a-b) as lines and points, respectively, while a 4junction is a nongeneric case, as shown in <ref type="figure" target="#fig_1">Figure 2</ref> </p><formula xml:id="formula_1">(c-d). For V ⊂ ℜ d each K-junction forms a subset of V</formula><p>that is topologically equivalent (homeomorphic) to a P-disk, where P = d − K + 1. Thus each type of material junction can be considered a P-cell, as described in the literature on discrete topology <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b1">2]</ref>. Generically, for d = 3 we have 4-junctions, which are 0-cells or points; 3-junctions, which are 1-cells or curves; and 2-junctions, which are 2-cells or surfaces.</p><p>The collection of cells that describe the different types of material junctions, taken together, form a CW-complex. That is, we can organize them hierarchically, such that each 2-cell is attached to a collection of 1-cells (at its border), and each one cell is attached to one or more 0-cells. The strategy in this paper is to sample nonmanifold multimaterial boundaries using this hierarchy of manifolds, and to form the appropriate relationships between samples at each level in the hierarchy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">REPRESENTING AND SAMPLING JUNCTIONS</head><p>Given a set of material indicator functions F, a set of analytical cell indicator functions, J, approximate the cells formed by each type of material junction (Section 4.1). In the proposed particle system sampling scheme, each particle will be constrained to a particular material junction. This formulation for each type of cell includes a set of projection operators to enforce this constraint (Section 4.2). A hierarchy of particle systems then samples each type of generically occurring material junction such that each junction is represented in the final mesh. That is, in 3D the 0-cells (points) are sampled first, followed by the 1-cells (curves), and concluding with the 2-cells (surfaces). Finally, a simple labeling algorithm extracts the multimaterial surface meshes as a subset of a Delaunay tetrahedralization of the samples (Section 4.3).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Differentiable Multimaterial Junctions</head><p>The proposed method analytically represents the individual material junctions present in the volumetric model of multimaterial datasets to allow sets of particles to specifically sample each junction. To do this, a definition of an inside/outside (IO) function for each material is defined using the volumetric model described in Section 3. These functions are:f</p><formula xml:id="formula_2">i = f i − n max j=1, j =i f j ,<label>(1)</label></formula><p>where positive values indicate the presence of material i and negative values indicate some other material. These functions have the property that the zero-set of any one IO function coincides with the material transitions between i and some other material. This means, for instance, that for two adjacent materials, i and j, we havef i =f j = 0 along the 2-junction where these two materials meet. This coincidence of zero-sets for adjacent materials in Equation 1 allows for a novel representation that approximates the different kinds of material junctions (cells) within a multimaterial volume. These junctions are detected by a cell indicator function that identifies points in V where a set of IO functions evaluate to zero, such as the material interface between materials 1 and 2 shown as the red dashed line in <ref type="figure" target="#fig_2">Figure 3</ref>. Along this curve,f 1 =f 2 = 0 andf 3 &lt; 0, while in the vicinity of this curvef 1 andf 2 will be nonzero (one negative and the other positive). Thus, in 3D, the set of 2-cells that form the interface between two materials i and j, where i = j, can be represented as the zero-set of the continuous cell indicator function: In this scheme, the 1-cells for the set of materials i, j, k (assumed distinct) are given by the set of points J i jk = 0 where:</p><formula xml:id="formula_3">J i j =f 2 i +f 2 j .<label>(2)</label></formula><formula xml:id="formula_4">J i jk =f 2 i +f 2 j +f 2 k ,<label>(3)</label></formula><p>and likewise, the indicator for a 0-cell is:</p><formula xml:id="formula_5">J i jkl =f 2 i +f 2 j +f 2 k +f 2 l .<label>(4)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Sampling Multimaterial Junctions with Particles</head><p>To distribute a set of dynamic particles across a manifold we need to define two things: first, how particles will be projected onto the manifold; and second, how particles will be constrained to move along the manifold. The first case is usually done using a gradient descent method such as Newton-Raphson, while the latter case is most often accomplished by projecting motion vectors onto the local tangent space of the manifold. For distributing particles across multimaterial intersections, both of these tasks require first derivative information of the cell indicator functions. The gradient of Equation 2 (with analogous definitions for Equations 3 and 4) is:</p><formula xml:id="formula_6">∇J i j = 2f i ∇f i + 2f j ∇f j .<label>(5)</label></formula><p>The max function is only C 0 , however, and the derivative is not defined at the transition between materials. Thus, we approximate max with a smooth function that is differentiable, interpolates the max(i, j) at i = j, and can be tuned (via a parameter) to be arbitrarily close to max. The approximation used for the results in this paper is discussed further in the Appendix. Using this approximation, it can be shown through a Taylor series expansion around points on material junctions that zero-set surfaces exist for the cell indicator functions to within machine precision.</p><p>Notice that the cell indicator functions have the property that they are zero on the set of interest (i.e., a material junction) and positive everywhere else. Because the set of interest is locally minimal, the gradient is zero on the material junctions, and thus these cell indicators, unlike the IO functions, do not directly provide the tangent spaces that are needed to constrain the motion of interacting particles. The cell indicators are constructed, however, from combinations of implicit functions for the individual materials (i.e., the IO functions), and the gradients of these IO functions give the local orientation of the cells. Thus we can use a series of projection operators that rely on gradients of the IO functions to reconstruct the tangent spaces (planes or lines in 3D) of the corresponding cells.</p><p>For 2-cells, the gradients of the IO functions that characterize the junction will be approximately equal and opposite near the zero set, thus we project a motion vector of a particle, v, onto a tangent plane that is defined by the average (for numerical robustness) of these IO function gradients:</p><formula xml:id="formula_7">n t = ∇f i − ∇f j |∇f i − ∇f j |<label>(6)</label></formula><p>and update the motion vector as:</p><formula xml:id="formula_8">v ← v− &lt; v, n t &gt; n t = (I − n t ⊗ n t )v.<label>(7)</label></formula><p>On the 1-cells, particles must move along the tangent line of the zeroset of J i jk . A tangent line is computed as the summation of the cross products of each pair of the three characterizing IO function normals, which all have zero-crossings along that set:</p><formula xml:id="formula_9">t i jk = ∇f i |∇f i | × ∇f j |∇f j | + ∇f j |∇f j | × ∇f k |∇f k | + ∇f k |∇f k | × ∇f i |∇f i | .<label>(8)</label></formula><p>The particle motion vectors are then projected onto this normalized tangent line, constraining the motions to the 1-cell:</p><formula xml:id="formula_10">v ← t i jk |t i jk | , v t i jk |t i jk | .<label>(9)</label></formula><p>The 0-cells, which are the first to be sampled, are isolated points, each sampled by a single particle (see Section 5.2), thus, we do not need to define a projection operator.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Meshing Multimaterial Samples</head><p>Fundamental work in inferring correct topology from a set of unorganized surface points relies on a sampling criterion that links the density of points to the LFS of the surface <ref type="bibr" target="#b3">[4]</ref>. In order to guarantee topologically and geometrically correct surface reconstructions, surface sampling algorithms based on the LFS require an infinite sampling density (in the limit) near sharp features, such as those formed by at the 0-cells in a multimaterial dataset. Recent theoretical work <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b11">12,</ref><ref type="bibr" target="#b13">14]</ref>, however, indicates that carefully designed meshing algorithms can handle sharp features and discontinuous surfaces. Furthermore, it can be shown in 2D that the LFS sampling constraint can be lifted around sharp features if sample points are placed explicitly on cells, allowing for the reconstruction of geometrically and topologically correct tessellations of surfaces with sharp features using Delaunay-based meshing schemes. The proof <ref type="bibr" target="#b28">[29]</ref> guarantees this claim in 2D for a lower bound of 45 • on the material angles formed by the tangent lines of the 1-cells at the 0-cell where they meet. Results from the level set literature indicate that angles between 1-cells, defined by smooth indicators functions, are 120 • at the 0-cells <ref type="bibr" target="#b48">[49]</ref>, making the 45 • lower bound a reasonable constraint for this work. We anticipate a similar result, with a larger angle constraint, in 3D. Based on this proof, we know that there exists a Delaunay-based method that can reconstruct topologically correct manifold surfaces of individual materials in multimaterial datasets from the set of particles. These datasets contain additional information, though -namely, a material label for almost every point in V -that allows for a simple labeling algorithm to reliably extract the manifold material surfaces, as well as the nonmanifold intersection surface <ref type="bibr" target="#b37">[38]</ref>. The labeling algorithm first computes a Delaunay tetrahedralization of the the sets of points sampling the 0-, 1-, and 2-cells. Next, each tetrahedron is assigned a material label by determining the material type at the location of its circumsphere center. Finally, the algorithm generates a surface mesh by extracting all faces bounded by tetrahedra with different material labels.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">IMPLEMENTATION</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Preprocessing Data</head><p>Representing multimaterial interfaces begins with the generation of the indicator functions f i that characterize each material in the volume. We do this by first isolating each material label into a separate volume, smoothing each volume to control the feature size, and then constructing smooth implicit representations of the smoothed volumes. As the labeled data is smoothed as a preprocessing step, the proposed method allows a domain expert to control the amount of data processing and smoothing such that the resulting meshes capture the appropriate amount of geometry for a specific application. This allowance is a significant difference from the data smoothing that occurs in gridbased approaches, which smooth voxelization artifacts present in the multimaterial mesh as a postprocessing step with a limited amount of user control. In (a), an isosurface of a labeled, single material volume is shown for a thin region of the material. After tightening with r = 1 (b), a large portion of a thin wall is eroded. In these situations it can be useful to tighten the material at a higher resolution (c) with a smaller tightening radius (r = 0.6 in this image). These meshes were extracted using marching cubes <ref type="bibr" target="#b26">[27]</ref> and Catmull-Rom spline reconstruction kernels.</p><p>The preprocessing begins by generating a binary volume for each material, which can be down-sampled to meet the resolution constraints of the final simulation, as well as coarsely smoothed using binary morphology operations <ref type="bibr" target="#b19">[20]</ref>. We note that the volume representation used through this work is a regular grid. Next, the volumes are antialiased <ref type="bibr" target="#b43">[44]</ref> to produce gray scale images. Each antialiased material volume is then smoothed using a grayscale morphology algorithm proposed by Williams and Rossignac <ref type="bibr" target="#b44">[45]</ref> called tightening, which limits the radius of curvature of the resulting boundary using constrained, level set curvature flow. The algorithm takes as input an antialiased volume representing a single, labeled material, along with a user-defined tightening radius r that specifies the desired minimum radius of curvature for the final, tightened surface. The output of the algorithm is a grayscale volume that stores the signed distance to a tightened material surface, where positive values indicate material.</p><p>In the process of tightening a surface to ensure a specific minimum radius of curvature, thin regions of the surface can be altered drastically by the algorithm. An example of this is shown in <ref type="figure" target="#fig_3">Figure 4</ref>, where a thin wall of material is noticeably eroded during tightening. To remedy this undesirable effect, a smaller tightening radius can be used, at the cost of less smoothing of the overall surface. However, due to the numerics of the level set framework in which the tightening algorithm is implemented, subvoxel tightening is not possible. Instead, the material volume can be upsampled to a higher resolution grid, over which a smaller tightening radius can then be applied. For the torso results shown in <ref type="figure">Figure 1</ref>, the heart material resides over a higher resolution grid then the other materials, and was tightened with r = 0.6 (where the units of r are given in the units of the courser grid) -all other materials presented in this paper use a tightening radius of r = 1.0.</p><p>Finally, we reconstruct continuous, differentiable f i from the tightened volumes of each material using separable convolution, which convolves a 1D continuous kernel with grid points along each separate axis of a volume. For the results presented in this paper, we use an interpolating 4 <ref type="bibr" target="#b2">3</ref> Catmull-Rom spline as the continuous kernel. The reconstructed implicit functions are then input to the system as the set of indicator functions F.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Distributing Particles on Junctions</head><p>We use the particle system framework of Meyer et al. <ref type="bibr" target="#b30">[31]</ref> for placing points along each material junction. This framework uses a sizing field that informs particles of how far they should be from their neighbors to meet LFS sampling requirements. We generate a sizing field volume for a multimaterial dataset by first computing the LFS of each IO function. We then store at each grid point in the sizing field volume the minimum LFS for the set evaluated at the grid point location.</p><p>Along sharp features, however, the LFS will go to zero, causing an infinite sampling requirement. Because sharp features in the data are explicitly sampled, the strict LFS requirements near 0-cells and 1-cells can be violated, and thus, we place a lower bound on the sizing field. This lower bound is determined by the tightening radius r (see the previous section) that drives the tightening algorithm when smoothing the material volumes. This is (from analytical results in 2D, and empirically in 3D) a good estimate of the size of the ball within which the angle constraint (from Section 4.3) holds. For surfaces in 3D, the preprocessing (tightening) does not guarantee a lower bound on the principal curvatures in hyperbolic regions, which could lead to problems in obtaining sampling densities that ensure the angle-constraint near 0-and 1-cells, which could result in triangulations that contain faces that cross the material boundaries. In practice, this appears to be very rare, and we have not observed this problem in the results shown in this paper, despite the complexity of the datasets.</p><p>Using an ordered sampling scheme for distributing sets of particle systems, we first sample each 0-cell with a single particle, which remains fixed in place. Next, we sample 1-cells with particle systems that interact with these 0-cell particles. Similarly, the 1-cell particles are allowed to converge to a steady state and are then fixed in place. Finally, we distribute particles on the various 2-cells that interact with 0-and 1-cell particles. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Meshing the Surface</head><p>We use Tetgen 1 to generate a tetrahedralization of the convex hull of the set of particles. Each tetrahedral element is labeled according to the material in which its circumscribing sphere center lies. The watertight, nonmanifold mesh of the material interfaces is the subset of faces that are bounded by tetrahedra of different material types. Faces that lie on the convex hull are labeled as having a second bounding tetrahedra of the outside material type. This nonmanifold mesh can then be used to generate volume filling elements that conform to the LFS of the boundary (see Section 6). Manifold meshes of each individual material can also be extracted in a similar fashion, with the shared boundaries of surface meshes having consistent triangulations by construction.</p><p>We have experimented with other Delaunay-based surface reconstruction algorithms, such as TightCocone <ref type="bibr" target="#b16">[17]</ref>, that are designed to infer topology from an organized set of points without knowledge of the underlying surface/solid. Our experiments showed these methods can sometimes fail, and thus we advocate the use of a simpler labeling algorithm, such as the one described in this paper, that includes information about the underlying multimaterial volume which guarantees conformal, watertight surfaces.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">RESULTS</head><p>We present results from several real-world datasets generated from MRI scans. The dimensions of each dataset are given in <ref type="table" target="#tab_0">Table 1, along   1</ref> tetgen.berlios.de with the number of materials and sample points. The torso and brain datasets were sampled on a P4 3.2GHz CPU with 2GB of memory in approximately 12 hours and 3 hours, respectively. The frog and spheres datasets were sampled on a laptop with a Celeron 1.4GHz CPU and 1GB of memory in approximately 5 hours and 4 minutes, respectively. Running on four Dual-Core AMD Opteron 3.0GHz processors, the preprocessing steps for each dataset (i.e., tightening each material volume, computing the medial axes, and generating the sizing field) required roughly the same amount of time as the respective particle sampling steps. We note that very little work was done to optimize the preprocessing pipeline, and we believe that these steps could be further streamlined, or, implemented with different algorithms (e.g., other methods for computing the medial axes). A driving application for this work is the simulation of cardiac defibrillation in children. The goal is to generate a pipeline that will acquire a MRI scan of a child, generate patient-specific geometry from the scanned data, and to then determine an ideal placement for a cardiac defibrillator through FEM simulation. The torso dataset shown in <ref type="figure">Figure 1</ref> was generated from a segmented MRI volume in this study, and consists of five materials: the torso tissue, bone, lung, heart, and air. Although other materials exist in the original MRI scan, decisions on which to include in the final simulation must be made to keep the number of elements manageable. For example, including the thin layers of fluid that exist between different organs would induce excessive numbers of elements as the feature size of this material layer is very small. Both the brain and frog datasets shown in <ref type="figure" target="#fig_4">Figures 5 and 6</ref> were also generated from MRI scans that had been segmented into multilabel volumes. The synthetic two-sphere example in <ref type="figure" target="#fig_5">Figure 7</ref> was generated over a grid from the difference of two analytically represented spheres.</p><p>For many FEM simulations used in biomedical computing, the condition number, i.e., the value that describes how numerically wellbehaved a simulation will be, is directly related to the most poorlyshaped element in a tessellation. A metric that is commonly used to quantify the quality of surface meshes for FEM is the ratio of the inscribed circle to the circumscribing circle of a triangle, 2r in /r circ <ref type="bibr" target="#b42">[43]</ref>. A ratio of one indicates an equilateral triangle, and a ratio of zero indicates a triangle that has collapsed down to an edge. In <ref type="table" target="#tab_1">Table 2</ref> we present statics for the tessellations generated with the proposed method, including the ratio of the most poorly shaped triangle for each mesh. These statistics indicate that not only are the bulk of the triangles nearly regular, but also that the worst shaped triangle is of consistently high-quality. This latter result is important for eliminating the time-consuming, and common, chore of hand tweaking mesh elements to make them suitable for simulations.</p><p>We compare our results against a grid-based multimaterial meshing scheme using the VTK software 2 . Common to these approaches is a pipeline that first extracts a nonmanifold mesh from a discrete, multilabel volume, followed by a smoothing step to eliminate voxelization artifacts, and finally a decimation of the mesh to decrease the number of triangles <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b17">18]</ref>. Our implementation uses the vtkDis-creteMarchingCubes class to extract a mesh of the interfaces, the vtk-WindowedSincPolyDataFilter to smooth the voxelization artifacts, and the vtkQuadricDecimation to reduce the number of triangles. We generated meshes using this pipeline of the two-sphere and frog examples <ref type="figure">Fig. 6</ref>. Meshes of the frog dataset generated from an MRI scan, which was segmented into five different materials. with approximately the same number of triangles as the analogous particle system-based examples. The minimum and average radius ratios for the spheres are 0.014 and 0.79, respectively, and for the frog 0.0 and 0.79, respectively. Not only is the quality of these meshes significantly lower than for the particle system-based meshes, but the sizes of the triangles do not adapt to the underlying geometry. Adaptive triangulations are important for efficiently capturing the geometry of an object with as few elements as possible. We present a visual comparison of these results in <ref type="figure">Figure 8</ref>. The proposed method is also well-suited for generating volumetric samples of multimaterial datasets. We have extended the particle system framework for packing spheres inside of sampled multimaterial interfaces. The spheres are distributed using the same sizing field that guides the surface samples, which is smoothed away from the surface such that larger values are on the inside of materials. The spheres are distributed as an additional step at the end of the ordered distribution process. These volume samples can be used to generate tetrahedral meshes that conform to the material interfaces and respect the LFS of the boundaries (see <ref type="figure">Figure 9)</ref>.</p><p>We have experimented with TetGen for creating tetrahedral meshes with, and without, the packed spheres, to test a range of options for generating volumetric meshes. In the latter case, we allow TetGen to place additional points inside of the surface meshes to meet quality metrics based on the radius-edge ratio. In both cases, however, poorly-shaped elements known as slivers are present in the meshthese slivers are characterized as a flat tetrahedron with vertices that are nearly coplanar, and are a common challenge for tetrahedralization algorithms as well-spaced points do not guarantee well-shaped tetrahedra <ref type="bibr" target="#b18">[19]</ref>. Several algorithms with shape guarantees have been developed for eliminating slivers <ref type="bibr" target="#b14">[15,</ref><ref type="bibr" target="#b12">13]</ref>, although it has been noted that, in practice, inserting points at the circumsphere centers of slivers works well <ref type="bibr" target="#b41">[42]</ref>. In <ref type="table">Table 3</ref> we report the minimum and average radius ratios for the tetrahedral meshes in <ref type="figure">Figure 9</ref> (where again, a value of one indicates a regular tetrahedron), along with the percentage of elements that are characterized as slivers (i.e., with a radius ratio less than 0.1). We observed that the slivers in the tetrahedral meshes generated from packed spheres exist almost exclusively near the surface mesh, which is a similar phenomena encountered in other tetrahedral mesh generation algorithms <ref type="bibr" target="#b2">[3]</ref>. To provide a proof-of-concept for taking real-world data containing multiple materials through a complete simulation pipeline, we have implemented a point-based physics algorithm using the packed spheres and surface meshes. In these simulations, research has shown that both physical and geometric complexity are highly correlated <ref type="bibr" target="#b0">[1]</ref>, and that the stability and accuracy of the simulation is directly related to the ability of the surface and volume samples to capture the LFS of the material boundaries. The algorithm simulates elastic materials <ref type="bibr" target="#b31">[32]</ref>, and is extended to handle multimaterial objects by assigning different physical properties to volume samples of different material types. We utilize surface meshes generated from the particles sampling the multimaterial interfaces to include collision detection between materials of different types <ref type="bibr" target="#b24">[25]</ref>, as well as for rendering the simulation results. In the supplemental video we present simulation results of the frog dataset dropping onto a flat surface. The video contrasts the results from assigning all volume samples the same material parameters with that from assigning different parameters to each material. By assigning different properties to each material in the frog, more <ref type="figure">Fig. 8</ref>. Comparisons of multimaterial meshes generated using a gridbased approach (top) and our particle system-based approach (bottom). The left column is the two-sphere example, and the right column is a closeup from the frog example.</p><p>complex and realistic simulations can be achieved, including stiffness within the head and body due to the rigid bone structure. This example illustrates not only the importance of modeling multiple materials of objects for increasingly realistic simulations, but also the potential for automatically generating complex digital models from scanned, realworld objects. <ref type="table">Table 3</ref>. Quality of tetrahedral meshes generated for the datasets in <ref type="figure">Figure 9</ref>. The different generation methods are: (SP) sphere packing; (SP-1R) sphere packing with one iteration of refinement; (SP-2R) sphere packing with two iterations of refinement; (TG) volumetric points added by TetGen. An element is considered a sliver when its radius ratio is less than 0.1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Material</head><p>Generation </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSIONS AND FUTURE WORK</head><p>The high-quality results of our method come at the cost of long computation times. Most of that time is spent in preprocessing the multilabel data and distributing the sets of particles. The number of materials in the dataset also adds to the overall computation time as the max function must evaluate every f i that exists in the set. However, the quality of the meshes from our particle-based scheme is so high that we can <ref type="figure">Fig. 9</ref>. Tetrahedralizations of the interface and volume particle samples, shown with a cutting plane.</p><p>avoid the usually time-consuming step of meticulous hand-editing of mesh vertices to ensure well-shaped elements. We are currently working towards an optimized implementation of this pipeline for public release, and we are interested in adapting more complex tetrahedralization algorithms to the multimaterial surfaces to produce higher quality volume meshes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">APPENDIX</head><p>Differentiable Approximation to max We present an analytic, differentiable approximation to max for a set of m functions v i ∈ V that interpolates the max(i, j) at i = j by first defining a function g:</p><formula xml:id="formula_11">g(v) = 1 + v (v 2 + ε 2 max ) 1/2 .<label>(10)</label></formula><p>The max function is then:</p><formula xml:id="formula_12">max(V ) = 1 2 m−1 m ∑ i=1 v i m ∏ j=1, j =i g(v i − v j )<label>(11)</label></formula><p>with the gradient given by:</p><formula xml:id="formula_13">∇ max(V ) = 1 2 m−1 m ∑ i=1 ∇v i m ∏ j=1, j =i g(v i − v j )+ v i m ∑ j=1, j =i ∇g(v i − v j ) m ∏ j=1, j =i g(v i − v j )<label>(12)</label></formula><p>where:</p><formula xml:id="formula_14">∇g(v) = ∇v 1 (v 2 + ε 2 max ) 1/2 − v 2 (v 2 + ε 2 max ) 3/2 .<label>(13)</label></formula><p>For the results in this paper we use ε max = 10 −5 .</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>•</head><label></label><figDesc>M. Meyer, C. Ledergerber, and H. Pfister are with the Initiative in Innovative Computing at Harvard University, E-mail: miriah,ledergerber,pfister@seas.harvard.edu. • R. Whitaker and R.M. Kirby are with the Scientific Computing and Imaging Institute at the University of Utah, E-mail: whitaker,kirby@sci.utah.edu. • M. Meyer accomplished this work while at the Scientific Computing and Imaging Institute at the University of Utah. Manuscript received 31 March 2008; accepted 1 August 2008; posted online 19 October 2008; mailed on 13 October 2008. For information on obtaining reprints of this article, please send e-mailto:tvcg@computer.org.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 .</head><label>2</label><figDesc>In 2D, a 3-material junction is generic and forms a 0-cell (a); it maintains its topology under small perturbations (b). A 4-material junction (c), however, is a nongeneric case, and is annihilated under small perturbations (d) to form generic 2-and 3-material junctions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 3 .</head><label>3</label><figDesc>Material interfaces in multimaterial datasets exist where a volumetric model of the data transitions from one maximal material to another, shown by the dotted lines for a set of three indicator functions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 .</head><label>4</label><figDesc>When materials have thin regions, tightening can remove a large amount of material to obtain the required minimum radius of curvature.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 .</head><label>5</label><figDesc>Meshes of the white matter and cerebral spinal fluid (CSF) of a brain dataset generated from an MRI scan.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 7 .</head><label>7</label><figDesc>A synthetic example of two intersecting spheres, illustrating the consistency of the meshes along the shared boundary.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head>Table 1 .</head><label>1</label><figDesc>The dimensions and number of materials of each dataset, and the number of particles used to sample the material junctions.</figDesc><table><row><cell>Dataset</cell><cell>Source</cell><cell>Volume</cell><cell># Particles</cell></row><row><cell>(# Materials)</cell><cell></cell><cell>Dimensions</cell><cell></cell></row><row><cell>torso (5)</cell><cell>MRI</cell><cell>260 × 121 × 169</cell><cell>394k</cell></row><row><cell>frog (5)</cell><cell>MRI</cell><cell>260 × 245 × 150</cell><cell>186k</cell></row><row><cell>brain (3)</cell><cell>MRI</cell><cell>149 × 188 × 148</cell><cell>161k</cell></row><row><cell cols="3">two spheres (3) synthetic 128 × 128 × 128</cell><cell>1214</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 2 .</head><label>2</label><figDesc>Statistics about each mesh and their quality.</figDesc><table><row><cell>Material</cell><cell>Number of</cell><cell>Min / Avg</cell></row><row><cell></cell><cell cols="2">Triangles Radius Ratio</cell></row><row><cell>torso tissue</cell><cell>673k</cell><cell>0.39 / 0.94</cell></row><row><cell>torso bone</cell><cell>460k</cell><cell>0.31 / 0.94</cell></row><row><cell>torso lung</cell><cell>215k</cell><cell>0.32 / 0.93</cell></row><row><cell>torso heart</cell><cell>140k</cell><cell>0.38 / 0.93</cell></row><row><cell>frog tissue</cell><cell>367k</cell><cell>0.30 / 0.94</cell></row><row><cell>frog bone</cell><cell>197k</cell><cell>0.37 / 0.94</cell></row><row><cell>frog guts</cell><cell>46k</cell><cell>0.30 / 0.94</cell></row><row><cell>frog brain</cell><cell>8k</cell><cell>0.52 / 0.94</cell></row><row><cell>brain white matter</cell><cell>255k</cell><cell>0.39 / 0.94</cell></row><row><cell>brain csf</cell><cell>92k</cell><cell>0.42 / 0.94</cell></row><row><cell>spheres top</cell><cell>1544</cell><cell>0.51 / 0.92</cell></row><row><cell>spheres bottom</cell><cell>1506</cell><cell>0.52 / 0.92</cell></row></table><note></note></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="2">vtk.org</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>The authors wish to thank Claudio Silva for the insightful conversations that inspired this work. The torso dataset is courtesy of Matthew Jolley at Children's Hospital Boston, and the brain dataset is courtesy of Tolga Tasdizen. This work was supported in part by ARO grant W911NF-05-1-0395, NIH/NCRR Center for Integrative Biomedical Computing, P41-RR12553-07, and NSF-CNS grant CNS 0551724.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Adaptively sampled particle fluids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Adams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pauly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Keiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">J</forename><surname>Guibas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page">48</biblScope>
+			<date type="published" when="2007-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Point-sampled cell complexes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Adamson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Alexa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="671" to="680" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Variational tetrahedral meshing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Alliez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Steiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Yvinec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Desbrun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions On Graphics</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="617" to="625" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">The crust and the beta-skeleton: Combinatorial curve reconstruction. Graphic Models and Image Processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Amenta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bern</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Eppstein</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998-03" />
+			<biblScope unit="volume">60</biblScope>
+			<biblScope unit="page" from="125" to="135" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">A new voronoi-based surface reconstruction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Amenta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bern</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kamvysselis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SIGGRAPH</title>
+		<meeting>SIGGRAPH</meeting>
+		<imprint>
+			<date type="published" when="1998-07" />
+			<biblScope unit="page" from="415" to="421" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Nonmanifold mesh extraction from time-varying segmented volumes used for modeling a human heart</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bertram</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Reis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">H</forename><surname>Van Lengen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Köhn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hagen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EuroVis</title>
+		<meeting>EuroVis</meeting>
+		<imprint>
+			<date type="published" when="2005-06" />
+			<biblScope unit="page" from="199" to="206" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Extracting Consistent and Manifold Interfaces from Multi-valued Volume Data Sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Bischoff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kobbelt</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Polygonization of non-manifold implicit surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bloomenthal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ferguson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;95: Proceedings of the 22nd annual conference on Computer graphics and interactive techniques</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="309" to="316" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Provably good sampling and meshing of surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-D</forename><surname>Boissonnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Oudot</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Graphical Models</title>
+		<imprint>
+			<biblScope unit="volume">67</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="405" to="451" />
+			<date type="published" when="2005-09" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Provably good sampling and meshing of lipschitz surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-D</forename><surname>Boissonnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Oudot</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SCG &apos;06: Proceedings of the twenty-second annual symposium on Computational geometry</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="337" to="346" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Material interface reconstruction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">S</forename><surname>Bonnell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Duchaineau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">R</forename><surname>Schikore</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="500" to="511" />
+			<date type="published" when="2003-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">A sampling theory for compact sets in euclidean space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Chazal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Steiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lieutier</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SCG &apos;06: Proceedings of the twentysecond annual symposium on Computational geometry</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="319" to="326" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S.-W</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">K</forename><surname>Dey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Edelsbrunner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Facello</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S.-H</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Teng. Sliver exudation. J. ACM</title>
+		<imprint>
+			<biblScope unit="volume">47</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="883" to="904" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Delaunay refinement for piecewise smooth complexes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S.-W</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">K</forename><surname>Dey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">A</forename><surname>Ramos</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SODA &apos;07: Proceedings of the eighteenth annual ACM-SIAM symposium on Discrete algorithms</title>
+		<meeting><address><addrLine>Philadelphia, PA, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="1096" to="1105" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Guaranteed-quality delaunay meshing in 3d (short version)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">P</forename><surname>Chew</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SCG &apos;97: Proceedings of the thirteenth annual symposium on Computational geometry</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM Press</publisher>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="391" to="393" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Isosurface extraction using particle systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Crossno</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Angel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 8th conference on Visualization &apos;97</title>
+		<meeting>the 8th conference on Visualization &apos;97</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="495" to="498" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Tight Cocone: A water-tight surface reconstructor</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">K</forename><surname>Dey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Goswami</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computing and Information Science in Engineering</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="302" to="307" />
+			<date type="published" when="2003-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Construction of simplified boundary surfaces from serial-sectioned metal micrographs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dillard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bingert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Thoma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1528" to="1535" />
+			<date type="published" when="2007-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Global optimization of mesh quality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Eppstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Tutorial at the 10th International Meshing Roundtable</title>
+		<meeting><address><addrLine>Newport Beach</addrLine></address></meeting>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">C</forename><surname>Gonzalez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">E</forename><surname>Woods</surname></persName>
+		</author>
+		<title level="m">Digital Image Processing</title>
+		<meeting><address><addrLine>Boston, MA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Addison-Wesley Longman Publishing Co., Inc</publisher>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Using the CW-complex to represent the topological structure of implicit surfaces and solids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Hart</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Implicit Surfaces</title>
+		<meeting>Implicit Surfaces</meeting>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="107" to="112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">A generalized marching cubes algorithm based on non-binary classifications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-C</forename><surname>Hege</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Seebaß</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Stalling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zöckler</surname></persName>
+		</author>
+		<idno>SC-97-05</idno>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+	<note type="report_type">ZIB Preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Dual contouring of hermite data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ju</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Losasso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Schaefer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Warren</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="339" to="346" />
+			<date type="published" when="2002-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Curvature-dependent triangulation of implicit surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Karkanis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Stewart</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="60" to="69" />
+			<date type="published" when="2001-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Contact handling for deformable point-based objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Keiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Heidelberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Teschner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 9th International Workshop &quot;Vision, Modeling, and Visualization</title>
+		<meeting>the 9th International Workshop &quot;Vision, Modeling, and Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004-11" />
+			<biblScope unit="page" from="339" to="346" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Istar: A raster representation for scalable image and volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kniss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hunt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Potter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Sen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1424" to="1431" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Marching Cubes: A high resolution 3d surface construction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACM SIGGRAPH</title>
+		<meeting>ACM SIGGRAPH</meeting>
+		<imprint>
+			<date type="published" when="1987-07" />
+			<biblScope unit="page" from="163" to="169" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Motion of multiple junctions: A level set approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Merriman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">K</forename><surname>Bence</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">J</forename><surname>Osher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Comput. Phys</title>
+		<imprint>
+			<biblScope unit="volume">112</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="334" to="363" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">Dynamic Particles for Adaptive Sampling of Implicit Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Meyer</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+		<respStmt>
+			<orgName>School of Computing, University of Utah</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Robust particle systems for curvature dependent sampling of implicit surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Meyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Georgel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Whitaker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Shape Modeling and Applications (SMI)</title>
+		<meeting>the International Conference on Shape Modeling and Applications (SMI)</meeting>
+		<imprint>
+			<date type="published" when="2005-06" />
+			<biblScope unit="page" from="124" to="133" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Topology, accuracy, and quality of isosurface meshes using dynamic particles</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Meyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Kirby</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Whitaker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1704" to="1711" />
+			<date type="published" when="2007-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Point based animation of elastic, plastic and melting objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Keiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Nealen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pauly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Alexa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SCA &apos;04: Proceedings of the 2004 ACM SIGGRAPH/Eurographics symposium on Computer animation</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM Press</publisher>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="141" to="151" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Computing the separating surface for segmented data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Nielson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Franke</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="1997-11" />
+			<biblScope unit="page" from="229" to="236" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Approximating normals for marching cubes applied to locally supported isosurfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">M</forename><surname>Nielson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Sylvester</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="459" to="466" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Level set methods and dynamic implicit surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Osher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Fedkiw</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Applied Mathematical Sciences</title>
+		<imprint>
+			<biblScope unit="volume">153</biblScope>
+			<date type="published" when="2003" />
+			<publisher>Springer-Verlag</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Meshing volumes bounded by smooth surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Oudot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Rineau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Yvinec</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 14th International Meshing Roundtable</title>
+		<meeting>14th International Meshing Roundtable</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="203" to="219" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Function representation in geometric modeling: concepts, implementation and applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">A</forename><surname>Pasko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Adzhiev</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sourin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">V</forename><surname>Savchenko</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Visual Computer</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="429" to="446" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">High-quality consistent meshing of multi-label datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-P</forename><surname>Pons</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Ségonne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-D</forename><surname>Boissonnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Rineau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Yvinec</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Keriven</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Information Processing in Medical Imaging</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="198" to="210" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Constructing smooth nonmanifold meshes of multi-labeled volumetric datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Reitinger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bornik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Beichel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">WSCG (Full Papers)</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="227" to="234" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">High-quality extraction of isosurfaces from regular and irregular grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schreiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Scheidegger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1205" to="1212" />
+			<date type="published" when="2006-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Sethian</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Level Set Methods and Fast Marching Methods. Cambridge Monograph on Applied and Computational Mathematics</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<publisher>Cambridge University Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Tetrahedral mesh generation by delaunay refinement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">R</forename><surname>Shewchuk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SCG &apos;98: Proceedings of the fourteenth annual symposium on Computational geometry</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="86" to="95" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<monogr>
+		<title level="m" type="main">What is a good linear finite element? interpolation, conditioning, anisotropy, and quality measures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">R</forename><surname>Shewchuk</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report Manuscript</note>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Reducing aliasing artifacts in iso-surfaces of binary volumes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">T</forename><surname>Whitaker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VVS &apos;00: Proceedings of the 2000 IEEE symposium on Volume visualization</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM Press</publisher>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="23" to="32" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Tightening: Curvature-limiting morphological simplification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Williams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Rossignac</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Symposium on Solid and Physical Modeling</title>
+		<meeting>the Symposium on Solid and Physical Modeling</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="107" to="112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Using particles to sample and control implicit surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">P</forename><surname>Witkin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">S</forename><surname>Heckbert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SIGGRAPH</title>
+		<meeting>SIGGRAPH</meeting>
+		<imprint>
+			<date type="published" when="1994-07" />
+			<biblScope unit="page" from="269" to="277" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Non-manifold implicit surfaces based on discontinuous implicitization and polygonization. Geometric Modeling and Processing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Yamazaki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Kase</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ikeuchi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings</title>
+		<imprint>
+			<biblScope unit="page" from="138" to="146" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Automatic 3d mesh generation for a domain with multiple materials</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">J R</forename><surname>Hughes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Bajaj</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IMR</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="367" to="386" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">A variational level set approach to multiphase motion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-K</forename><surname>Zhao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Chan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Merriman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Osher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computational Physics</title>
+		<imprint>
+			<biblScope unit="volume">127</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="179" to="195" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

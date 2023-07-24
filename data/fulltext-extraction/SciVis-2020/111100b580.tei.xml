@@ -1,0 +1,1424 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Visual Analysis of Large Multivariate Scattered Data using Clustering and Probabilistic Summaries</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tobias</forename><surname>Rapp</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christoph</forename><surname>Peters</surname></persName>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carsten</forename><surname>Dachsbacher</surname></persName>
+							<email>dachsbacher@kit.edu</email>
+						</author>
+						<title level="a" type="main">Visual Analysis of Large Multivariate Scattered Data using Clustering and Probabilistic Summaries</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<note type="submission">received xx xxx. 201x; accepted xx xxx. 201x.</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T19:48+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>interactive visual analysis</term>
+					<term>probabilistic data summaries</term>
+					<term>multivariate data</term>
+					<term>scattered data</term>
+					<term>Gaussian mixture models</term>
+					<term>Gaussian rendering</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Rapidly growing data sizes of scientific simulations pose significant challenges for interactive visualization and analysis techniques. In this work, we propose a compact probabilistic representation to interactively visualize large scattered datasets. In contrast to previous approaches that represent blocks of volumetric data using probability distributions, we model clusters of arbitrarily structured multivariate data. In detail, we discuss how to efficiently represent and store a high-dimensional distribution for each cluster. We observe that it suffices to consider low-dimensional marginal distributions for two or three data dimensions at a time to employ common visual analysis techniques. Based on this observation, we represent high-dimensional distributions by combinations of low-dimensional Gaussian mixture models. We discuss the application of common interactive visual analysis techniques to this representation. In particular, we investigate several frequency-based views, such as density plots in 1D and 2D, density-based parallel coordinates, and a time histogram. We visualize the uncertainty introduced by the representation, discuss a level-of-detail mechanism, and explicitly visualize outliers. Furthermore, we propose a spatial visualization by splatting anisotropic 3D Gaussians for which we derive a closed-form solution. Lastly, we describe the application of brushing and linking to this clustered representation. Our evaluation on several large, real-world datasets demonstrates the scaling of our approach.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>We model each cluster using combinations of low-dimensional Gaussian mixture models. This allows us to interactively visualize the position of particles by splatting 3D Gaussians (a) and to create density-based 1D and 2D plots, depicted in (b) and (c). A density-based parallel coordinate plot is shown in (d). All of those views support interactive navigation and exploration by brushing (red) and linking. We render this massive dataset in 28 ms on an NVIDIA GTX 1080 Ti at a resolution of 1920 × 1080.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>The field of scientific visualization is confronted with rapidly growing amounts of data, including multivariate and time-dependent data.</p><p>Interactive visual analysis <ref type="bibr" target="#b45">[46]</ref> approaches have been established as a powerful approach to facilitate knowledge discovery in complex datasets. However, growing data sizes make the interactive exploration increasingly difficult or even impossible for some datasets.</p><p>To deal with large amounts of data, recent approaches employ probabilistic data summaries <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b7">8,</ref><ref type="bibr" target="#b11">12,</ref><ref type="bibr" target="#b44">45]</ref> to represent blocks of data as probability distributions. These approaches have been mostly limited to univariate, volumetric data. In this work, we propose a representation that supports arbitrarily structured, time-dependent, and multivariate data defined in a two-or three-dimensional spatial domain. To this end, the data needs to be partitioned, i.e. clustered into spatially coherent regions. In each cluster, we make use of Gaussian mixture models (GMMs) to compactly represent a probability distribution of the data using a weighted combination of Gaussian components. However, multivariate data requires modeling high-dimensional distributions, which suffer from the curse of dimensionality. Our approach is based on the observation that representations of low-dimensional marginal distributions suffice to analyze and visualize the data. All common visualizations, such as scatter plots, histograms, and parallel coordinate plots, require only 1D or 2D distributions. The exception is the spatial domain of scattered data in 3D for which we employ a 3D distribution. Thus, we model the marginal distributions of all individual dimensions and pairs of dimensions as well as the spatial 3D distribution.</p><p>For large data, common item-based visualizations, such as scatter and parallel coordinate plots, are challenged by overdraw and cluttering. Frequency-based visualizations are a viable alternative in this case <ref type="bibr" target="#b24">[25,</ref><ref type="bibr" target="#b33">34]</ref>. Density estimation <ref type="bibr" target="#b39">[40]</ref> is a frequency-based approach commonly used in statistics. However, its usage in interactive visualization has been limited due to performance considerations. Although our approach supports all common visualization techniques, it is especially well suited to density-based techniques since our modeled distributions are already an estimate of density. We discuss the efficient visualization and interaction with density-based plots using our compact representation. Additionally, we consider time-dependent histograms that would otherwise be infeasible to produce for large datasets. In this view, we can interactively brush over different time steps. To visualize the uncertainty introduced by our data representation, we propose an error metric based on the cumulative distribution function, similar to statistical goodness of fit tests. A level-of-detail mechanism allows scientists to drill down on interesting or uncertain regions in the data. Additionally, we discuss the explicit visualization of outliers, which are not handled well by density-based visualizations.</p><p>Our last contribution is the visualization of spatial density distributions. Since drawing and rendering samples from the GMMs would be infeasible for large, scattered datasets, we directly render 3D Gaussians. We derive a closed-form solution to integrate anisotropic Gaussians using a splatting approach. Back-to-front splatting has the disadvantage that it assumes non-overlapping Gaussians. Therefore, we employ moment-based order-independent transparency <ref type="bibr" target="#b30">[31]</ref> for datasets where this is not an acceptable assumption. To summarize, our main contributions are:</p><p>• We define compact data representations based on probabilistic models of low-dimensional marginal distributions for scattered, multivariate data,</p><p>• We describe interactive visual analysis techniques based on our probabilistic data summaries,</p><p>• We efficiently visualize scattered, overlapping, anisotropic 3D Gaussians.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>In this section, we discuss previous work on probabilistic data modeling, density-based visualizations, and the rendering of 3D Gaussians.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Probabilistic Modeling of Large Data</head><p>Several probabilistic approaches to represent large volumetric, univariate datasets have been proposed. Thompson et al. <ref type="bibr" target="#b41">[42]</ref> describe hixels, a data representation that stores a histogram per block of voxels. Liu et al. <ref type="bibr" target="#b26">[27]</ref> discuss volume rendering using per voxel Gaussian mixture models. Sicat et al. <ref type="bibr" target="#b38">[39]</ref> construct a multi-resolution volume from sparse probability density functions defined in the 4D domain comprised of the spatial and data range. To visualize and analyze large volumetric data, Wang et al. <ref type="bibr" target="#b44">[45]</ref> employ a spatial GMM in addition to a value distribution in each data block. For in-situ feature analysis of time-varying data, Dutta et al. <ref type="bibr" target="#b6">[7]</ref> perform incremental GMM estimation instead of expectation maximization, which is traditionally used to estimate the parameters of a mixture model. By design, none of these approaches is applicable to more than four dimensions. Dutta et al. <ref type="bibr" target="#b7">[8]</ref> model a single Gaussian or a GMM with a fixed number of components to each univariate value distribution in a cluster of the data.</p><p>The authors compare several clustering techniques to determine homogeneous regions in volumetric data. Since an optimal clustering of the data is generally domain or application specific, we do not make any assumptions about the clustering procedure. Our method overcomes the limitation to low-dimensional data by working with low-dimensional GMMs for all relevant combinations of dimensions. We also introduce a fast and adaptive selection of the number of GMM components. For parameter studies in cosmological simulations, Wang et al. <ref type="bibr" target="#b43">[44]</ref> store GMMs as a prior knowledge to reconstruct high-resolution datasets from multiple prior simulation runs. Li et al. <ref type="bibr" target="#b25">[26]</ref> reduce cosmological simulation data in-situ by subdividing space using a k-d tree and estimating particle density using a GMM in each leaf node. During the analysis stage, particles are sampled from the GMMs. Hazarika et al. <ref type="bibr" target="#b10">[11]</ref> propose a copula-based uncertainty modeling approach to represent a multivariate distribution using different types of univariate distributions, including GMMs, separately from their interrelation. To summarize large-scale multivariate volumetric data, a copula-based analysis framework has been introduced <ref type="bibr" target="#b11">[12]</ref>. This approach is the first to address the modeling of multivariate data, but the Gaussian copula function limits the correlations between dimensions to a single Gaussian. Whilst we similarly decompose a high-dimensional model into more manageable low-dimensional models, we do not share this limitation. Moreover, the approaches of Hazarika et al. and Li et al. require sampling, which hinders the application to interactive visual analysis, especially for rendering scattered data. Similarly, we do not perform subsampling of scattered data <ref type="bibr" target="#b35">[36,</ref><ref type="bibr" target="#b47">48]</ref> for data reduction since our GMMs already estimate density, which we use directly in our density-based visualizations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Density-Based Scatter and Parallel Coordinate Plots</head><p>Scatter and parallel coordinate plots can be used to visualize multivariate data. For large data, these item-based visualizations are challenged by overdraw and visual clutter. Instead of drawing discrete glyphs, density estimation methods reconstruct and visualize a continuous density of data values. For scatterplots, a simple form of density estimation is to draw individual points semi-transparently using alpha blending. Histograms and hexagonal binning are often employed to convey frequency information, but can lead to aliasing due to their discrete nature. The concept of histograms has also been extended to parallel coordinate space <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b2">3,</ref><ref type="bibr" target="#b33">34]</ref>. Although kernel density estimation would allow for an improved reconstruction of continuous density, it is computationally expensive. Splatterplots <ref type="bibr" target="#b28">[29]</ref> perform kernel density estimation to avoid overdraw, but explicitly add representative outliers. We estimate density using GMMs and similarly support the explicit visualization of outliers.</p><p>In the field of scientific visualization, continuous scatter and parallel coordinate plots have been introduced <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b13">14]</ref> to construct density plots by considering the topology and interpolation of data samples in their spatial domain. Despite optimizations <ref type="bibr" target="#b12">[13]</ref>, this remains a computationally challenging approach that is unsuited for the interactive analysis of large-scale datasets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Rendering 3D Gaussians</head><p>The encoding of scattered, unstructured, or large volumetric data using radial basis functions (RBF) has been an active research topic <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b16">17,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b46">47]</ref>. This involves the rendering of isotropic and anisotropic Gaussian kernels <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b19">20,</ref><ref type="bibr" target="#b32">33]</ref>. In detail, Zwicker et al. <ref type="bibr" target="#b48">[49]</ref> discuss splatting of elliptical Gaussians by approximating the footprint after perspective projection. They extend their splatting approach by combining the reconstruction with a low-pass kernel, which could be similarly applied to our approach. In contrast to previous work, we derive a closedform solution to integrate a Gaussian kernel along a ray. This enables us to efficiently splat large amounts of Gaussians without requiring expensive precomputation. Note that we consider three-dimensional Gaussians defined by a mean and covariance matrix, which makes the use of a view-independent look-up table infeasible. Additionally, we employ moment-based order-independent transparency <ref type="bibr" target="#b30">[31]</ref> to address the short-comings of back-to-front splatting. Our method could also be employed during volume ray casting <ref type="bibr" target="#b22">[23]</ref>.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">PROBABILISTIC SUMMARIES</head><p>In this work, we describe the creation of probabilistic data summaries for multivariate, scattered data. We assume that the data is clustered into spatially coherent regions <ref type="bibr" target="#b7">[8]</ref>. In Sect. 6, we discuss both domain specific and standard clustering techniques for scattered data. Similar to previous work, we employ Gaussian mixture models to represent data distributions in each cluster. However, these have not been applied to multivariate data. High-dimensional Gaussian mixture models require immense computational effort and due to the curse of dimensionality, there are not enough samples to cover a multi-dimensional space extensively.</p><p>Our approach is based on the observation that we do not require more than three data-dimensions at once to employ common interactive visual analysis techniques. In fact, the visualization of the spatial distribution is the only aspect considering correlations of three dimensions. Therefore, our approach is to only generate GMMs for the relevant combinations of dimensions. By default, these are all individual dimensions, all pairs of dimensions (cf. <ref type="figure" target="#fig_2">Fig. 2</ref>) and all vectorial attributes. As for high-dimensional GMMs, the storage cost grows quadratically with the number of dimensions. To better reason about our approach, we first introduce it more formally.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Data Model</head><p>Our data consists of n ∈ N samples. Each sample is associated with a position in 3D space, m v − 1 ∈ N 0 additional vectorial attributes and m s ∈ N 0 scalar attributes. Of course, the approach is also applicable to scattered data in 1D or 2D space. We denote the data for sample i ∈ {0,...,n − 1} by:</p><formula xml:id="formula_0">• v i,0 ∈ R 1×3 for the position, • v i, j ∈ R 1×3 for vectorial attribute j ∈ {1,...,m v − 1}, • s i, j ∈ R for scalar attribute j ∈ {0,...,m s − 1}.</formula><p>To define our probabilistic summaries, we concatenate all attributes for sample i ∈ {0,...,n − 1} into a single vector with m u := 3m v + m s entries to enable linear indexing:</p><formula xml:id="formula_1">u i := (v i,0 , v i,1 ,...,v i,mv−1 , s i,0 ,...,s i,ms−1 ) ∈ R 1×mu .</formula><p>GMMs are generated for each given cluster I ⊆ {0,...,n − 1} and for each relevant combination of dimensions. First, we generate 1D models for each attribute j ∈ {0,...,m u − 1}:</p><formula xml:id="formula_2">(u i, j ) i∈I ∈ R |I|×1 .</formula><p>Then, we generate 2D models for each pair of dimensions j, k ∈ {0,...,m u − 1} with j &lt; k: <ref type="figure">Fig. 3</ref>: To the distribution shown by the histogram, we have fitted a Gaussian (red) and a mixture of two Gaussians (blue). In this example, the GMM better models the data.</p><formula xml:id="formula_3">(u i, j , u i,k ) i∈I ∈ R |I|×2 . −0.2 0.0 0.2 0.4 0.6 0.8 1.0 1.2 0 1 2 GMM, 2 components Gaussian</formula><p>Finally, we generate 3D models for each vectorial attribute j ∈ {0,...,m v − 1}:</p><formula xml:id="formula_4">(v i, j ) i∈I ∈ R |I|×3 .</formula><p>Of course, the generation of GMMs for particular combinations of attributes may be skipped if the analysis of their mutual dependence is of no interest in a specific application. Our probabilistic summary is the combination of all these lowdimensional GMMs for all clusters. They capture all information needed for common interactive visual analysis techniques but limit the analysis of higher dimensional correlations. By modeling only low-dimensional distributions, the curse of dimensionality does not apply. Ultimately, this limitation enables us to create reliable models of multivariate data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Gaussian Mixture Models</head><p>We use GMMs because they offer a compact and efficient representation of the target distributions and have been employed successfully for modeling low-dimensional distributions in previous work <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b7">8,</ref><ref type="bibr" target="#b44">45]</ref>. In the following, we provide more details on our fitting procedure.</p><p>We generate a GMM for each combination of a cluster I and a relevant subset of attributes J ⊆ {0,...,m u − 1}. As explained above, the number of attributes |J| is one, two, or three. A GMM is indexed by a pair g := (I, J) and consists of n g ∈ N weighted Gaussians. Gaussian l ∈ {0,...,n g − 1} is given by its weight w g,l &gt; 0, its mean μ g,l ∈ R |J| and its covariance Σ g,l ∈ R |J|×|J| . The density of a GMM at p ∈ R |J| is the weighted sum of the individual Gaussian densities ( <ref type="figure">Fig. 3</ref>):</p><formula xml:id="formula_5">ρ g (p) := ng−1 ∑ l=0 w g,l |2πΣ g,l | exp − (p − μ g,l ) T Σ −1 g,l (p − μ g,l ) 2 .</formula><p>We compute the parameters of a GMM from a sequence of input samples with the expectation maximization (EM) procedure. This iterative method seeks maximum likelihood estimates of the model parameters. It alternates between an expectation step, which evaluates the log-likelihood of the input samples using the current parameters, and a maximization step, which computes the parameters by maximizing the expected log-likelihood found in the expectation step.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Fast Selection of GMM Components</head><p>The EM algorithm takes the number of Gaussian components n g as input. With more components, the target distribution can be modeled better. However, too many components may not significantly improve the model, but increase the storage overhead. A fixed, arbitrary number of number of components is often used <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b7">8,</ref><ref type="bibr" target="#b11">12]</ref>. Similar to Wang et al. <ref type="bibr" target="#b44">[45]</ref>, we adaptively select the appropriate number of components, but propose approximations to significantly reduce the computational complexity.</p><p>We iteratively fit GMMs with an increasing number of components up to a user specified maximum and select the GMM with the best Bayesian information criterion (BIC) <ref type="bibr" target="#b37">[38]</ref>. The BIC rewards a high likelihood over the training data and penalizes by the number of components. It is defined using the number of free parameters k GMM in the GMM as</p><formula xml:id="formula_6">−2L p + k GMM log |I|,</formula><p>where L p denotes the maximized log-likelihood and k GMM is given by</p><formula xml:id="formula_7">k GMM := n g |J|(|J| + 1) 2 + |J| + |J| − 1.</formula><p>The iterative computation of GMMs with different numbers of components is computationally challenging, especially for large clusters. To speed up the selection of the best n g , we propose two approximations: First, we take a random subset I S ⊂ I of our cluster whilst iteratively estimating the GMMs. After we have selected the best n g based on the BIC, we recompute the GMM with n g components for the whole cluster I.</p><p>Second, after we have selected the number of components {n 0 ,...,n mu−1 } for all one-dimensional GMMs, we use them as lower and upper bounds for the two-and three-dimensional GMMs. In detail, for a subset of attributes J ⊆ {0,...,m u −1}, we define the lower bound as</p><formula xml:id="formula_8">n min I,J := min j∈J n I,{ j}</formula><p>and an approximate upper bound as</p><formula xml:id="formula_9">n max I,J := Π j∈J n I,{ j} .</formula><p>This implies that the higher-dimensional GMMs include at least the complexity of lower dimensions, whilst being bound by all combinations of all lower dimensional Gaussian components. In the supplementary material, we show that the bounds introduce no error, whilst the subsampling introduces a small error on our datasets. Lastly, it is possible that some clusters contain only a small number of data samples. Although such a clustering may not seem optimal, it is quite likely to occur for scattered data. For very small clusters, e.g. |I| ≤ 20, fitting a GMM is problematic since the target distribution may be underdetermined. In this case, we fit a single Gaussian to these clusters.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">SPATIAL VISUALIZATION</head><p>In this section, we discuss the visualization of the spatial density distribution. Although we could reconstruct the original data by drawing samples from the GMM of each cluster, this would require rendering a large amount of scattered data. Instead, we derive an efficient formulation to directly splat three-dimensional Gaussians. Additionally, we consider the application of a transfer function to a one-dimensional value distribution in each cluster.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Integrating Visibility for Gaussians</head><p>To render a trivariate Gaussian distribution, we integrate along a view ray o + xd starting at o ∈ R 3 in normalized direction d ∈ R 3 with x ∈ R. The Gaussian is given by its weight w := w g,l , mean μ := μ g,l ∈ R 3 and covariance Σ := Σ g,l ∈ R 3×3 . To derive a general solution, we integrate over <ref type="bibr">[a, b]</ref> by substituting the ray equation into the trivariate Gaussian distribution:</p><formula xml:id="formula_10">I(a, b) := b a 1 |2πΣ| exp − (o + xd − μ) T Σ −1 (o + xd − μ) 2 dx.</formula><p>Through integration by substitution (see the supplementary material), we obtain the following closed-form solution:</p><formula xml:id="formula_11">I(a, b) = c √ π √ c d,d 1 2 erf(y) √ cd,d b+ c o,d c d,d √ cd,d a+ c o,d c d,d ,<label>(1)</label></formula><p>with</p><formula xml:id="formula_12">c d,d := 1 2 d T Σ −1 d, c o,d := 1 2 (o − μ) T Σ −1 d, c := 1 |2πΣ| exp − 1 2 (o − μ) T Σ −1 (o − μ) + c 2 o,d c d,d .</formula><p>When integrating over all of R, this result simplifies to</p><formula xml:id="formula_13">I(−∞, ∞) = c √ π √ c d,d .<label>(2)</label></formula><p>We could use this result inside a ray tracer, possibly with ray tracing GPUs <ref type="bibr" target="#b21">[22]</ref>. It only has to identify relevant Gaussians per pixel, ray marching for integration becomes unnecessary. In the following, we discuss our approach using GPU rasterization, which works efficiently on commodity graphics hardware.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Back-to-Front Splatting</head><p>To splat scattered 3D Gaussians, we sort them from back-to-front based on their mean distance to the camera. Then, we integrate the Gaussians along the viewing direction using Equation 2. Integrating from −∞ to ∞ is generally a reasonable approximation, but it is possible that we incorrectly evaluate a Gaussian if the camera is positioned within its support. Alternatively, we could employ Equation 1, but this is far more expensive and only gives a benefit in rare cases.</p><p>To render a single 3D Gaussian, we first compute the principal components of the distribution to fit a bounding box along the principal axes. By default, we limit the size of the bounding box in each dimension by 3 standard deviations. This box is then rasterized and for each resulting fragment, we integrate the Gaussian along the viewing direction in a fragment shader using Equation 2. Finally, we tone-map the resulting density (see Equation 4) to better convey the high-dynamic range.</p><p>We did experience some numerical issues with some of our datasets due to very large or small spatial and value domains. We were able to address these issues by switching to a more numerically stable eigen decomposition <ref type="bibr" target="#b9">[10,</ref><ref type="bibr">Algorithm 8.2.3]</ref>. Lastly, we make use of the Cholesky decomposition to invert covariance matrices, which behaves robustly even for nearly singular matrices <ref type="bibr">[43, p. 176</ref>].</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Order-Independent Transparency</head><p>The splatting approach assumes that distributions do not overlap since this could lead to visible flickering between frames when the order changes. Depending on the clustering of the data, this assumption is not always acceptable. For this reason, we propose the use of an order-independent transparency (OIT) approach to avoid sorting semitransparent Gaussians. Although, a large number of Gaussians are problematic for most OIT approaches, moment-based order-independent transparency (MBOIT) <ref type="bibr" target="#b30">[31]</ref> is well-suited for this application. We introduce the steps of this method briefly.</p><p>MBOIT first accumulates moments of the optical depth in an additive rendering pass. These moments offer a compact representation and an efficient reconstruction of the transmittance function per view ray. Subsequently, a second additive rendering pass of all Gaussians composites the fragment colors using transmittance values reconstructed from the moments. We use three trigonometric moments in half-precision, which results in a total of 112 bits per pixel for the moments.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Uncertainty Transfer Function</head><p>Lastly, we discuss how to apply a transfer function to the distribution of an attribute j ∈ {n 0 ,...,n mu−1 } for each cluster I. The one-dimensional value dimension is modeled separately from the cluster as a GMM g = (I, { j}) with n g components. For each cluster, we compute an expected color and opacity <ref type="bibr" target="#b36">[37]</ref> by convolving the transfer function f with the value distribution:</p><formula xml:id="formula_14">E[ f |g] := ∞ −∞ f (p)ρ g (p)dp.</formula><p>We insert the Gaussian mixture model into this equation and rearrange:</p><formula xml:id="formula_15">E[ f |g] = ng−1 ∑ l=0 w g,l ∞ −∞ f (p) 1 2πσ 2 g,l exp − (p − μ g,l ) 2 2σ 2 g,l dp.<label>(3)</label></formula><p>We efficiently evaluate this equation by precomputing the integrand, which is simply a convolution of the transfer function with differently parametrized Gaussians. The resulting 2D lookup table thus depends on the transfer function and is parameterized by mean and variance.</p><p>Now that we are able to render the spatial distribution of our data, we move on to the visual exploration and analysis of additional data dimensions using our representation. This includes multiple views with brushing and linking coupled with a focus and context visualization to emphasize brushed values.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Density-Based Visualization</head><p>Prior work relies on sampling to create visualizations from modeled distributions. Although this is similarly possible with our data representation, see <ref type="figure" target="#fig_0">Fig. 11 (c)</ref> and (d), we focus on density-based visualizations.</p><p>Since we already have an estimate of density in the form of our GMMs, we efficiently construct density-based visualizations that are costly to compute otherwise. To obtain the density, we evaluate and accumulate the Gaussian distributions from the GMMs in all clusters. Since the distribution in each cluster is normalized, we additionally weight each cluster I by the normalized number of samples it represents 1 n |I|.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.1">Density Plots</head><p>To compute a density in 1D or 2D, we evaluate and accumulate the Gaussian distributions, see <ref type="figure" target="#fig_0">Fig. 1(b)</ref> and (c). Since this operation can be parallelized trivially, we make use of GPU acceleration. In the 1D case, we evaluate 1D Gaussians on the GPU and plot a probability density function. For a 2D plot, we render a quadrilateral for each Gaussian, evaluate the Gaussian for each fragment, and additively accumulate the results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.2">Parallel Coordinate Plots</head><p>Miller and Wegman <ref type="bibr" target="#b29">[30]</ref> formulate parallel coordinate plots for bivariate Gaussian distributions. With this formulation, we splat the 2D distributions for each pair of consecutive dimensions in parallel coordinate space. Specifically, for each pair of axes we draw a quad for each Gaussian by truncating its support to three standard deviations. In the fragment shader, we evaluate the density in parallel coordinate space and additively blend the result with all other Gaussians. A densitybased parallel coordinate plot is shown in <ref type="figure" target="#fig_0">Fig. 1(d)</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.3">Mapping Density</head><p>The density-based visualizations described above and the spatial visualization in Sect. 4 all produce a single density ρ per Gaussian and per pixel. For large datasets, this density will have a high dynamic range and needs to be mapped to an opacity between zero and one through a non-linear mapping <ref type="bibr" target="#b18">[19]</ref>. We choose a mapping that interprets the density, scaled by a user-controllable parameter λ &gt; 0, as optical depth. The resulting opacity is</p><formula xml:id="formula_16">1 − exp(−λ ρ).<label>(4)</label></formula><p>With this mapping, multiplying the density of a Gaussian by an integer factor k produces the same result as rendering it k times with alpha blending, which is an intuitive behavior. At the same time, it retains detail even for large densities.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Brushing Distributions</head><p>To brush a value range of a dimension with our data representation and reflect this in all linked views, we use the clustering information.</p><p>Although we could brush based on the cluster mean value, this is confusing and not very intuitive, especially when considering a dimension represented by multiple Gaussian components, see <ref type="figure" target="#fig_3">Fig. 4(a)</ref> and (b). Feng et al. <ref type="bibr" target="#b8">[9]</ref> discuss user interaction based on Gaussian distributions in the context of uncertainty visualization. We generalize their work and the concept of smooth brushing <ref type="bibr" target="#b5">[6]</ref> to Gaussian mixture models. In detail, we compute the amount a cluster is in focus, the degree of interest, as the ratio between the integrand of the brushed regions of the GMM and the total area, see <ref type="figure" target="#fig_3">Fig. 4(c)</ref>. For clusters that contain multiple Gaussian components, we compute the degree of interest as the weighted sum of all components. Brushing only based on the mean value μ would lead to confusing results (a), especially if the distribution is represented by multiple Gaussian components (b). We compute the degree of interest of the brushing operation as the ratio between the integrand (gray) and the total area under the curve (c).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Time-Dependent Visualization</head><p>Brushing in different time steps is a powerful tool for the interactive exploration of time-dependent data <ref type="bibr" target="#b14">[15]</ref>, but is not practical for large datasets since all time steps have to be processed. Our compact data summaries enable us to interact with multiple time steps at once. We support this interaction in a time histogram <ref type="bibr" target="#b23">[24]</ref> where we depict a timeseries of a selected dimension as a series of 1D histograms, see <ref type="figure" target="#fig_0">Fig. 10</ref>.</p><p>If the clustering is fixed over time, we can trivially extend the brushing operation to time-dependent data. This is not possible when clusters change over time, e.g. merge together into larger, or split into smaller clusters. In this case, the relationship of clusters in different time steps has to be explicitly modeled and stored.</p><p>For brushing, we need to reassign degrees of interest from frame to frame. To this end, we transfer the degrees of interest to the individual samples uniformly and then reassign them to clusters. Say we have n t ∈ N clusters I t,0 ,...,I t,nt −1 ⊆ {0,...,n − 1} in frame t and analogously for frame t + 1. The clusters in frame t have associated degrees of</p><formula xml:id="formula_17">interest d t,0 ,...,d t,nt −1 ∈ [0, 1].</formula><p>Then we define the degree of interest of cluster k ∈ {0,...,n t+1 − 1} in frame t + 1 as</p><formula xml:id="formula_18">d t+1,k := nt −1 ∑ l=0 |I t,l ∩ I t+1,k | |I t+1,k | d t,l ∈ [0, 1].</formula><p>The quotient in this sum is the fraction of samples in cluster I t+1,k that was part of cluster I t,l in the previous frame. Interest is inherited from the cluster in the previous frame in proportion to that quotient. Note that this method defines a simple linear transform. There is no need to consider all samples at run time. Instead, the transfer coefficients for the degrees of interest can be precomputed and stored in a sparse matrix.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Uncertainty Visualization</head><p>We introduce an error estimate to convey the uncertainty of the data summaries. By computing and storing an error for each cluster, we are able to visualize the uncertainty interactively during the visual analysis and to support brushing and linking. Prior work measures the error directly between the density of the Gaussian mixture model and the original data. However, this is not robust and suffers from aliasing due to the necessary use of histograms. Instead, we define the error between a Gaussian mixture model and the samples of a cluster I for a dimension j ∈ {0,...,m u − 1} similar to common statistical goodness of fit tests. In detail, we compute the empirical cumulative distribution functions (CDF) of the data samples</p><formula xml:id="formula_19">F I (p) := 1 |I| ∑ i∈I 1 if u i, j ≤ p, 0 otherwise<label>(5)</label></formula><p>and compare it to the CDF F g of the Gaussian mixture model using the Wasserstein distance <ref type="bibr" target="#b34">[35]</ref>:</p><formula xml:id="formula_20">W (F I , F g ) := ∞ −∞ F I (p) − F g (p) dp.<label>(6)</label></formula><p>To visualize the Wasserstein distance, we show it together with the CDF, cf. <ref type="figure">Fig. 8 (b)</ref>. A high Wasserstein distance consequently indicates a high uncertainty of the data model. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">Level of Detail and Outliers</head><p>By design, our representation is a simplified model of the data. During the exploration and analysis process, a scientist might want to investigate a subset of the data more closely. For this purpose, we substitute brushed clusters by their original data values. To integrate the data distributions into our frequency-based views, we perform kernel density estimation using Gaussian kernels. We can thus avoid differentiating between the modeled and original data distributions. Moreover, outliers, i.e. isolated samples in regions of low density, tend to get lost in density-based visualizations <ref type="bibr" target="#b28">[29,</ref><ref type="bibr" target="#b33">34]</ref>. To explicitly add outliers to our visualizations, we sort all samples in a cluster in a preprocess according to a measure of outlyingness. Although any measure between a sample and a GMM could be used, we employ the Mahalanobis distance <ref type="bibr" target="#b27">[28]</ref> to the closest Gaussian component. This effectively measures how many standard deviations a sample is away from the mean of the closest Gaussian, see <ref type="figure">Fig. 5</ref>. To visualize outliers, we then take a fixed percentage p o of outliers from a cluster I by loading the first p o |I| samples. <ref type="figure">Fig. 6 (c)</ref> shows a spatial visualization with 2% of outliers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">EVALUATION</head><p>In this section, we apply our approach to a synthetic and three realworld datasets. Additional results can be found in the supplementary material.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Synthetic Data</head><p>We first apply our approach to a small synthetic dataset consisting of 10 clusters from a total of 100 000 points. The dataset contains 9 dimensions. The three spatial dimensions in each cluster are normally distributed, but 10 % of the points are distributed uniformly to add noise to the distributions. <ref type="figure">Fig. 6 (a)</ref> shows this dataset. The 3D Gaussians are shown in <ref type="figure">Fig. 6 (b)</ref> and in (c) where we explicitly add 2% of outliers from all clusters.</p><p>We compare the uncertainty transfer function to a 1D transfer function based on mean values in <ref type="figure">Fig. 7</ref>. In (a), we set the opacity of the transfer function, where the peak coincides with the mean value. The synthetic dataset in (b) shows the resulting rendering. For our data summaries in (c), the opacity is similarly reduced. This is due to the uncertainty transfer function since it computes the expected opacity with respect to the value distribution. In comparison, the opacity of the Gaussians in (d) using a mean transfer function does not change since the opacity of the mean value is still set to opaque in (a). Thus, changing any of the opacity (or color) values of the transfer function has no influence except if the mean value is changed. An alternative would be the use of a 2D transfer function <ref type="bibr" target="#b20">[21]</ref> that offers increased control over the classification, but complicates user interaction. In <ref type="figure">Fig. 8 (a)</ref> we illustrate an exponentially distributed dimension of the dataset, which is difficult to model using only Gaussian components. The cumulative distribution function shown in (b), illustrates this error as measured by the Wasserstein distance. By quantifying the error, we can decide if this error is acceptable, or brush and use the level-of-detail mechanism to directly load a subset of the data with a high error.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Cosmological Data</head><p>The Illustris simulation <ref type="bibr" target="#b31">[32]</ref> is a large-scale cosmological hydrodynamical simulation of galaxy formation that aims to predict both dark and baryonic components of matter. In detail, the dynamics of dark matter and gas are simulated with the quasi-Lagrangian code AREPO <ref type="bibr" target="#b40">[41]</ref>, which employs an unstructured Voronoi tessellation of the domain. After simulation, only the center points of the Voronoi cells are kept and are referred to as particles. Since the simulation has been run in different resolutions and we want to show both dark and baryonic matter, we discuss multiple separate datasets as shown in <ref type="table" target="#tab_0">Table 1</ref>. We compare the data based on the 100th time step without descendant or ancestor information.</p><p>The Illustris datasets have been clustered into halos using a domain specific approach. The sizes of clusters are extremely irregular and range in between a single particle and up to millions of particles per cluster. Since we cannot fit a GMM to very small clusters, we fit a single Gaussian for clusters of size below 20.  <ref type="figure">Fig. 9</ref>: The Illustris-3 Gas dataset rendered by splatting particles (a) and 3D Gaussians (b). In (c) we have brushed a region and clusters that are not in focus are shown in a desaturated gray. We load the original particle data of the brushed region and render them together with the context (d).  <ref type="figure" target="#fig_0">Fig. 10</ref>: A time-histogram of electron abundance in the Illustris-3 Gas dataset is shown in (a). We have brushed (red) in the 94th time step, which affects all linked views in the current, 100th time step. The spatial visualization that highlights the brushed values in the 100th time step is shown in (b). Note that Gaussians are shown as saturated or desaturated, depending on how much they are in focus.  <ref type="figure" target="#fig_0">Fig. 11</ref>: Visualization of a spray nozzle using our approach with the k-means 32.000 clustering by splatting 3D Gaussians (a) and by drawing samples from the GMMs to create a 2D histogram (c) and a parallel coordinate plot (d). In (b), (e), and (f) the corresponding visualizations using the original SPH particle data are shown. With our approach, we are able to interactively visualize and explore these massive datasets that might not even fit into memory otherwise. <ref type="figure" target="#fig_0">Fig. 1</ref> shows several interactive, linked views of the Illustris-1 dataset. We have brushed the x-, y-, and z-axis in the parallel coordinate plot (d). The brushed regions (green) are then highlighted in red in all other views. The density-based views are free of clutter and clearly show trends and correlations between the dimensions. For example, the parallel coordinate plot in (d) indicates that the brushed values have velocity components that are distributed around zero and are linearly correlated. The spatial visualization depicts 5.3 million clusters that we render and navigate interactively. <ref type="figure">Fig. 9</ref> compares our probabilistic summaries with the original particle data of Illustris-3 Gas. Note that the interactive visualization of Illustris-1 and 2 is not possible on our system due to their data sizes. Although we clearly miss some details in the spatial visualization, we still manage to convey the general structure of the data and the distribution of color-mapped values. Whilst sorting and rendering all 16 million particles as isotropic Gaussians takes 61 ms on our system, the clusters require only 2 ms. Note that for this dataset, the 110, 000 clusters are represented by a total of 357, 512 Gaussians in 3D. In <ref type="figure">Fig. 9(c)</ref>, we have brushed a spatial region on the right side which is consequently put into focus. In (d) we have loaded the original particle data of the brushed clusters. Note that all of the linked views are also updated by this operation. Since we only load an additional 240, 000 particles, the interactive visualization still takes only 3.8 ms to render. Although other forms of level of detail are possible, this is a powerful way to drill-down from an overview to a detailed view of the data.</p><p>Since the clusters split and merge over time in this dataset, we have precomputed the transfer coefficients for time-dependent visualizations. <ref type="figure" target="#fig_0">Fig. 10</ref> depicts a time-histogram of a selected attribute over several time steps. We have brushed the 94th time step, which is reflected in all views in the current, 100th time step. The spatial visualization in (b) highlights those brushed values. Due to our brush, mostly smaller clusters are in focus. This brushing and linking over time thus allows exploring the selected dimension and its time-dependent behavior. With our data summaries, we can compute the whole time-histogram in just under a second. In comparison, computing a time-histogram from the particle data takes 34 s and is severely I/O limited since the complexity scales with respect to the number of particles instead of the amount of clusters.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Spray Nozzle</head><p>We have applied our technique to a smoothed particle hydrodynamics (SPH) dataset of a fuel spray nozzle simulation <ref type="bibr" target="#b3">[4]</ref>. In the context of renewable energy production, biomass is converted into fuel by a gasification process. The quality of the spray is analyzed since it is critical for the efficiency of the gasification. However, the size of the time-dependent data prevents the usage of common interactive visual analysis techniques. In detail, the dataset contains about 43 million particles per time step. Each particle contains a position, velocity, pressure, density, and fluid type for a total of 9 separate dimensions. The fluid type describes four different categories, including fluid, gas, and two types of boundaries.</p><p>We have partitioned the data using a k-means clustering based on the spatial position, fluid type, and velocity magnitude. <ref type="table" target="#tab_1">Table 2</ref> shows the data size reduction and average number of GMM components for different numbers of clusters. For this dataset, we fix the maximum number of GMM components to 6. The size of the data summaries increases with the number of clusters. At the same time, the average number of GMM components decreases. This shows that the number of GMM components adapts to the less complex clusters. Moreover, the average Wasserstein distance is reduced for a larger number of clusters. <ref type="figure" target="#fig_0">Fig. 11</ref> depicts several visualizations created from our representation and from the original SPH data. The spatial visualizations in (a) and (b) depict velocity in u-direction. Our approach does lose some details, especially on the finer structures on the right side of the cylindrical domain. Since item-based visualizations of 43 million particles suffer from strong overdraw and visual clutter, density-based visualizations are preferable for this dataset. These are fast and efficient to create using our representation that is already an estimate of density. The 2D histogram in (b) and the parallel coordinate plot in (c) have been created from samples drawn from the GMMs. Compared to the reference plots in (e) and (f), we achieve nearly identical results. Moreover, it is possible to vary the number of samples, which could be used to create less cluttered visualizations, e.g. for scatter and parallel coordinate plots.</p><p>We represent the fluid type, i.e. the categorical dimension, by interpreting it as a scalar dimension. This is possible since the data only consists of four fluid types that we model using an appropriate number of Gaussian components. We could have increased the maximum number of components for all marginal distributions containing a categorical dimension, but this was not necessary for this dataset. Although a small number of categories is common in multiphase fluid simulations, in general, representing categorical dimensions with GMMs does not scale.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.4">Hurricane Isabel</head><p>The Hurricane Isabel dataset is an atmospheric simulation from the IEEE Visualization Contest 2004, produced by the Weather Research and Forecast (WRF) model. Besides an implicit spatial position and a velocity vector, the time-dependent dataset contains 9 additional scalar quantities on a uniform grid of size 500 × 500 × 100. Since we formulated our approach for scattered data and did not consider the important but special case of gridded data, we disregard the topology of the dataset.</p><p>To apply our approach, we either define clusters through uniform blocks or apply k-means clustering based on the spatial position and velocity magnitude. Both clustering procedures require a fixed number of clusters as input. Independent from the clustering, we always store 3D distributions for the spatial position and the velocity vector and compute the respective 2D marginal distribution from these. Apart from that, we model and store all pairwise 2D distributions and all 15 onedimensional distributions. Additionally, we compare our representation to modeling each cluster with a high-dimensional Gaussian mixture model. <ref type="table" target="#tab_2">Table 3</ref> shows the data summaries we have created with both clustering procedures, with different cluster sizes, with our approach and using high-dimensional Gaussian mixture models. We have chosen a maximum number of 6 GMM components for the low-dimensional  and 32 for the high-dimensional models to achieve a comparable quality. Note that creating the high-dimensional model took nearly 43 hours, cf. <ref type="table" target="#tab_4">Table 5</ref>. Both approaches can model the data well even though some dimensions are quite challenging. The high-dimensional model performs surprisingly well for this dataset, considering the dimensionality, which is due to high correlations in the dimensions. The low-dimensional representation requires more storage since it cannot make use of these higher-dimensional correlations. In both cases, the two clustering procedures lead to similar results. <ref type="figure" target="#fig_0">Fig. 12</ref> shows a visualization of wind speed from west to east, i.e. uvelocity, by splatting the original data and with our approach. Although our representation loses some details, it conveys the major features of the dataset. Whilst the low-dimensional representation models the spatial position separately, the high-dimensional GMM takes correlations between all dimensions into account. The marginal distribution of the spatial positions is thus also influenced by the other dimensions, which leads to the artifacts in <ref type="figure" target="#fig_0">Fig. 12(c)</ref>. This reduces trust in the high-dimensional model since it is unclear if these correlations actually exist in the data or not. Lastly, the high-dimensional model contains over five times the amount of Gaussian components, which increases the complexity of all visualizations. In comparison, our representation consists of low-dimensional models that are easier to understand and more robust.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.5">Performance</head><p>Our evaluations were performed on an Intel i7-6700 with 32 GB of system memory and an NVIDIA GTX 1080 Ti graphics card providing 11 GB of video memory. For GPU acceleration, we make use of both CUDA for general purpose computations and OpenGL for rendering. For our spatial visualization, we have used a screen resolution of 1920× 1080. The resolution of our 2D density plots was 200 × 200 and 800 × 300 for the parallel coordinate plot (PCP).</p><p>Timings for several visualizations are shown in <ref type="table" target="#tab_3">Table 4</ref>. In general, our prototype allows interactive navigation and creation of all visualizations introduced above. The Illustris 1 and 2 datasets are the most demanding, due to the large number of clusters. Note that the performance of our approach scales with the number of clusters and Gaussian components, not the original data size. The order-independent transparency (OIT) approach performs very well on the cosmological datasets compared to the back-to-front splatting using sorting. Note that the speed varies depending on the number of covered pixels. The sorting approach is faster on the smaller and spatially more compact datasets.</p><p>We create our probabilistic data summaries in a preprocessing step using the Python scikit-learn library. This process is trivial to parallelize since all time steps, clusters, and distributions can be processed independently. Due to inherent restrictions imposed by our Python prototype, an implementation in a native language is expected to be significantly faster. The measurements for our prototype are shown in <ref type="table" target="#tab_4">Table 5</ref>. Our fast GMM component estimation (Sect. 3.2) leads to a significant speedup. In the supplementary material, we show that a slight error is introduced by this approximation. Lastly, computing high-dimensional GMMs requires significantly more preprocessing time, making it unsuited for use in practice. Note that our approximations for a fast estimation of GMM components cannot be used for the high-dimensional data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION</head><p>In this paper, we introduce probabilistic data summaries for multivariate scattered data. They enable the interactive visual analysis of large datasets that would not be possible otherwise due to limitations of memory or compute. Although our data representation is a simplified model of the data, we inform the user about this uncertainty and present a level-of-detail and outlier visualization for more detailed investigations.</p><p>The core insight of our approach is that we only have to model combinations of low-dimensional distributions for visual analysis, which avoids the complexity of modeling high-dimensional distributions. Although the data must be clustered, we do not make any restrictive assumptions about the clustering procedure. In fact, our evaluation shows that the impact of the clustering on the quality of the representation is less pronounced than expected and is largely offset by the adaptive modeling of GMMs.</p><p>In the future, we want to improve the scalability of our approach even further by adding a level-of-detail approach based on a hierarchical clustering of the data. By interactively selecting the appropriate detail, it should be possible to interactively explore massive datasets even on mobile devices and seamlessly scale up to powerful workstations.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 :</head><label>1</label><figDesc>Our probabilistic summary of a cosmological dataset represents 2.6 billion particles partitioned into 5.3 million clusters.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 2 :</head><label>2</label><figDesc>From a given clustering of the data (a), we model each cluster using combinations of low-dimensional distributions, similar to a scatter plot matrix (b).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 :</head><label>4</label><figDesc>Brushing of a value range [a, b] applied to several distributions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 :Fig. 6 :</head><label>56</label><figDesc>To rank samples by their outlyingness, we evaluate the Mahalanobis distance to the closest Gaussian. This measures how many standard deviations a sample is away from the mean of the closest Gaussian.(a) Synthetic data (b) GMMs (c) GMMs and outliers Rendering of Gaussians from the synthetic dataset using kernel density estimation (a), with our data model (b), and with 2% of outliers (c).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 7 :Fig. 8 :</head><label>78</label><figDesc>We set the opacity of the transfer function (a) to visualize the synthetic dataset (b). Our uncertainty transfer function (c) computes the expected opacity (i.e. the integral of the opacity curve), while a 1D transfer function based on the mean value (d) sets all Gaussians to opaque. The exponentially distributed dimension (a) is hard to model using Gaussian components. The cumulative distribution function in (b) conveys the error to the user.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head></head><label></label><figDesc>Brushed clusters in the 100th time step</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head></head><label></label><figDesc>all particles (c) Histogram from samples (d) PCP from samples (e) Histogram from all particles (f) PCP from all particles</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 12 :</head><label>12</label><figDesc>Visualization of wind speed from west to east (U) in the Hurricane Isabel data by splatting the original data (a), with the k-means 16.000 clustering of the low-dimensional model (b), and the high-dimensional model (c).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head>Table 1 :</head><label>1</label><figDesc>Overview of the cosmological data from the Illustris simulation.</figDesc><table><row><cell>Dataset</cell><cell># Dimensions</cell><cell># Particles</cell><cell cols="5"># Clusters Data size Summaries GMM comp. Wasserstein dist.</cell></row><row><cell>Illustris-3 Gas</cell><cell>15</cell><cell>16,039,182</cell><cell>110,000</cell><cell>2 GB</cell><cell>200 MB</cell><cell>2.15 ± 1.60</cell><cell>1.77 × 10 −6</cell></row><row><cell>Illustris-2 DM</cell><cell>7</cell><cell>319,324,195</cell><cell>841,639</cell><cell>11.3 GB</cell><cell>617 MB</cell><cell>1.54 ± 1.22</cell><cell>3.10 × 10 −7</cell></row><row><cell>Illustris-1 DM</cell><cell>6</cell><cell cols="3">2,635,739,426 5,352,571 72.2 GB</cell><cell>1.5 GB</cell><cell>1.13 ± 0.38</cell><cell>4.56 × 10 −8</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>2.7e5</cell></row><row><cell>(a)</cell><cell>(b)</cell><cell></cell><cell>(c)</cell><cell></cell><cell></cell><cell>(d)</cell><cell></cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>-2.6e6</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>Potential</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>(km/s) 2 /a</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 2 :</head><label>2</label><figDesc>Overview of the spray nozzle dataset. We show the absolute summary size, relative to the original data size, the average number of GMM components, and the average Wasserstein distance.# Clusters Summaries Rel. size GMM comp. Wasserstein dist.</figDesc><table><row><cell>2,000</cell><cell>6.7 MB</cell><cell>0.006%</cell><cell>1.7 ± 1.19</cell><cell>5.54 × 10 −5</cell></row><row><cell>8,000</cell><cell>19.9 MB</cell><cell>0.017%</cell><cell>1.4 ± 0.85</cell><cell>1.57 × 10 −5</cell></row><row><cell>32,000</cell><cell>47.5 MB</cell><cell>0.036%</cell><cell>1.2 ± 0.61</cell><cell>4.64 × 10 −6</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 3 :</head><label>3</label><figDesc>Overview of the different clustering procedures of the Hurricane Isabel dataset. We show the resulting absolute and relative data size and the average Wasserstein distance.Model Clustering # Clusters Summaries Rel. size Wasserstein dist.</figDesc><table><row><cell>Our</cell><cell>Blocks</cell><cell>1,000</cell><cell>12.1 MB</cell><cell>1.4%</cell><cell>1.20 × 10 −4</cell></row><row><cell>HD</cell><cell>Blocks</cell><cell>1,000</cell><cell>5.2 MB</cell><cell>0.6%</cell><cell>1.21 × 10 −4</cell></row><row><cell>Our</cell><cell>Blocks</cell><cell>8,000</cell><cell>82.6 MB</cell><cell>9.0%</cell><cell>1.58 × 10 −5</cell></row><row><cell>HD</cell><cell>Blocks</cell><cell>8,000</cell><cell>34.7 MB</cell><cell>4.8%</cell><cell>1.56 × 10 −5</cell></row><row><cell>Our</cell><cell>Blocks</cell><cell>16,000</cell><cell>146.8 MB</cell><cell>14.8%</cell><cell>8.49 × 10 −6</cell></row><row><cell>HD</cell><cell>Blocks</cell><cell>16,000</cell><cell>50.0 MB</cell><cell>5.1%</cell><cell>8.24 × 10 −6</cell></row><row><cell>Our</cell><cell>k-means</cell><cell>1,000</cell><cell>12.1 MB</cell><cell>1.4%</cell><cell>1.23 × 10 −4</cell></row><row><cell>HD</cell><cell>k-means</cell><cell>1,000</cell><cell>5.4 MB</cell><cell>0.6%</cell><cell>1.26 × 10 −4</cell></row><row><cell>Our</cell><cell>k-means</cell><cell>8,000</cell><cell>80.5 MB</cell><cell>8.8%</cell><cell>1.66 × 10 −5</cell></row><row><cell>HD</cell><cell>k-means</cell><cell>8,000</cell><cell>33.8 MB</cell><cell>3.7%</cell><cell>1.57 × 10 −5</cell></row><row><cell>Our</cell><cell>k-means</cell><cell>16,000</cell><cell>143.9 MB</cell><cell>14.7%</cell><cell>8.75 × 10 −6</cell></row><row><cell>HD</cell><cell>k-means</cell><cell>16,000</cell><cell>48.5 MB</cell><cell>5.0%</cell><cell>8.01 × 10 −6</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 4 :</head><label>4</label><figDesc>Performance of visualizations with our data summaries.</figDesc><table><row><cell>Dataset</cell><cell cols="2">Splatting</cell><cell>PCP</cell><cell cols="2">Density Brushing</cell></row><row><cell></cell><cell>Sorting</cell><cell>OIT</cell><cell></cell><cell>(x, u)</cell><cell></cell></row><row><cell>Illustris-3 Gas</cell><cell>3.9ms</cell><cell>4.3ms</cell><cell>439ms</cell><cell>1.0ms</cell><cell>4ms</cell></row><row><cell>Illustris-2 DM</cell><cell>31ms</cell><cell>14ms</cell><cell>421ms</cell><cell>3.6ms</cell><cell>28ms</cell></row><row><cell>Illustris-1 DM</cell><cell>196ms</cell><cell cols="3">28ms 1241ms 11.2ms</cell><cell>160ms</cell></row><row><cell>Hurricane Isabel k=8000</cell><cell>4.6ms</cell><cell>20ms</cell><cell>99ms</cell><cell>1.1ms</cell><cell>2ms</cell></row><row><cell>Spray Nozzle k=8000</cell><cell>4.4ms</cell><cell>23ms</cell><cell>47ms</cell><cell>1.4ms</cell><cell>2ms</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 5 :</head><label>5</label><figDesc>Measurements of the data summary preprocessing.</figDesc><table><row><cell>Dataset</cell><cell cols="3">Our GMMs Low-dim. GMMs High-dim. GMMs</cell></row><row><cell>Hurricane Isabel k=1000</cell><cell>2h 54m</cell><cell>9h 31m</cell><cell>42h 55m</cell></row><row><cell>Spray Nozzle k=2000</cell><cell>1h 43m</cell><cell>8h 13m</cell><cell>14h 51m</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The Spray Nozzle dataset is due to the Institute of Thermal Turbomachinery (ITS) at the Karlsruhe Institute of Technology (KIT). The Hurricane Isabel data is courtesy of NCAR, and the U.S. National Science Foundation (NSF).</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Uncovering clusters in crowded parallel coordinates visualizations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">O</forename><surname>Artero</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">C F</forename><surname>De Oliveira</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Levkowitz</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/INFVIS.2004.68</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Information Visualization</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="81" to="88" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Continuous scatterplots</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Bachthaler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2008.119</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1428" to="1435" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Extensions of parallel coordinates for interactive exploration of large multi-timepoint data sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Blaas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Botha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Post</surname></persName>
+		</author>
+		<idno>doi: 10 .1109/TVCG.2008.131</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1436" to="1451" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">SPH simulation of a twin-fluid atomizer operating with a high viscosity liquid</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Chaussonnet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Braun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Dauch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Keller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kaden</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Schwitzke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Jakobs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Koch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-J</forename><surname>Bauer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">14th Triennial International Conference on Liquid Atomization and Spray Systems</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Hierarchical clustering for unstructured volumetric scalar fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">S</forename><surname>Co</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Heckel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hagen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/VISUAL.2003.1250389</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 14th IEEE Visualization</title>
+		<meeting>the 14th IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page">43</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Smooth brushing for focus+context visualization of simulation data in 3D</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Doleisch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Journal of WSCG</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="147" to="154" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">In situ distribution guided analysis and visualization of transonic jet engine simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dutta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Heinlein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">P</forename><surname>Chen</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2016.2598604</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="811" to="820" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Homogeneity guided probabilistic data summaries for analysis and visualization of largescale data sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dutta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">P</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/PACIFICVIS.2017.8031585</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="111" to="120" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Matching visual saliency to confidence in plots of uncertain data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Feng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kwock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Taylor</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="980" to="989" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Matrix Computations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">H</forename><surname>Golub</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">F V</forename><surname>Loan</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1993" />
+			<publisher>The Johns Hopkins University Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Uncertainty visualization using copula-based analysis in mixed distribution models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hazarika</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Biswas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">W</forename><surname>Shen</surname></persName>
+		</author>
+		<idno>doi: 10. 1109/TVCG.2017.2744099</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="934" to="943" />
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">CoDDA: A flexible copulabased distribution driven analysis framework for large-scale multivariate data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hazarika</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dutta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chen</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2018.2864801</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1214" to="1224" />
+			<date type="published" when="2019" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Progressive splatting of continuous scatterplots and parallel coordinates</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heinrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Bachthaler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/j.1467-8659.2011.01914.x</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="653" to="662" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Continuous parallel coordinates</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Heinrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2009.131</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1531" to="1538" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Dynamic query tools for time series data sets: Timebox widgets for interactive exploration</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hochheiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+		<idno type="DOI">10.1057/palgrave.ivs.9500061</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Information Visualization</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="18" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Constructing 3D elliptical Gaussians for irregular data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Neophytou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+		<idno type="DOI">10.1007/b10665711</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Mathematical Foundations of Scientific Visualization, Computer Graphics, and Massive Data Exploration</title>
+		<meeting><address><addrLine>Berlin Heidelberg</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="213" to="225" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Enhancing the interactive visualization of procedurally encoded multifield data with ellipsoidal basis functions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">P</forename><surname>Botchen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lauser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">P</forename><surname>Gaither</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/j.1467-8659.2006.00978.x</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="587" to="596" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Interactively visualizing procedurally encoded scalar fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">P</forename><surname>Gaither</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<idno type="DOI">10.2312/VisSym/VisSym04/035-044</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Sixth Joint Eurographics -IEEE TCVG Conference on Visualization</title>
+		<meeting>the Sixth Joint Eurographics -IEEE TCVG Conference on Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="35" to="44" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Revealing structure within clustered parallel coordinates displays</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Johansson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ljung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Jern</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Cooper</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/INFVIS.2005.1532138</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Information Visualization</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="125" to="132" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Modelling and rendering large volume data with Gaussian radial basis functions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Juba</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Varshney</surname></persName>
+		</author>
+		<idno>No. UMIACS-TR-2007-22</idno>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+		<respStmt>
+			<orgName>University of Maryland</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Multidimensional transfer functions for interactive volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kniss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Kindlmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2002.1021579</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="270" to="285" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Efficient Particle Volume Splatting in a Ray Tracer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Knoll</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">K</forename><surname>Morley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Wald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Leaf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Messmer</surname></persName>
+		</author>
+		<idno type="DOI">10.1007/978-1-4842-4427-229</idno>
+		<imprint>
+			<date type="published" when="2019" />
+			<publisher>Apress</publisher>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="533" to="541" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">RBF volume ray casting on multicore and manycore CPUs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Knoll</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Wald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Navratil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bowen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Reda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">E</forename><surname>Papka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Gaither</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/cgf.12363</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">33</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="71" to="80" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Time histograms for large, timedependent data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kosara</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Bendix</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Sixth Joint Eurographics-IEEE TCVG conference on Visualization</title>
+		<meeting>the Sixth Joint Eurographics-IEEE TCVG conference on Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="45" to="54" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Interactive visualization of streaming data with kernel density estimation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><forename type="middle">D</forename><surname>Lampe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/PACIFICVIS.2011.5742387</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="171" to="178" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Distribution-based particle data reduction for in-situ analysis and visualization of large-scale n-body cosmological simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Shan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Liao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Lu</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/PacificVis48177.2020.1186</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+		<imprint>
+			<date type="published" when="2020" />
+			<biblScope unit="page" from="171" to="180" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Gaussian mixture model based volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Levine</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">T</forename><surname>Bremer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/LDAV.2012.6378978</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization (LDAV)</title>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="73" to="77" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">On the generalized distance in statistics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">C</forename><surname>Mahalanobis</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1936" />
+		</imprint>
+		<respStmt>
+			<orgName>National Institute of Science of India</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Splatterplots: Overcoming overdraw in scatter plots</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Mayorga</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gleicher</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2013.65</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="1526" to="1538" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Construction of line densities for parallel coordinate plots</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">J</forename><surname>Wegman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computing and Graphics in Statistics</title>
+		<imprint>
+			<biblScope unit="volume">36</biblScope>
+			<biblScope unit="page" from="107" to="123" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Moment-based order-independent transparency</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Münstermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Krumpen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Peters</surname></persName>
+		</author>
+		<idno>doi: 10.1145/ 3203206</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the ACM on Computer Graphics and Interactive Techniques</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="20" />
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">The Illustris simulation: Public data release</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Nelson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Pillepich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Genel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Vogelsberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Springel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Torrey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Rodriguez-Gomez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Sijacki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">F</forename><surname>Snyder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Griffen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Marinacci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Blecha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Sales</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Hernquist</surname></persName>
+		</author>
+		<idno>doi: 10. 1016/j.ascom.2015.09.003</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Astronomy and Computing</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page" from="12" to="37" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">GPU-accelerated volume splatting with elliptical RBFs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Neophytou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">T</forename><surname>Mcdonnell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Guan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Qin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+		<idno type="DOI">10.2312/VisSym/EuroVis06/013-020</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eighth Joint Eurographics / IEEE VGTC Conference on Visualization</title>
+		<meeting>the Eighth Joint Eurographics / IEEE VGTC Conference on Visualization</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="13" to="20" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Outlier-preserving focus+context visualization in parallel coordinates</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Novotny</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2006.170</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="893" to="900" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Statistical aspects of Wasserstein distances</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><forename type="middle">M</forename><surname>Panaretos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zemel</surname></persName>
+		</author>
+		<idno type="DOI">10.1146/annurev-statistics-030718-104938</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Annual Review of Statistics and Its Application</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="405" to="431" />
+			<date type="published" when="2019" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Void-and-cluster sampling of large scattered data and trajectories</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Rapp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Peters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Dachsbacher</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2019.2934335</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="780" to="789" />
+			<date type="published" when="2020" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">A statistical direct volume rendering framework for visualization of uncertain data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Sakhaee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Entezari</surname></persName>
+		</author>
+		<idno>doi: 10. 1109/TVCG.2016.2637333</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2509" to="2520" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Estimating the dimension of a model</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Schwarz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Annals of Statistics</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="461" to="464" />
+			<date type="published" when="1978" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Sparse PDF volumes for consistent multi-resolution volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Sicat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<idno>doi: 10. 1109/TVCG.2014.2346324</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2417" to="2426" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<title level="m" type="main">Density estimation for statistics and data analysis. Routledge</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">W</forename><surname>Silverman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Galilean-invariant cosmological hydrodynamical simulations on a moving mesh</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Springel</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/j.1365-2966.2009.15715.x</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Monthly Notices of the Royal Astronomical Society</title>
+		<imprint>
+			<biblScope unit="volume">401</biblScope>
+			<biblScope unit="page" from="791" to="851" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Analysis of large-scale scalar data using hixels</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Thompson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Levine</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Bennett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">T</forename><surname>Bremer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Gyulassy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">P</forename><surname>Pébay</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/LDAV.2011.6092313</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="23" to="30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Trefethen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Bau</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Numerical Linear Algebra. Society for Industrial and Applied Mathematics</title>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Statistical super resolution for data analysis and visualization of large scale cosmological simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Shen</surname></persName>
+		</author>
+		<idno>doi: 10. 1109/PacificVis.2019.00043</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+		<imprint>
+			<date type="published" when="2019" />
+			<biblScope unit="page" from="303" to="312" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Statistical visualization and analysis of large data using a value-based spatial distribution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">H</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">W</forename><surname>Shen</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/PACIFICVIS.2017.8031590</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="161" to="170" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Interactive visual exploration and analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">H</forename><surname>Weber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+		<idno>doi: 10. 1007/978-1-4471-6497-5 15</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Scientific Visualization</title>
+		<meeting><address><addrLine>London</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="161" to="173" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Hardware-assisted feature analysis and visualization of procedurally encoded multifield volumetric data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Botchen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Stegmaier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">P</forename><surname>Gaither</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/MCG.2005.106</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="72" to="81" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">In-situ sampling of a large-scale particle simulation for interactive visualization and analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Figg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wendelberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Habib</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Heitmann</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/j.1467-8659.2011.01964.x</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1151" to="1160" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">EWA volume splatting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zwicker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Baar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/VISUAL.2001.964490</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="29" to="538" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

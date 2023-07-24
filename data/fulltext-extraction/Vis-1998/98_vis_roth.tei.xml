@@ -1,0 +1,675 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">A Higher-Order Method For Finding Vortex Core Lines</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Roth</surname></persName>
+							<email>roth@acm.org</email>
+							<affiliation key="aff0">
+								<orgName type="department">Swiss Center for Scientific Computing</orgName>
+								<orgName type="institution">ETH Zürich</orgName>
+								<address>
+									<country key="CH">Switzerland</country>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ronald</forename><surname>Peikert</surname></persName>
+							<email>peikert@scsc.ethz.ch</email>
+							<affiliation key="aff0">
+								<orgName type="department">Swiss Center for Scientific Computing</orgName>
+								<orgName type="institution">ETH Zürich</orgName>
+								<address>
+									<country key="CH">Switzerland</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">A Higher-Order Method For Finding Vortex Core Lines</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:39+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>vortex cores</term>
+					<term>3D vector fields</term>
+					<term>CFD analysis</term>
+					<term>feature extraction</term>
+					<term>feature-based visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>This paper presents a novel method to extract vortical structures from 3D CFD vector fields automatically. It discusses the underlying theory and some aspects of the implementation. Making use of higher-order derivatives, the method is able to locate bent vortices. In order to structure the recognition procedure, we distinguish locating the core line from calculating attributes of strength and quality. Results are presented on several flow fields from the field of turbomachinery.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>In spite of recent advances, visualizing complex flow fields remains a major challenge. For 2D domains, texturing techniques ( <ref type="bibr" target="#b2">[3]</ref>, <ref type="bibr" target="#b22">[22]</ref>, <ref type="bibr" target="#b12">[13]</ref>) have been very successful in displaying a vector field in its entirety. Texture methods can also be applied in 3D ( <ref type="bibr" target="#b3">[4]</ref>, <ref type="bibr" target="#b7">[8]</ref>). However, such a direct mapping of the entire field to graphical objects can not successfully convey all information present in a spatially complex flow field. Visualization of 3D flows is therefore highly selective. Classical visualization techniques require careful and laborious selection of streamlines or isosurface levels to display the essential properties of a flow. Recent methods ( <ref type="bibr" target="#b20">[20]</ref>, <ref type="bibr" target="#b21">[21]</ref>) aim at assisted or automatic selection and display of essential flow features, leading to the field of feature-based visualization, which integrates data analysis and recognition techniques as first steps into the visualization pipeline.</p><p>Helman and Hesselink <ref type="bibr" target="#b5">[6]</ref> introduced the topology of a vector field as such an automatic feature-based visualization technique. This work has recently been extended to symmetric tensor fields <ref type="bibr" target="#b11">[12]</ref> and second-order singularities <ref type="bibr" target="#b16">[17]</ref>. Other efforts have concentrated on tracking coherent structures in large time-varying flows ( <ref type="bibr" target="#b24">[24]</ref>, <ref type="bibr" target="#b20">[20]</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Turbomachinery flows</head><p>Our field of application, CFD simulations of hydraulic turbomachinery <ref type="bibr" target="#b10">[11]</ref>, is particularly demanding. Flows in water turbines and pumps have fully developed turbulence, are constrained in curved channels of complex geometry and exhibit large downstream pressure gradients and high shear. In addition, commonly used grids have some properties usually not supported in general-purpose visualization packages, such as multi-block structured grids, rotational symmetry and zones moving relative to each other (e.g. stator and runner). The machines are highly optimized, with efficiencies exceeding 93%. Industrial simulations usually solve for steady (time-averaged) solutions of the Navier-Stokes equations. Typical vortices <ref type="bibr" target="#b18">[19]</ref> in such flows are weak, yet these vortices are of particular interest to the engineers developing these turbomachines. Extracting vortices is thus the most important step of a feature-based visualization for this task.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Existing methods for finding vortices</head><p>Various previously published methods for vortex recognition have been found of limited applicability for typical turbomachinery flows. Methods based on isosurfaces of a scalar field (namely, vorticity magnitude <ref type="bibr" target="#b26">[26]</ref>, helicity <ref type="bibr" target="#b13">[14]</ref>, pressure <ref type="bibr" target="#b1">[2]</ref> or lambda 2 <ref type="bibr" target="#b8">[9]</ref>) are usually not able to discriminate between different structures.</p><p>We therefore concentrate on vortex recognition schemes based on the extraction of vortex core lines, i.e. the center lines of the vortices around which the flow spirals. Methods that assume the vortex core line to be a streamline (streamlines from critical points, <ref type="bibr" target="#b4">[5]</ref>) or a vorticity line <ref type="bibr" target="#b25">[25]</ref> could not be successfully applied to our data. Among existing methods for vortex core extraction, we found in <ref type="bibr" target="#b15">[16]</ref> that the ones based on local differential geometric properties of the vector field came closest to our objectives. For both the method that places vortex cores where the curl (vorticity) is parallel to the flow, and for the eigenvector method of <ref type="bibr">Sujudi and Haimes ([23]</ref>, <ref type="bibr" target="#b9">[10]</ref>), we showed that they work satisfactorily in some cases, but failed in others.</p><p>In the following, we discuss the eigenvector method and present an improved method to locate vortex core lines which can handle the case of bent vortices. This method, based on higher-order derivatives, is presented in section 2. Section 3 introduces two attributes of a vortex core -its strength and quality; section 4 presents our results on some example flows. Finally, we summarize our findings and conclude with a preview of planned future work in section 5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Vortex core line method 2.1 Notation and foundations</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Notation</head><p>We use lower case letters in bold font for vectors and vector fields, such as x and v. Upper case letters in the same font represent matrices, such as M and J. In this paper, we refer to the velocity field by v, and to the matrix of its first derivatives (the Jacobian of v) by J:</p><p>.</p><p>( 1 )</p><p>J has either three real, or one real and a pair of conjugate complex eigenvalues. The latter occurs when the discriminant of the characteristic equation is positive, ,</p><p>where P, Q and R are the invariants of J, in particular and .</p><p>We also need the third-order tensor of second derivatives of v, written as T:</p><formula xml:id="formula_1">. ( 3 )</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Fluid dynamics equations</head><p>From fluid dynamics, we need to introduce the derivative following a particle of an arbitrary function f, denoted , and defined as .</p><p>In the remainder of the paper, we assume the vector field to be steady, therefore is zero. We can thus write using vector calculus for steady vector fields as .</p><p>In particular, we can apply this derivative to the velocity vector itself, resulting in the acceleration of a particle (in steady flows):</p><p>.</p><p>This expression appears in both Euler and Navier-Stokes equations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Differential geometry equations</head><p>From differential geometry, we will use curvature and torsion of parametric curves in R <ref type="bibr" target="#b2">3</ref> given in the form .</p><p>With , and denoting and , respectively, we can define a curvature vector of x as <ref type="bibr" target="#b7">(8)</ref> and write the curvature of x as .</p><p>Similarly, the torsion of x can be expressed as</p><formula xml:id="formula_7">. (10)</formula><p>Finally, we will always assume the vector field v to be nondegenerate, that is, the vector and its derivatives up to second order are well-defined and non-zero except at isolated points.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Eigenvector method of Sujudi and Haimes</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Definition</head><p>In their original publication <ref type="bibr" target="#b23">[23]</ref>, Sujudi and Haimes defined the vortex core line as the set of places where what they call the reduced velocity is zero. Reduced velocity is defined as the velocity minus its component in the direction of the real eigenvector of the Jacobian J (Eq. 1). Only regions having complex eigenvalues (Eq. 2) are considered, so there is always a single real eigenvalue and the corresponding eigenvector direction is unique. In a case study <ref type="bibr" target="#b9">[10]</ref> this method was applied to several large data sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Observations</head><p>A reduced velocity of zero means that at these points, the velocity vector is parallel to the real eigenvector of J. Equivalently, v itself is an eigenvector of J, hence a solution of .</p><p>For the assumed case of steady flow, (Eq. 6) is the acceleration vector a of the particle. The method can thus be implemented by evaluating a and checking for parallel v without explicitly solving an eigenvalue problem.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Curvature of a vector field</head><p>Curvature of a vector field can be defined at every (nondegenerate) point by calculating the curvature of the streamline x(t). For a streamline, we have <ref type="bibr" target="#b10">(11)</ref> and, using (Eq. 6), .</p><p>Therefore, the curvature vector (Eq. 8) of a vector field v can be calculated at any (nondegenerate) point by ,</p><p>which becomes zero if, and only if, v is parallel to a -exactly the core line according to the eigenvector method. An intuitive explanation is that a particle at this core is currently moving in direction of v, and its acceleration a is parallel to v, so it will momentarily stay on a straight line.</p><p>Another equivalent formulation of the "v parallel a" condition is thus zero curvature. Again, (Eq. 2) is required a priori.</p><formula xml:id="formula_10">J ij v i ∂ x j ∂ -------- = Q 3 ---- P 2 9 ------ -     3 QP 3R - 6 ---------------------- P 3 27 ------ -     2 + 0 &gt; P trace J ( ) - = R det J ( ) - = T ijk ∂ 2 v i x j x k ∂ ∂ ------------------ = Df Dt ⁄ Df Dt ------- f ∂ t ∂ ----- f ∂ x 1 ∂ ---------v 1 f ∂ x 2 ∂ ---------v 2 f ∂ x 3 ∂ ---------v 3 + + + = f ∂ t ∂ ⁄ Df Dt ⁄ Df Dt ------- grad f v ⋅ = a Dv Dt -------- grad v v ⋅ J v ⋅ = = = x x t ( ) = x' x'' x''' dx dt ⁄ d 2 x dt 2 ⁄ , d 3 x dt 3 ⁄ c x' x'' × x' 3 ---------------- = κ κ c = τ τ x' x'' × ( ) x''' ⋅ x' x'' × 2 --------------------------------- = Jv λv = Jv x' v = x'' Dv Dt -------- Jv a = = = c v a × v 3 ------------- =</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Optimality in globally linear vector fields</head><p>Linear vector fields, e.g. local linearizations given by a Taylor expansion, can be classified into basic patterns named sink, source, saddle, spiral sink, spiral source and spiral saddle, according to <ref type="bibr" target="#b0">[1]</ref>. This classification can be based on the three invariants of the Jacobian, as explained in <ref type="bibr" target="#b14">[15]</ref>.</p><p>As a first test for any vortex core finder, we can therefore examine all classes of globally linear vector fields. For linear fields, the spiral patterns (also called foci) obviously do contain a vortex, and the core line is a straight streamline through the critical point of the vector field -each nondegenerate linear vector field has exactly one critical point. The other classes (sinks, sources, saddles) do not contain a vortex. The eigenvector method agrees with all cases of globally linear vector fields, which makes it superior to the other methods examined.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Problems of the eigenvector method</head><p>While the eigenvector method is correct for all purely linear vector fields, it has problems with vortices that are curved. Especially for our turbomachinery data sets, the vortex core lines found were not as expected. We showed in <ref type="bibr" target="#b15">[16]</ref> that the method introduces an error as soon as the vortex is bent. The error increases with decreasing ratio between rate of rotation around the core and rate of rotation generated by curvature along the core. For very strong vortices or almost straight ones, the eigenvector method succeeds. Problems are caused by weakly rotating vortices with nonnegligible curvature.</p><p>These difficulties originate from the fact that using a linear vector field (the local linearization), it is not possible to model a curved vortex; linear fields can only model a straight vortex, with a straight streamline as its core line.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">A higher-order method for vortex core lines</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Second-order derivatives</head><p>In order to improve the definition for vortex core lines with respect to curved vortices, one obviously has to take into account higher-order derivatives in some way. We therefore introduced the tensor of second derivatives, T (Eq. 3) and use it to calculate the second derivative of v. We do this by applying the operator (Eq. 5) to a defined in (Eq. 6). We denote this second derivative following a particle by b:</p><p>.</p><p>Analogous to (Eq. 11) and (Eq. 12), this is the third derivative of a streamline x(t):</p><p>.</p><p>Zero torsion (streamline locally planar)</p><p>Similar to the curvature in (Eq. 13), the torsion (Eq. 10) of a vector field v can be written as .</p><p>A streamline is locally planar if v, a and b are coplanar, i.e. if the numerator of is zero:</p><formula xml:id="formula_14">. (17)</formula><p>This is true even where is undefined because v is parallel to a.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Model of a bent vortex</head><p>The eigenvector method is based on a straight-line model for the vortex core. The core line actually generated by this method can deviate to some extent from a straight line. However, if the deviation is too large, the result is inconsistent with the underlying model.</p><p>Instead, we use a curved vortex model, namely the bent helical flow introduced in <ref type="bibr" target="#b15">[16]</ref>. In its standard form, this synthetic vortical flow has a core in the shape of a circle and acceleration on the core has a centripetal component only, as depicted in <ref type="figure" target="#fig_0">Fig. 1</ref>. This flow field is defined by , <ref type="bibr" target="#b17">(18)</ref> and conserves mass in an incompressible medium (zero divergence). Modifications of this bent vortex might consist of distorting the circular core or adding tangential acceleration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Adapting the method for bent vortices</head><p>In order to allow curved vortex cores, the zero-curvature condition must be relaxed to a zero-torsion condition, (Eq. 17). The vortex core is a planar curve in the model (Eq. 18), but in analogy to the eigenvector method, we do not assume this property to be true for the resulting core lines in general flows.</p><p>In contrast to the zero-curvature condition, the zero-torsion condition is true on a 2D manifold, namely the zero isosurface of torsion. Therefore, a second condition is needed to restrict the solution to lines.</p><p>A possible second condition could be that zero torsion is preserved as well as possible when following the streamline. This would lead to a definition for the vortex core to be the places where torsion and its first derivative are zero. This indicates that the streamline not only has a point of zero torsion at the core, but at the same time, it is tangential to the zero torsion isosurface.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>D Dt</head><formula xml:id="formula_15">⁄ b D 2 v Dt 2 ---------- Da Dt --------- D Jv ( ) Dt ----------------- JJv Tvv + = = = = x''' b JJv Tvv + = = τ v a × ( ) b ⋅ v a × 2 ------------------------- =</formula><formula xml:id="formula_16">v a × ( ) b ⋅ 0 = τ v bent vortex model γy r ----- - ωzx r 2 ---------- - γx r ----- ωzy r 2 ---------- - ω 1 R r ---- -     , ,     = where r x 2 y 2 + = Dτ Dt ⁄</formula><p>The advantage of this hypothetical method is that it correctly handles the bent vortex model under a wide range of modifications. However, calculating the derivative of torsion requires yet another derivative, the third derivative of the vector field v. Calculating high derivatives numerically in a discrete grid is by nature unstable and inaccurate. In practice, as a second condition appears too difficult to evaluate with sufficient accuracy for the resulting vortex cores to be useful: the large relative errors on a third derivative lead to excessive noise.</p><p>A numerically feasible method must avoid third derivatives of the velocity. Knowing that b is restricted to the &lt;v, a&gt; plane by the condition of zero torsion (Eq. 17), we can now add a second condition by prescribing to b a fixed direction in the &lt;v, a&gt; plane. Here, the best choice is to require that b is parallel to v, since this correctly describes the standard case of the bent vortex model shown in <ref type="figure" target="#fig_0">Fig. 1</ref>.</p><p>If the model is modified by adding tangential acceleration or some distortions to the circular core, solving for b parallel to v yields a core line which deviates from the actual core. However, around the core, b varies in direction fast enough to make these deviations small under realistic conditions. We demonstrate below that our bent helical flow can model the characteristics of vortices actually present in real CFD data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Higher-order method for vortex cores</head><p>Based on the above motivation and supported by practical data, we suggest the following improved definition for a vortex core: the core line is the location of all points where b is parallel to v. This can be written as . <ref type="bibr" target="#b18">(19)</ref> Note that this vector equation represents three scalar equations for x,y,z and a new variable k; nondegenerate solutions are therefore one-dimensional.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Application to direction fields</head><p>It is possible to define a variation of our method such that vortices are determined by the geometry of the streamlines alone, and do not depend on the speed along these lines. This is equivalent to claiming that vortex cores should only depend on the directional information in the vector field, and not on the magnitudes of the flow vectors.</p><p>To modify the core line condition according to this requirement, one has to take the derivatives along the streamline with respect to arc length, as opposed to a temporal derivative. This can be achieved by normalization of the vectors prior to the application of the b parallel v method. This variant with prior normalization of the vector field defines the vortex core at the places where streamlines are locally circular, i.e. are planar (zero torsion) and have currently no change in curvature.</p><p>The two variants pick slightly different locations for the vortex core lines; they agree if the acceleration along the core is negligible.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">Implementation Issues</head><p>Our current implementation consists of two parts: first, the vector field b is calculated at all gridpoint locations. Then, the problem of finding the places where b is parallel to v is solved.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Derivatives</head><p>The calculation of b requires second derivatives. This is currently done by implementing a D/Dt operator (Eq. 5) which calculates one derivative (Jacobian) and multiplies it by v. This function is then applied twice to the velocity vector v itself.</p><p>To calculate derivatives in a discrete grid we take all neighbor points of a vertex (26 neighbors in a structured grid) and find the linear function that fits best with respect to a least-squares criterion. This can be solved with a simple 3 by 3 matrix inversion.</p><p>As no smoothing is done within the derivative algorithm, it is advisable to use some smoothing on the data as a preprocessing step. This avoids excessive fluctuations of the calculated derivative due to discretization errors. In the near future, we plan to examine how different smoothing functions improve the numerical accuracy of the derivatives and the resulting core lines. However, images in the paper and the accompanying video have been calculated without smoothing the vector field.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Finding parallel vectors using Newton iteration</head><p>The second step consists of finding the places where two given vector fields are parallel. Our algorithm looks at all internal faces (quads or triangles) of grid cells and finds the points where the solution curve intersects the face. We have two ways to find intersection of the solution curve with a face, given the two vector fields in the corners of the face.</p><p>The first method uses Newton iteration. Starting in the center of each face, a succession of 2D Newton steps within the face approaches the solution. If the solution converges but lies outside the current face, it is discarded. This method can handle vector fields defined on the cell face by an arbitrary interpolation function, for example, a bilinear interpolation on quadrilaterals.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Analytic solution for parallel vectors</head><p>The second method calculates the analytic solution, but assumes linear interpolation on the face. Quadrilateral faces thus have to be subdivided into triangles. The search for points where two linear vector fields g and h are parallel can be reduced to an eigenvector problem in the following way: On a triangular face, a linear vector field g can be written as a function of local triangle coordinates u, v:</p><formula xml:id="formula_17">. (20)</formula><p>Two fields are parallel when</p><formula xml:id="formula_18">. (21) Dτ Dt ⁄ Dτ Dt ⁄ 0 = k ∃ JJv Tvv + , kv = g G 1 u v = G 1 u v kH 1 u v =</formula><p>If H is invertible, multiplying this by its inverse, H -1 , leads to ,</p><p>which is an eigenvector problem with . If H is not invertible but G is, then the roles of g and h can simply be swapped. If both are not invertible, no isolated solutions exist. Points where two linear vector fields are parallel on a triangle can thus be found analytically by calculating eigenvectors of a 3 by 3 matrix M. <ref type="figure" target="#fig_3">Fig. 5 and 6</ref> show the raw output of this algorithm: all points on a grid cell face where v is parallel to a, or b, respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Vortex strength and quality</head><p>Both the eigenvector method and our method produce many solution points that, upon close inspection, can not be considered vortex cores, for example because there is no significant rotation present (raw points shown in <ref type="figure" target="#fig_3">Fig. 5 and 6</ref>). Therefore, besides the location of vortex cores discussed so far in this paper, it is also necessary to define some attributes on these core lines. The most important one is a measure for the strength of the vortex.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Strength of rotation</head><p>The eigenvector method assumes that some swirl is present whenever there are complex eigenvalues of the Jacobian (Eq. 2). The strength of the swirling motion is measured by the absolute value of the imaginary part of the complex eigenvalues. In our method, we prefer to do this calculation in two dimensions. Therefore, we first project the linearized vector field onto a plane perpendicular to the core velocity. The 2D discriminant is then computed, and in case of complex eigenvalues, the imaginary part is used as the measure for rotation strength.</p><p>We also determine the sign (right-or lefthanded rotation) by computing the sign of the curl of the projected flow and comparing with the local flow direction.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Quality of solution</head><p>The equations for both the eigenvector method and our method can have solution lines at a large angle to the flow vector. This does not correspond with the intuitive model of a vortex, where the core line is close to a streamline. From the set of detected vortex cores, we therefore want to eliminate lines that consistently exhibit a large angle to the flow.</p><p>We measure quality by the cosine of the angle between the vortex core and the velocity vector. For actual vortices, this angle is expected to be small.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Noise suppression</head><p>Especially in regions where there is only a slight rotation present, very short segments of vortex cores with weak rotation are found. Small and weak features are undesired, as they may stem from numerical errors (in the calculation of core lines, or in the original flow simulation). The user can therefore impose limits on minimal strength and quality in order to filter desired solutions from noise. Instead of this absolute threshold, we plan to apply a hysteresis threshold technique to the vortex core lines.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Preliminary results</head><p>We applied the b parallel v method to several data sets, including the two data sets used in the video accompanying <ref type="bibr" target="#b15">[16]</ref>. Many vortical structures can be recognized by both the eigenvector and our higher-order method, but the vortex core lines often do not coincide. In such situations, the core lines produced by our method consistently exhibit better quality in the sense of the definition in section 3.</p><p>Our method was designed to handle the case of the analytical flow representing a bent vortex <ref type="figure" target="#fig_2">(Fig. 2, left)</ref>. Similar situations have been found in practical data sets <ref type="figure" target="#fig_2">(Fig. 2, right)</ref>. As long as the flow speed along the core is uniform, the condition b parallel v holds at the vortex core. If the flow along the core accelerates however, the core line deviates from the core. For reasonable parameters, it is still closer to the actual core than the position indicated by the eigenvector method. The variant that applies normalization of the vector field prior to calculating derivatives is not disturbed by acceleration along the core. However, it can not correctly handle some distortions such as a scaling in x direction of the whole vector field. The actual vortex core of this synthetic flow field always corresponds exactly to our "hypothetical" method (zero torsion and zero derivative of torsion along a streamline), but this method is not applicable to practical data sets due to numerical instabilities in the calculation of third derivatives.</p><p>For the example field of the turbine draft tube <ref type="bibr" target="#b17">[18]</ref>, the improved method finds a vortex core that can be associated with the large swirl in this flow and also tracks the core in the curved part of the draft tube <ref type="figure" target="#fig_8">(Fig. 3)</ref>. The eigenvector method detected a reasonable vortex core only in the straight end part of the data set, but none in the curved part.</p><p>For the turbine runner example data set, we selected a typical vortical structure and colored some streamlines manually to roughly indicate the structure in question <ref type="figure" target="#fig_7">(Fig. 4, top)</ref>. The eigenvector method captured the start of this vortex well and tracked it to some extent; the vortex core however appeared slightly offset to the inside of the core radius <ref type="figure" target="#fig_7">(Fig. 4, bottom)</ref>. This indicates that the flow in this practical data set is very consistent to our analytical model of a bent vortex. The improved method locates the core and can track it significantly further than the eigenvector method. As a final example, we applied the higher order method to the standard benchmark CFD data set, the blunt fin flow <ref type="bibr" target="#b6">[7]</ref>. On this data set, several different vortex finding algorithms, including ours depicted in <ref type="figure" target="#fig_5">Fig. 7</ref>, agree on the location of the core line of the horseshoe vortex in front of the fin.</p><formula xml:id="formula_20">H 1 -G 1 u v k 1 u v = Mx λx = M H 1 -G =</formula><p>Our prototype implementation in AVS 5 only requires storage for the additional vector b and runs in a few minutes for typical data sets with half a million nodes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Conclusions, Future Work</head><p>This paper proposes a new method to find vortex core lines. Localization of vortices has been structured into several components: To find the location of the core lines, we use the condition of b parallel v. Rotation strength is measured by projecting the linearized flow field perpendicular to the core velocity. A sign denoting the handedness of rotation is similarly computed.</p><p>Finally, a quality attribute is evaluated to check for consistency.</p><p>With the test data used so far, we can conclude that the b parallel v method represents a significant improvement over the eigenvector method for flows where the curvature of vortices can not be neglected. In cases where the eigenvector method is already sufficient (due to almost straight or very strongly rotating vortices), the two methods are roughly equivalent.</p><p>Compared to the eigenvector method, our new method faces the problems of computing higher order derivatives. Careful imple-mentation can reduce undesired "false hit" effects in the form of short, isolated vortex core segments, especially near solid boundaries.</p><p>Work is underway to extract a more symbolic description of the vortex core lines. The algorithm described here yields only a set of points (with strength and quality measurement). This is sufficient for direct display as lines, but in order to allow operations like interactive selection of vortices, the program needs a symbolic description of the line structures. Once the core lines are known, more powerful and informative visualization methods can be devised, for example by defining a vortex region around the core to depict size and shape of the whole vortex. We plan to develop such a technique in the near future and apply it to a larger set of data, mainly from the field of hydrodynamics.      </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Front and top view of situation at core of bent helical vortex. At the core, b is antiparallel to v; a is perpendicular.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head></head><label></label><figDesc>τ</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2 :</head><label>2</label><figDesc>Comparable situation in bent vortex model (left) and practical data (right): shown are cores indicated by eigenvector (a) and b parallel v (b) methods, and a set of streamlines around each core.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 5 :</head><label>5</label><figDesc>All points where a is parallel to v(Eigenvector method)    in the blunt fin data set.The main horseshoe vortex is strong enough to be detected by the eigenvector method in spite of its curvature.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 6 :</head><label>6</label><figDesc>All points where b is parallel to v. Although second-order derivatives are calculated numerically, the increase in noise in comparison to the eigenvector is tolerable.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 7 :</head><label>7</label><figDesc>Core lines (white) detected by the b parallel v method, and some streamlines (black) in the blunt fin data set.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 2 .</head><label>2</label><figDesc>Comparable situation in bent vortex model (left) and practical data (right): shown are cores indicated by eigenvector (a) and b parallel v (b) methods, and a set of streamlines around each core.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 4 .</head><label>4</label><figDesc>Streamlines (top) and core lines (bottom) in a turbine runner at part load.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure 3 .</head><label>3</label><figDesc>Vortex cores and streamlines in a water turbine draft tube.</figDesc></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>The authors want to thank the CFD group of Sulzer Hydro Ltd., Zurich, and Prof. Markus Gross (Computer Graphics Research Group, ETH Zurich) for their support of this research. This work is partly financed by the Commission for Technology and Innovation (CTI project 3744.1).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Web address</head><p>http://www.scsc.ethz.ch/SV/turbo </p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Asimov</surname></persName>
+		</author>
+		<title level="m">Notes on the Topology of Vector Fields and Flows</title>
+		<meeting><address><addrLine>San Jose</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of Visualization &apos;93</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">C</forename><surname>Banks</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">A</forename><surname>Singer</surname></persName>
+		</author>
+		<title level="m">Vortex Tubes in Turbulent Flows: Identification, Representation, Reconstruction</title>
+		<meeting><address><addrLine>Washington, DC</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1994-10" />
+			<biblScope unit="page" from="132" to="139" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of IEEE Visualization &apos;94</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Imaging Vector Fields using Line Integral Convolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Cabral</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Leedom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics `93 (SIGGRAPH) Conference Proceedings</title>
+		<meeting><address><addrLine>Los Angeles, CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1993-08" />
+			<biblScope unit="page" from="263" to="270" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Crawfis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+		<title level="m">Texture Splats for 3D Scalar and Vector Field Visualization</title>
+		<imprint>
+			<date type="published" when="1993-10" />
+			<biblScope unit="page" from="261" to="265" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of Visualization &apos;93</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">A Tool for Visualizing the Topology of 3D Vector Fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Globus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Levit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Lasinski</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;91</title>
+		<meeting>Visualization &apos;91<address><addrLine>San Diego, CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1991-10" />
+			<biblScope unit="page" from="33" to="39" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Visualizing Vector Field Topology in Fluid Flows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">L</forename><surname>Helman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Hesselink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="36" to="46" />
+			<date type="published" when="1991-05" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Simulation of Blunt-Fin Induced Shock Wave and Turbulent Boundary Layer Separation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Hung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">G</forename><surname>Buning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AIAA Aerospace Sciences Conference</title>
+		<meeting><address><addrLine>Reno, NV</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1984-01" />
+		</imprint>
+	</monogr>
+	<note>AIAA Paper 84-0457</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Interrante</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Grosch</surname></persName>
+		</author>
+		<title level="m">Strategies for Effectively Visualizing 3D Flow with Volume LIC</title>
+		<meeting><address><addrLine>Phoenix, AZ</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1997-10" />
+			<biblScope unit="page" from="421" to="424" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of Visualization &apos;97</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">On the identification of a vortex</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Jeong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Hussain</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Journal of Fluid Mech</title>
+		<imprint>
+			<biblScope unit="volume">285</biblScope>
+			<biblScope unit="page" from="69" to="94" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Vortex Identification -Applications in Aerodynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kenwright</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Haimes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;97</title>
+		<meeting>Visualization &apos;97<address><addrLine>Phoenix, AZ</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1997-10" />
+			<biblScope unit="page" from="413" to="416" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">I</forename><surname>Krivchenko</surname></persName>
+		</author>
+		<idno>1-56670-001-9</idno>
+		<title level="m">Hydraulic Machines: Turbines and Pumps</title>
+		<imprint>
+			<publisher>CRC Press</publisher>
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+	<note>2nd ed.</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lavin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Levy</surname></persName>
+		</author>
+		<title level="m">Singularities in Nonuniform Tensor Fields</title>
+		<meeting><address><addrLine>Phoenix, AZ</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1997-10" />
+			<biblScope unit="page" from="59" to="66" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of Visualization &apos;97</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Enhanced Spot Noise for Vector Field Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>De Leeuw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Wijk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;95</title>
+		<meeting>Visualization &apos;95<address><addrLine>Atlanta, GA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1995-10" />
+			<biblScope unit="page" from="233" to="239" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Graphical Visualization of Vortical Flows by Means of Helicity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Levy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Degani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Seginer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">AIAA</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1347" to="1352" />
+			<date type="published" when="1990-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Topology of Flow Patterns in Vortex Motions and Turbulence</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">E</forename><surname>Perry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">S</forename><surname>Chong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eddy Structure Identification in Free Turbulent Shear Flows</title>
+		<editor>J. P Bonnet and M. N. Glauser</editor>
+		<imprint>
+			<publisher>Kluwer Academic Publishers</publisher>
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Flow Visualization for Turbomachinery Design</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Roth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization &apos;96</title>
+		<meeting>IEEE Visualization &apos;96<address><addrLine>San Francisco, CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1996-10" />
+			<biblScope unit="page" from="381" to="384" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Visualization of Higher Order Singularities in Vector Fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Scheuermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hagen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Menzel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Rockwood</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;97</title>
+		<meeting>Visualization &apos;97<address><addrLine>Phoenix, AZ</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1997-10" />
+			<biblScope unit="page" from="67" to="71" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Uprating of Ultra-Low Head Francis Units based on Numerical Flow Analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sebestyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Keck</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Water Power Conference on Uprating and Refurbishing Hydro Powerplants</title>
+		<meeting>Water Power Conference on Uprating and Refurbishing Hydro Powerplants<address><addrLine>Nice, France</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Simulation of Turbomachinery Secondary Flow Phenomena</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sebestyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of European Modeling and Simulation Multiconference</title>
+		<meeting>European Modeling and Simulation Multiconference<address><addrLine>Panum Institute, Copenhagen, Denmark</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1991-06" />
+			<biblScope unit="page" from="590" to="594" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Streamlines (top) and core lines (bottom)in a turbine runner at part load</title>
+	</analytic>
+	<monogr>
+		<title level="j">Figure</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Volume Tracking</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Silver</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization &apos;96</title>
+		<meeting>IEEE Visualization &apos;96<address><addrLine>San Francisco, CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1996-10" />
+			<biblScope unit="page" from="157" to="164" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Deformable Surface Techniques for Field Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Sadarjoen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Post</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Eurographics &apos;97</title>
+		<meeting>Eurographics &apos;97<address><addrLine>Budapest</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1997-09" />
+			<biblScope unit="page" from="109" to="116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Fast and Resolution Independent Line Integral Convolution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Stalling</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hege</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics `95 (SIGGRAPH) Conference Proceedings</title>
+		<meeting><address><addrLine>Los Angeles</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1995-08" />
+			<biblScope unit="page" from="249" to="256" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Sujudi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Haimes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Identification of Swirling Flow in 3D Vector Fields</title>
+		<meeting><address><addrLine>MIT, Cambridge, MA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Tech. Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">An Algorithm for Space Recognition and Time Tracking of Vorticity Tubes in Turbulence</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">John</forename><surname>Villasenor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Vincent</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">CVGIP Image Understanding</title>
+		<imprint>
+			<date type="published" when="1992-01" />
+			<biblScope unit="volume">55</biblScope>
+			<biblScope unit="page" from="27" to="35" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Streamlines, Vorticity Lines, and Vortices</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">A</forename><surname>Yates</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">T</forename><surname>Chapman</surname></persName>
+		</author>
+		<idno>AIAA 91-0731</idno>
+	</analytic>
+	<monogr>
+		<title level="m">29th Aerospace Sciences Meeting</title>
+		<meeting><address><addrLine>Reno, NV</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1991-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Emergence of Coherent Patterns of Vortex Stretching during Reconnection: A Scattering Paradigm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">J</forename><surname>Zabusky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><forename type="middle">N</forename><surname>Boratav</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Pelz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Silver</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">P</forename><surname>Cooper</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Phys. of Fluids A</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page">2469</biblScope>
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

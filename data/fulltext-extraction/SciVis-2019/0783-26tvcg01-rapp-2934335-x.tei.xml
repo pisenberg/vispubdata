@@ -1,0 +1,832 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main"></title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<idno type="DOI">10.1109/TVCG.2019.2934335</idno>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T19:45+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<abstract/>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>We select 1 % from 500,000 data points by random (a) and using our void-and-cluster (d) sampling technique. Our approach chooses a set of samples that uniformly covers the spatial domain, whilst avoiding regularity artifacts, which leads to a blue noise spectrum for our technique (e) in contrast to random sampling (b). Our approach leads to a more accurate reconstruction of the dataset using the same amount of samples (c, f). Furthermore, we have sampled pathlines of the ABC flow with our technique (g, h), which implicitly defines a continuous level-of-detail, to render a greater (g) and smaller subset (h) of the trajectories.</p><p>Abstract-We propose a data reduction technique for scattered data based on statistical sampling. Our void-and-cluster sampling technique finds a representative subset that is optimally distributed in the spatial domain with respect to the blue noise property. In addition, it can adapt to a given density function, which we use to sample regions of high complexity in the multivariate value domain more densely. Moreover, our sampling technique implicitly defines an ordering on the samples that enables progressive data loading and a continuous level-of-detail representation. We extend our technique to sample time-dependent trajectories, for example pathlines in a time interval, using an efficient and iterative approach. Furthermore, we introduce a local and continuous error measure to quantify how well a set of samples represents the original dataset. We apply this error measure during sampling to guide the number of samples that are taken. Finally, we use this error measure and other quantities to evaluate the quality, performance, and scalability of our algorithm.</p><p>Index Terms-Data reduction, sampling, blue noise, entropy-based sampling, scattered data, pathlines In the field of scientific visualization, interactive exploration and analysis are considered essential to gain insight into large and complex datasets. Although data sizes are growing rapidly, for example due to advancements in high-performance computing or increasingly accurate measurement devices, storage bandwidth does not increase accordingly. Data reduction is thus a necessary means to reduce storage requirements for both simulation, measurement devices, and for subsequent data analysis. We specifically consider the reduction of large, spatio-temporal scattered data, i.e. unstructured points in space-time with an associated value domain. In particular, we investigate the use of statistical sam-</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>pling to reduce large datasets to a representative subset. Sampling scales well to higher dimensional data and is well-suited for scattered data. Although simple random sampling gives decent results, recent work improves upon this using stratified <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b27">28]</ref> and information-guided sampling <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b26">27]</ref>. These results emphasize the significance of stratification in the spatial domain and adaptive sampling guided by the value domain.</p><p>We propose a sampling strategy for scattered data generalizing the void-and-cluster technique from Ulichney <ref type="bibr" target="#b24">[25]</ref> that stratifies optimally in the spatial domain. Specifically, we find samples that are well distributed with respect to the blue noise property, which implies large mutual distances between samples without causing regularity artifacts. Additionally, we discuss how to adapt the sampling strategy to the value dimensions by better sampling regions of value distributions with high entropy. Moreover, the sampling technique implicitly defines an ordering on the samples that enables progressive data loading and continuous level-of-detail during visualization and analysis. Our proposed algorithm is fast, scalable, and well-suited for GPU acceleration. Therefore, it is applicable in-situ, i.e. while a simulation is running, but also as a traditional post-processing step.</p><p>Furthermore, we extend our sampling technique to time-dependent scattered data. Instead of considering each time step independently, we sample trajectories, i.e. sequences of scattered points defined over time. We find representative trajectories that evenly cover the spatiotemporal domain based on an efficient iterative extension of the voidand-cluster technique. An example for such trajectory datasets are particle-based simulations that trace particles over time. Additionally, representing fluid flows using Lagrangian trajectories, i.e. pathlines, instead of velocity fields has recently gained popularity <ref type="bibr" target="#b0">[1]</ref>. Pathlines are thereby advected during simulation time using the high-resolution vector field data, which could not be stored otherwise. In both of these examples, the data consists of a large amount of trajectories that we reduce using our sampling technique.</p><p>Lastly, we introduce an error measure to quantify how well a set of samples represents the data with respect to both the spatial and the value domain. In particular, we derive a continuous error measure that quantifies the difference in the value distributions for every point in the dataset. This error measure integrates well into our sampling technique, where we use it to determine when a sufficient number of samples has been taken. We evaluate the quality of our proposed sampling technique on different synthetic and real-word datasets using this error measure and other derived quantities, such as the quality of scattered data interpolation. Finally, we investigate the performance and scalability of our proposed sampling technique and compare it to related approaches. To summarize, our contribution is a sampling technique that:</p><p>Takes optimally distributed samples in the spatial domain with respect to the blue noise property, Adapts to an arbitrary density, for example derived from a multivariate value domain, Implicitly defines an ordering of the samples that we use for continuous level-of-detail and progressive data loading,</p><p>We extend to sample time-dependent data, for example pathlines in a fluid flow.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>We first discuss the visualization of large data with a focus on data reduction and scattered data, before we introduce the concept of blue noise and discuss corresponding sampling strategies.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Visualizing Large Datasets</head><p>To visualize large datasets, we focus on approaches that create a compact derived representation, instead of orthogonal approaches such as data compression. Li et al. <ref type="bibr" target="#b12">[13]</ref> survey data reduction techniques for simulation, visualization, and data analysis.</p><p>Several distribution-based data representation approaches have been proposed, which represent large datasets using distributions that are sampled during subsequent visualization and analysis. In particular, Thompson et al. <ref type="bibr" target="#b22">[23]</ref> represent value distributions by storing a histogram per block of voxels. Sicat et al. <ref type="bibr" target="#b18">[19]</ref> construct a multi-resolution volume from sparse probability density functions defined in the 4D domain comprised of the spatial and data range. Several promising approaches rely on Gaussian mixture models (GMMs), which represent arbitrary distributions as a weighted combination of Gaussians. Wang et al. <ref type="bibr" target="#b25">[26]</ref> employ a spatial GMM in addition to a value distribution in each data block, whilst Dutta et al. <ref type="bibr" target="#b6">[7]</ref> partition the data into local, homogeneous regions and fit a GMM in each partition. For in-situ processing, Dutta et al. <ref type="bibr" target="#b5">[6]</ref> perform incremental GMM estimation instead of expectation maximization to compute the mixture models. Hazarika et al. <ref type="bibr" target="#b10">[11]</ref> model distribution-based multivariate data using copula functions, which allow modeling the marginal distributions separately from the dependencies between dimensions.</p><p>Although distribution-based approaches achieve a significant reduction in data size, they are difficult to extend to higher-dimensional data due to the curse of dimensionality. Moreover, these approaches have been developed for uniformly structured data and the extension to scattered data is non-trivial. While scattered data can be visualized by first reconstructing a structured representation <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b15">16]</ref>, this approach has its own drawbacks and is not an option for all analysis techniques and needs. For example, particle-based visualizations benefit from specific visualization and analysis techniques <ref type="bibr" target="#b9">[10]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Sampling</head><p>Statistical sampling of data <ref type="bibr" target="#b4">[5]</ref> is gaining popularity in the field of scientific visualization. Reinhardt et al. <ref type="bibr" target="#b16">[17]</ref> use stochastic sampling to improve performance and reduce visual clutter for the visual debugging of smoothed particle hydrodynamics (SPH) simulations. Sauer et al. <ref type="bibr" target="#b17">[18]</ref> propose a data representation that combines particle and volume data and supports sampling of particles by using the corresponding volume to find evenly distributed samples. Woodring et al. <ref type="bibr" target="#b27">[28]</ref> describe a simulation-time stratified sampling strategy for a large-scale particle simulation. For stratification, the authors construct a kd-tree from the data that is also used as a level-of-detail representation. Su et al. <ref type="bibr" target="#b20">[21]</ref> discuss server-side sampling using bitmap indices and stratify both in the spatial and value domain. Wei et al. <ref type="bibr" target="#b26">[27]</ref> extend their approach with an information-guided sampling strategy and recovery technique. During sampling, they measure the information per stratum by computing the entropy of the value distribution and draw samples accordingly. Biswas et al. <ref type="bibr" target="#b2">[3]</ref> similarly employ an information-guided strategy to sample adaptively during in-situ simulation, but use a global histogram for the entropy computation.</p><p>A desirable property of point distributions is the blue noise characteristic <ref type="bibr" target="#b23">[24]</ref>, which leads to large mutual distances between points without noticeable regularity artifacts. Balzer et al. <ref type="bibr" target="#b1">[2]</ref> compute Capacityconstrained Voronoi diagrams (CCVD) to optimize the blue noise property of point distributions, which allows adapting the point distributions to a given density function. To find representative particles, Frey et al. <ref type="bibr" target="#b8">[9]</ref> propose loose capacity-constrained Voronoi diagrams (LCCVD) that relax the capacity-constraints of the CCVD method and are computed on the GPU. All methods based on capacity-constrained Voronoi diagrams can be used to sample scattered data, but are computationally demanding. Bridson <ref type="bibr" target="#b3">[4]</ref> presents a Poisson disk sampling technique to generate blue noise samples in arbitrary dimensions by enforcing a minimal and maximal distance between nearest neighbors. The technique is designed to produce entirely new sample sets, not to reduce an existing sample set.</p><p>Ulichney <ref type="bibr" target="#b24">[25]</ref> introduces the void-and-cluster sampling technique in the context of halftoning and dithering. The technique ranks all pixels in a rastered image, thus producing a dithering mask. If we think of all pixels that are already ranked as white and mark the others black, applying a Gaussian filter yields an image that indicates the local density of ranked pixels. The tightest cluster is brightest, the largest void is darkest. The void-and-cluster technique goes through three phases to fill large voids and reduce tight clusters greedily. The order  <ref type="bibr" target="#b24">[25]</ref> extended to scattered data. After initial random sampling (a), the samples are optimized by finding (b) and exchanging (c) the largest void p min with the tightest cluster s max until p min = s max . We then iteratively find and add (d) the largest void p min until we have enough samples.</p><p>of greedy additions implies an order on the sample set such that each prefix has good blue noise characteristics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">SAMPLING SCATTERED DATA AND TRAJECTORIES</head><p>Ulichney's algorithm <ref type="bibr" target="#b24">[25]</ref> is restricted to regular grids and produces samples with a uniform density. In this section, we generalize the approach to scattered data with a non-uniform distribution. To preserve the spatial density, we compute a density estimate on the whole dataset.</p><p>Our generalized void-and-cluster sampling works on scattered data and enforces the given density (Sect. 3.1). Like the original algorithm, it orders all sample points to enable level of detail and progressive data loading (Sect. 3.2). The algorithm is efficient because each iteration only requires local updates with compact kernels (Sect. 3.3). Our parallel implementation in Sect. 4 further exploits this locality. Supporting arbitrary sampling densities lets us emphasize regions of high entropy in the value domain (Sect. 3.4). Finally, we extend our technique to the sampling of time-dependent trajectories (Sect. 3.5).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Void-and-Cluster Sampling</head><p>Assume we have a dataset with points P ⊂ R d in a d-dimensional spatial domain. Each sample is mapped to a value in the possibly multivariate value domain V through v : P → V . Among these points, we want to pick a representative subset S ⊂ P. Therefore, we optimize the placement of samples in the spatial domain by estimating the density of selected samples λ S : P → R + for each point p ∈ P. A high sample density indicates a large number of nearby samples, whilst a low density indicates few. We want to place samples such that dense regions (clusters) and empty regions (voids) are avoided. Or, in other words, reduce the maximum of the sample density λ S and increase its minimum. This does not work for spatially non-uniformly distributed data points since we have to account for the original distribution in the spatial domain. Even for uniformly distributed points the border region of the spatial domain is less densely populated. We account for the spatial distribution of the points by first computing a point density ρ P for each p ∈ P:</p><formula xml:id="formula_0">ρ P (p) := ∑ p i ∈P k( p − p i ),<label>(1)</label></formula><p>using a kernel function k. Given a subset of samples S ⊂ P, the sample density at p ∈ P is then defined as:</p><formula xml:id="formula_1">λ S (p) := ∑ s∈S k( p − s ) ρ P (p) .<label>(2)</label></formula><p>We will now describe a strategy to find the optimal set of samples in the spatial domain with respect to the sample density λ S , by extending the void-and-cluster algorithm <ref type="bibr" target="#b24">[25]</ref>. This is an iterative and greedy algorithm that at each step finds a locally optimal distribution of samples. An overview of our modified void-and-cluster sampling technique is depicted in <ref type="figure" target="#fig_1">Fig. 2</ref>. Initially, we take a fixed number of random samples. Although the point density ρ P stays constant, we have to update λ S when we change the set of samples. The sample density is computed incrementally when a sample s is added (or removed), by adding to (or subtracting from) the density λ S (p) for all points.</p><p>We then optimize these initial samples by removing the tightest cluster</p><formula xml:id="formula_2">s max = arg max s∈S λ S (s) ∈ S,<label>(3)</label></formula><p>i.e. the sample with largest λ S . Then, we add the largest void</p><formula xml:id="formula_3">p min = arg min p∈P\S λ S (p) ∈ P \ S,<label>(4)</label></formula><p>i.e. the point with the lowest λ S that is not a sample yet. Since we add and remove a sample, we have to update the sample densities accordingly. The optimization stops once the tightest cluster that we remove then becomes the largest void, that is s max = p min . After construction of the optimal initial sampling, we iteratively find and add the largest void to the set of samples until we have reached the desired amount of samples. We provide detailed pseudocode of the entire algorithm in the supplementary document.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Ordering of Samples</head><p>A positive side-effect of the greedy approach is that the void-and-cluster strategy implicitly defines an ordering of the samples. With respect to this ordering, any prefix of the sample set S still has good blue noise characteristics. Ulichney <ref type="bibr" target="#b24">[25]</ref> denotes it as the rank r : P → N, where r(p) = ∞ for all p ∈ P \ S. To compute this ordering, we assign and increment the rank when adding a sample during the initial random sampling or the void filling steps. For a sample s i that is added as the i-th sample, we set r(s i ) = i. During the void-and-cluster optimization, when we exchange the tightest cluster s max with the largest void p min , we have to swap the rank accordingly, i.e. we set r(p min ) = r(s max ) and r(s max ) = ∞.</p><p>We re-order (or index) the samples according to this mapping. We can use this ordering for continuous level-of-detail and for progressive data loading during the subsequent visualization and analysis.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Compact Kernels</head><p>If the kernel k is compact, i.e. has a finite extent, only a local neighborhood has to be considered when updating the densities of samples and points. For compact kernels, the optimization is thus defined locally. In our experiments, we found that the choice of kernel does influence the distribution of samples and the quality of the blue noise. Nonetheless, we always achieved good results as long as the kernel size h P was in a reasonable order of magnitude with respect to the spatial domain. If we take a fraction of all samples |S| &lt; |P|, we have to increase the kernel size h used for sampling accordingly:</p><formula xml:id="formula_4">h := h P d |P| |S| ,<label>(5)</label></formula><p>using the spatial dimension d. Although we did experiment with a Gaussian kernel, we use a cubic spline <ref type="bibr" target="#b14">[15]</ref> in the remainder of this work since it yields similar results, but is compact. Lastly, we denote points in the support of kernel k at point p ∈ P as its neighborhood N p ⊂ P.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Adaptive Sampling</head><p>So far we have taken all samples with equal probability and proportional to the spatial density. Now, we discuss the use of non-uniform probabilities to better capture complicated behavior in the value dimensions.</p><p>In general, we would like to take samples S ⊂ P according to the probability mass function φ : P → [0, 1]. To sample a representative subset, we must re-weight all samples s ∈ S proportionally to the reciprocal φ −1 (s). With our void-and-cluster approach, we implement this adaptation by using a modified density:</p><formula xml:id="formula_5">ρ P (p) := ρ P (p)φ (p).<label>(6)</label></formula><p>Thus, any normalized importance measure, for example a computed feature or derived variable, can be used to guide the placement of samples.</p><p>Entropy Sampling Similar to recently proposed sampling techniques <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b26">27]</ref>, we place more samples in regions with a high entropy, i.e. value distributions of high complexity.</p><p>For each point p ∈ P we compute the entropy using its local neighborhood N p , see <ref type="figure" target="#fig_2">Fig. 3</ref>. Specifically, we create a histogram of the value distribution of all points in the neighborhood. We use the global value range for the computation of the histogram to ensure that the entropy is consistent everywhere. To obtain a continuous entropy in the spatial domain, we weight the contribution of each neighbor with respect to its distance to p using the kernel k. From the weighted and normalized histogram h p of size N bins , we compute the entropy:</p><formula xml:id="formula_6">H(p) := − N bins −1 ∑ i=0 h p (i) log 2 h p (i).<label>(7)</label></formula><p>Similar to Wei et al. <ref type="bibr" target="#b26">[27]</ref>, we derive a sampling probability that is independent of the size of the histogram as</p><formula xml:id="formula_7">φ H (p) := 2 H(p) N bins<label>(8)</label></formula><p>and then derive a correctly normalized probability mass function as</p><formula xml:id="formula_8">φ (p) = φ H (p) ∑ p i ∈P φ H (p i ) .<label>(9)</label></formula><p>For multivariate data, we have to construct a single probability from multiple value dimensions. Hence, we compute the entropy individually in each dimension and use the maximal entropy at each point. Intuitively, we consider a data point relevant if at least one dimension shows high entropy. Dependent on the application, we could also select a subset of the value dimensions to guide the entropy sampling. <ref type="figure">Fig. 4</ref>: In (a), we sample trajectories that bundle and separate over time. We optimize the distribution of sampled trajectories in (b), by stopping (blue) and starting (red) trajectories in t 1 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.5">Trajectory Sampling</head><p>In addition to sampling a single time step, we extend our sampling technique to time-dependent data. Specifically, we consider trajectories of scattered data points in discrete time steps t 0 ,...,t N−1 ∈ R. A trajectory is then defined as a sequence of points over time τ :</p><formula xml:id="formula_9">= (p t j ,..., p t k )</formula><p>with 0 ≤ j ≤ k ≤ N − 1 and points p t i ∈ P t i at time t i . Note that each trajectory can have different starting and ending points in time, i.e. it does not have to be present in every time step. We now discuss how to sample a subset T from the set of all trajectories.</p><p>To avoid an optimization of trajectories over all time steps, we sample iteratively. In the first time step, we employ our void-and-cluster sampling strategy to sample a subset S t 0 ⊂ P t 0 that defines an initial set of trajectories T . In the next time step, a number of trajectories could end, i.e. no longer exist in the following steps. We first compute the point density ρ P and the sample density λ S from the trajectories T that still exist in the current time step. For n ending trajectories, we then add the trajectories from the n largest voids to T and thus start new trajectories from this time step. To start a trajectory τ in time step t i means that we create a new trajectory τ s :</p><formula xml:id="formula_10">= (p t i ,..., p t k ).</formula><p>Hlawatsch et al. <ref type="bibr" target="#b11">[12]</ref> observed that longer trajectories have greater accuracy than a series of shorter trajectories. However, longer trajectories may bundle together or move away and create regions with little coverage, see <ref type="figure">Fig. 4</ref>. Thus, we forcefully stop up to a user-defined amount of trajectories ε T in each time step t i . To stop a trajectory τ in time step t i , we take the prefix τ e := (p t j ,..., p t i ) instead of τ. The parameter ε T depends on the dataset and the specific application. In general, it should be inversely proportional to the amount of trajectories ending. In datasets where all trajectories exist in all time steps, ε T should be high. To select which trajectories to stop and which to start in time step t i , we perform the void-and-cluster optimization. That is, we exchange the tightest cluster with the largest void up to ε T times or until the sample distribution is optimal, i.e. the tightest cluster is equal to the largest void, and start or stop the corresponding trajectories. Note that longer trajectories may again be obtained by interpolation from shorter ones <ref type="bibr" target="#b0">[1]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">PARALLEL IMPLEMENTATION</head><p>In this section, we discuss the parallel implementation of the sampling technique, specifically the computation of the point and sample densities, and the parallelization of the void filling step.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Computing the Densities</head><p>One of the most computationally demanding parts of the algorithm is creating the density ρ P and updating λ S . Each point p has to scatter its density, weighted by the distance and kernel function, to all neighboring points N p . This is an embarrassingly parallel task and is especially well-suited for GPU acceleration. If the kernel function is compact, data structures, such as a kd-tree or a regular grid, should be employed to efficiently retrieve the neighborhood of a point or sample.</p><p>In our implementation, we use a uniform grid of cell size h. To find the neighborhood N p of p, we thus have to query 3 d cells around p. To speed-up the neighborhood search, we layout all cells in memory using a space-filling Z-curve to optimize memory access to neighboring cells.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Parallel Void Filling</head><p>The void filling step seems to enforce a sequential bottleneck: In each step, we find the sample p ∈ P \ S with the smallest sample density λ S (p). Then we add p to the sample set S and increase sample densities in the neighborhood before we search the smallest sample density again. To overcome this sequential dependency, we store each added sample p alongside the sample density λ S (p) that it has when it is added. Since we only ever add to the densities and pick the minimum in each step, these densities grow monotonically. If we can guarantee that they are computed correctly for each added sample, sorting by the densities guarantees that we rank all selected samples correctly.</p><p>To provide this guarantee, we must never add a sample too early. All samples in a neighborhood p n ∈ N p with a rank r(p n ) &lt; r(p) must have contributed to the sample density λ S (p) before we add p ∈ P \ S and store λ S (p). We can be certain that this is the case if p has the smallest sample density in its neighborhood, i.e.</p><formula xml:id="formula_11">λ S (p) ≤ min p n ∈N p λ S (p n ).<label>(10)</label></formula><p>By selecting the sample p ∈ P \ S that minimizes λ S (p) globally, we will never select another sample in N p before p. Hence, we know that the rank r(p) is also minimal within the neighborhood N p . This principle enables our parallel implementation. We first sort all p ∈ P \ S in ascending order by their density λ S (p) and take the first n points p 0 , p 1 ,..., p n−1 in each iteration. Then we compute an adjacency matrix in parallel using the kernel size h:</p><formula xml:id="formula_12">A := ⎛ ⎜ ⎜ ⎝ 0 0 ... 0 p 1 − p 0 − h 0 ... 0 . . . . . . . . . . . . p n−1 − p 0 − h ... p n−1 − p n−2 − h 0 ⎞ ⎟ ⎟ ⎠ .</formula><p>A negative entry in the i-th row and j-th column with i &gt; j indicates that p i is in the neighborhood of p j . Since λ S (p i ) ≥ λ S (p j ) due to the sorting, this means that p i might not satisfy Equation <ref type="bibr" target="#b9">(10)</ref> and it is flagged accordingly. Once the process is complete, all points that have not been flagged satisfy Equation <ref type="bibr" target="#b9">(10)</ref>. They are added to the sample set and their densities are stored. Note that the matrix A is never stored. We only need the flags. Although we can parallelize this computation, the workload is unevenly distributed. The i-th row of A has i non-zero entries. Therefore, we index the non-zero entries of A with a single linear index k ∈ {0,..., n(n−1) 2 }. In the supplementary material we show that row and column indices can be computed from this flat index through</p><formula xml:id="formula_13">i = 1 2 + 1 4 − 2k , j = k − (i − 1)i 2 .<label>(11)</label></formula><p>For large k, the square root has to be evaluated in double-precision to avoid rounding errors. Thanks to the sorting by density, the procedure described above guarantees a correct relative rank of selected samples. However, samples may be missing if we just terminate after a particular iteration. For a complete result, we perform additional iterations. If the largest density of a sample added in the last proper iteration was λ max , we continue iterating until the smallest sample density in P \ S is greater than λ max . At this point, we can be certain that we have not missed a sample that should have been added up until the last proper iteration. This way, we guarantee that we take the same samples as the sequential algorithm.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">LOCAL ERROR MEASURE</head><p>In this section, we discuss an error measure to quantify how well a set of samples represents a dataset. We propose a measure that takes not only the spatial domain into account, but also how well the value domain is represented in each region of the dataset. To this end, we first discuss how such a local error can be defined, before we discuss how to compare value distributions. Lastly, we discuss an error guided sampling strategy that relies on an efficient iterative error estimation to sample just below a given error threshold, instead of drawing a fixed amount of samples.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Locality and Continuity</head><p>We derive a local error measure that compares the value distribution V S ⊂ V of the sampled dataset with the value distribution V of the original dataset. Specifically, we propose to compare value distributions in the local neighborhood N p for each corresponding p ∈ P. This method implicitly accounts for non-uniformly distributed data points. Additionally, we weight the contribution of each p i ∈ N p to the value distribution by its distance k( p − p i ) so that the error varies smoothly over the spatial domain.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Wasserstein Distance</head><p>To measure the difference between the original value distribution given by values V = {X 0 , ..., X n−1 } and a sampled subset V S ⊂ V , we use the corresponding cumulative distribution functions (CDFs) F V and F S . The CDF at a point p ∈ P is estimated as</p><formula xml:id="formula_14">F V (p,t) = 1 ∑ n−1 i=0 k( p − p i ) n−1 ∑ i=0 k( p − p i ) if X i ≤ t, 0 otherwise.<label>(12)</label></formula><p>In practice, this implies that we need to sort the X i before accumulating them. Since the samples are a subset V S ⊂ V , it is sufficient to sort the values V to estimate both CDFs. Alternatively, we estimate the CDFs based on a histogram of V and V S , which introduces a discretization, but is more efficient to evaluate.</p><p>To measure the distance, we found the Wasserstein distance, or earth movers distance, to be a good choice. In the one-dimensional case, it is defined as the L1-norm between the two CDFs:</p><formula xml:id="formula_15">W(p, F V , F S ) := ∞ −∞ |F V (p, x) − F S (p, x)| dx.<label>(13)</label></formula><p>In contrast, we found the Kolmogorov-Smirnov distance, defined as the infinity norm between the CDFs, to be unsuited since it is not robust to small shifts in the value dimension. Note that this definition of the Wasserstein distance is only valid for one-dimensional value distributions. Thus, we compute a separate error for each value dimension. We can further deduce the error across dimensions, e.g. by taking the mean or maximum. In the following we will use the maximum; however, this is an application and data specific decision.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Error Guided Sampling</head><p>During void-and-cluster sampling, we efficiently keep track of the error distribution, for example to stop sampling if the average error falls below a given threshold. In detail, we compute the error for all samples after the initial void-and-cluster optimization. When adding a sample p min , we compute the error of p min and additionally update the error for all neighbors N p min since these have changed as well.</p><p>To describe the distribution of errors during sampling, we found the average error to be a robust statistic that is efficient to compute. In contrast, the maximal error does not decrease smoothly with respect to the number of samples and is not robust against outliers, e.g. stemming from small, but complex value regions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">RESULTS AND DISCUSSION</head><p>In this section, we evaluate our sampling technique using four realworld datasets and the synthetic sinc signal.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Synthetic Data: Sinc</head><p>We have created the sinc dataset by randomly placing 500,000 points in the domain [−5,   We employ simple random sampling and random sampling with non-uniform probabilities based on the entropy. Moreover, we compare to stratified sampling utilizing a kd-tree based on a median split, similar to Woodring et al. <ref type="bibr" target="#b27">[28]</ref>. Lastly, we employ Poisson disk sampling <ref type="bibr" target="#b3">[4]</ref> and loose capacity constrained Voronoi diagrams (LCCVD, <ref type="bibr" target="#b8">[9]</ref>). For an increasing number of samples, the error from most strategies converges to zero, which implies that these strategies sample a representative subset. However, Bridson's Poisson disk sampling <ref type="bibr" target="#b3">[4]</ref> lacks explicit control over the sample count, which is instead steered by the enforced minimal and maximal distance. The technique is unable to surpass a certain sample count for this dataset. Our proposed void-and-cluster sampling strategies perform best for all sample counts. The entropy-based strategies perform similar to their uniform counter parts. In <ref type="figure" target="#fig_4">Fig. 6 (right)</ref>, the mean error has been computed iteratively during sampling until the error was less than ε = 0.0065, which led to a sampling percentage of 34.1 %. The error first falls rapidly then converges asymptotically to zero. Initially, we sample 5000 and iteratively add the remaining samples. In each void filling step, we take only 32 samples in parallel to still keep the error up to date. In comparison, we take up to 12,288 voids in parallel if we do not perform error guided sampling.</p><p>We use scattered data interpolation to interpolate the sampled data values to a grid of size 1024 2 , see <ref type="figure">Fig. 5</ref>. Our void-and-cluster strategies show a major improvement compared to the other sampling strategies. The signal-to-noise (SNR) ratios shown in the logarithmic decibel scale support this assessment. Note that the LCCVD and Poisson disk sampling strategies also achieve good results, but are still worse than our proposed methods. For reconstruction, the entropy-based sampling strategies perform slightly better compared to the uniform approaches.   For all sampling strategies, the quality of the reconstruction agrees with the error measure.</p><p>Lastly, <ref type="figure" target="#fig_3">Fig. 7</ref> shows the spectrum of the sinc dataset reduced to a subset of 1 % with our uniform void-and-cluster strategy, LCCVD, and with Poisson disk sampling. The Fourier transform shows the blue noise property for these methods. Low frequencies are substantially weaker and the spectrum is isotropic. However, LCCVD has more energy in low frequencies than our void-and-cluster strategy. Poisson disk sampling has less energy in low frequencies, but contains a noticeable spike near zero. Note that the random and stratified sampling strategies do not have this property, which suggests that the blue noise property is desirable for scattered data interpolation. Indeed, the error of kernel estimation has been shown to depend on the disorder of particles <ref type="bibr" target="#b13">[14]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Von Kármán Vortex Street</head><p>The von Kármán vortex street is a time-dependent SPH dataset that contains about 5 million particles in each time step. Since the particles enter the domain on the left side and exit on the right, the amount of particles per step changes. A circular boundary in the mid of the domain causes a repeating pattern of swirling vortices, the vortex street.</p><p>We compare the error measured from the different techniques for sampling the first time step in <ref type="figure" target="#fig_6">Fig. 9 (left)</ref>. Since the original dataset already contains well distributed samples, as a result of the SPH simulation, the Poisson disk sampling can correctly sample the dataset even for large sample counts. Still, the void-and-cluster techniques consistently lead to the lowest error. The decreased error of stratified kd-tree sampling and entropy random sampling compared to naive random The corresponding u-velocity fields are shown, which have been created using scattered data interpolation. Our error measure is shown in (d).</p><p>The entropy void-and-cluster sample distribution in the first time step is illustrated in (e).</p><p>(a) We visualize the particles using sphere and arrow glyphs with our level-of-detail (b) Uniform sampling (c) Entropy sampling <ref type="figure">Fig. 11</ref>: The surface-mounted cylinder, after sampling 466,103 particles, is shown in (a). We use the continuous level-of-detail, in addition to a transfer function, to further reduce the amount of particles. Slices of the dataset using the uniform (b) and entropy (c) sampling illustrate the difference between the sampling strategies. The entropy strategy samples the less interesting region above the empty cylinder less densely.    We have computed the FTLE after sampling 10 % of the trajectories by random sampling (b) and using the uniform void-and-cluster (c) technique.</p><p>sampling implies that both stratification and entropy-based sampling are beneficial for this dataset. We sample 10 % of the trajectories in the discrete time interval [0, 20]. Since particles frequently enter and exit the domain, we do not explicitly stop trajectories to sample new ones. In <ref type="figure" target="#fig_5">Fig. 8</ref> we plot the error over time for the different sampling strategies. The void-andcluster strategy is not only consistently better, but also stays nearly constant over time. In contrast, we observe an increase of the error over time for the random sampling techniques. Lastly, the entropy-based sampling strategies show a noticeable improvement for this dataset because they are able to focus more samples on the difficult vortex and boundary regions.</p><p>A comparison between random sampling, uniform, and entropy void-and-cluster sampling after 10 time steps is shown in <ref type="figure">Fig. 10</ref>. Although all sampling strategies deteriorate slightly over time, the samples are still well distributed for the uniform void-and-cluster sampling approach. We reconstruct the u-velocity field using scattered data interpolation. The results are considerably better for the void-and-cluster approaches. Moreover, the entropy sampling strategy leads to a better reconstruction compared to the uniform void-and-cluster technique. Our error measure of the entropy strategy is shown in (d). Although the entropy strategy already places most samples near the vortex street, the lower boundary, and the upper boundary, the error is still highest in these regions.</p><p>We illustrate the sample distribution for the entropy sampling technique in the first time step in <ref type="figure">Fig. 10</ref> (e). More samples are placed behind the circular boundary, where vortex shedding occurs, and near the bottom and top of the domain. In these regions, the velocity differs considerably. The sampling distribution in the tenth time step has deteriorated considerably for the entropy strategy, but still leads to better results. The entropy strategy thus seems to require shorter trajectories to accurately place samples with respect to the entropy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Surface-Mounted Cylinder</head><p>This dataset stems from a 3D SPH simulation that simulates the flow around a surface-mounted cylinder <ref type="bibr" target="#b21">[22]</ref>. In detail, particles move through a wall-bounded box where an empty cylinder is placed on the bottom. The dataset contains about 46 million particles in each time step, each of which has a position, velocity, and pressure and either belongs to the static domain boundary or the simulated fluid. In <ref type="figure" target="#fig_6">Fig. 9</ref> (right), we compare the error of the different sampling techniques. Most notably, the entropy-based techniques show a larger error for smaller sample counts.</p><p>We sample 1 % of the dataset and visualize the particles as sphere and arrow glyphs in <ref type="figure">Fig. 11 (a)</ref>. We map u-velocity to color, i.e. velocity in the principal flow direction. Since the sampled subset still contains a large amount of particles, we make use of the continuous level-ofdetail in addition to a transfer function, which maps fast particles to transparent, to further reduce the amount of visual clutter. The vortex shedding in the wake of the cylinder thus becomes visible. Furthermore, we illustrate the difference between uniform and entropy void-andcluster sampling in <ref type="figure">Fig. 11 (b)</ref> and (c). The entropy strategy samples the regions near the wall and close to the cylinder more densely due to fluctuating velocities, but also due to the interface between fluid and boundary particles that leads to a high entropy. In contrast, the regions above and next to the cylinder contain a large amount of particles that move unobstructed through the domain.</p><p>In <ref type="figure" target="#fig_1">Fig. 12</ref>, we create a histogram of u-velocity (a) and a scatter plot of x and v-velocity (c) of the dataset sampled with the entropy void-and-cluster technique. We use our level-of-detail mechanism to create a subset of 10, 000 particles and compute similar plots in (b) and (d). The histograms in (a) and (b) are similar, even though we reduce the amount of samples considerably. In the scatter plot (d), the amount of clutter is significantly reduced. The periodic changes in v-velocity, caused by the swirling vortices in the wake of the cylinder, then become visible. Lastly, the ordering of samples allows us to optimize loading times and latency. In particular, when opening a new file or time step, we initially load only a small subset and asynchronously continue to load more samples to reduce the latency. Especially for larger datasets, we found working with a small subset of the data to be preferable due to the fast and less cluttered visualizations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.4">The ABC Flow</head><p>The Arnold-Beltrami-Childress (ABC) flow is a three-dimensional, steady velocity field:ẋ = A sin z +C cos ẏ y = B sin x + A cos ż z = C sin y + B cos x.</p><p>We set A = √ 3, B = √ 2, C = 1. We represent the flow in the Lagrangian basis with 134,217,728 trajectories that start in the spatial domain [0, 2π] <ref type="bibr" target="#b2">3</ref> and are integrated using a 4th-order Runge-Kutta scheme over the time interval [0, 10]. We then sample 10 % of the trajectories, without stopping and starting new trajectories.</p><p>In <ref type="figure">Fig. 1 (g)</ref> and (h), 50,000 and 500 trajectories are shown as illuminated pathlines using the continuous level-of-detail that is implicitly given by the rank of our sampling strategy. Since we reorder the samples by their rank, we only have to load the first samples for visualization and can load additional samples progressively.</p><p>After random sampling and uniform void-and-cluster sampling, we have computed the (forward) finite-time Lyapunov exponent (FTLE). This quantity measures how neighboring trajectories separate over time and is used to visualize time-dependent flow behavior. A slice of the FTLE is shown in <ref type="figure" target="#fig_2">Fig. 13</ref>. Computing the FTLE after sampling with the uniform void-and-cluster strategy yields better results compared to random sampling, even though the same number of samples have been taken.   <ref type="figure" target="#fig_4">Fig. 16</ref>: We evaluate the scalability of our algorithm using differently sized sinc datasets, whilst always sampling 10 %.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.5">Dark Sky</head><p>The Dark Sky simulations are a series of cosmological N-body simulations of the evolution of the large-scale universe <ref type="bibr" target="#b19">[20]</ref>. We study a subset that consists of 111 million particles with a position, velocity, and unique identifier. <ref type="figure" target="#fig_12">Fig. 14</ref> shows a visualization of the dataset reduced to 5 %. Since the simulations investigate the clustering of particles into galaxies, filaments, and the emergence of cosmic voids, the spatial distribution of the particles is strongly non-uniform. Consequently, a sampled subset of the data should preserve this distribution of cosmological mass. This is not possible using Poisson disk sampling or entropy-based adaptive sampling. In contrast, our uniform void-andcluster technique optimizes the blue noise property with respect to the spatial density of particles in the dataset. The spatial distribution is thus preserved, whilst the samples are optimally stratified.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.6">Performance and Scalability</head><p>To assess the performance of our algorithm, we compare the run time of different sampling strategies. For the measurements, we use an Intel Core i7-6700 and an Nvidia Quadro RTX 8000. We enable GPU acceleration where possible. Measurements for all of our datasets are shown in <ref type="figure" target="#fig_13">Fig. 15</ref>. We were not able to measure our implementation of LCCVD for larger datasets since it is computationally demanding and we did not parallelize it. Although Poisson disk sampling is a linear time algorithm, it is inherently sequential and leads to long run times for large data sizes. Random and stratified sampling are fast even though no GPU acceleration is used. In comparison, the void-and-cluster techniques are slower, but considering the data sizes we argue that the performance is acceptable. For example, we take 1,342,177 samples out of 134 million from the ABC flow dataset in 68 seconds. Due to the non-uniform input data of the dark sky simulation, a large kernel support is required that leads to a significantly increased run time. The use of adaptive kernel sizes or better suited data structures could potentially improve the efficiency of the neighborhood search for non-uniformly distributed datasets.</p><p>The uniform and entropy-based sampling strategies perform similar. However, for small sampling percentages the entropy computation is noticeably slower since the computation depends on the kernel size h, which increases for smaller sampling percentages, and scales with the input data size. This is especially visible in the ABC flow where the run-time of the entropy computation increases dramatically for smaller sampling percentages due to the neighborhood lookup limiting the GPU efficiency. In general, the run-time increases when a larger number of samples is taken, which indicates that the void filling step is the bottleneck.</p><p>Lastly, to measure the time complexity and scalability of the algorithm, we measure GPU and single-threaded CPU performance with differently sized sinc datasets. The measurements are shown in <ref type="figure" target="#fig_4">Fig. 16</ref>. Although our GPU implementation is competitive with random and stratified sampling, the single-threaded CPU implementation is considerably slower. This highlights the benefits of parallelization and GPU acceleration for our algorithm. Compared to LCCVD our singlethreaded implementation achieves an enormous speed-up. Although not shown in the plot, LCCVD took more than 2500 seconds to sample a dataset of size 10 6 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">FUTURE WORK: MULTI-NODE PARALLELISM</head><p>An important use case that has not been addressed so far is the parallel implementation for distributed memory systems. To scale the sampling technique to multiple nodes on a compute cluster, the spatial domain could be subdivided into uniform tiles. Each compute node then performs void-and-cluster sampling of one tile. Although this will produce tiles that are well distributed according to the blue noise property, the samples in the border region between two or more tiles are not necessarily well separated. If this is not acceptable, then the cluster-and-void optimization step can be applied again to the whole dataset. However, this would have to be performed on a single node which might not be possible, for example due to memory constraints. The extension of the proposed algorithm for multi-node parallelism is thus still an open problem.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">CONCLUSION</head><p>We present a novel approach for using statistical sampling to reduce large scattered datasets for visualization and analysis. In particular, our void-and-cluster technique optimizes sample distributions with respect to the blue noise property and thus produces samples that evenly cover the spatio-temporal domain. Our technique significantly improves the accuracy of operations such as scattered-data interpolation or the computation of the FTLE. In combination with the level-of-detail given by our technique, we are able to generate interactive and clutter-free visualizations of large datasets. Lastly, we introduce an error measure to quantify the error of a subsampled dataset, which takes both spatial and value domain into account. Our results show a clear correlation between the error measure and the quality of derived quantities such as scattered data interpolation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The von Kármán vortex street and the surface-mounted cylinder datasets are courtesy of Thilo Dauch and Rainer Koch from the Institute of Thermal Turbomachinery at the Karlsruhe Institute of Technology.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head></head><label></label><figDesc>Void-and-Cluster Sampling of Large Scattered Data and TrajectoriesTobias Rapp, Christoph Peters, and Carsten Dachsbacher</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 :</head><label>2</label><figDesc>(a) Initial random sampling (b) Find p min and s max (c) Exchange p min and s max (d) Find and add the next p min Overview of the void-and-cluster sampling technique of Ulichney</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 3 :</head><label>3</label><figDesc>We compute the entropy of a point in its local neighborhood from a histogram of the value distribution, weighted by the radially symmetric kernel k.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 7 :</head><label>7</label><figDesc>Fourier transform of the sinc dataset after taking 5000 samples using our uniform void-and-cluster method, loose capacity constrained Voronoi diagrams (LCCVD), and Poisson disk sampling.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 6 (</head><label>6</label><figDesc>left) compares different sampling strategies and shows the mean Wasserstein distance.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 8 :</head><label>8</label><figDesc>Comparison of the mean error over all time steps in the von Kármán vortex street dataset.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 9 :</head><label>9</label><figDesc>Comparison of the local error measure after sampling a single time step of the von Kármán vortex street (left) and the surface-mounted cylinder (right).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>1 Fig. 10 :</head><label>110</label><figDesc>(a) Random sampling and reconstruction in t<ref type="bibr" target="#b9">10</ref> (b) Void-and-cluster uniform sampling and reconstruction in t 10 (c) Void-and-cluster entropy sampling and reconstruction in t 10 (d) Entropy sampling error in t 10 (e) Entropy sampling distribution in t The von Kármán vortex street after ten time steps using random (a), uniform (b), and entropy (c) void-and-cluster trajectory sampling.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Frequency</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>FrequencyFig. 12 :</head><label>12</label><figDesc>(d) Scatter plot from 10,000 samples We create a histogram (a) and a scatter plot (c) of the surface-mounted cylinder, after sampling 466,103 particles using the void-and-cluster entropy strategy. With our level-of-detail, we select a subset of 10,000 particles and create a histogram (b) and a scatter plot (d).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Fig. 13 :</head><label>13</label><figDesc>Slices of the finite-time Lyapunov exponent (FTLE) from the ABC flow. The reference, computed on all trajectories, is shown in (a).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Fig. 14 :</head><label>14</label><figDesc>The Dark Sky dataset reduced to 5 % using the uniform voidand-cluster technique (a). A slice of the dataset is shown in (b), with the corresponding slice from the original dataset in (c).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head>Fig. 15 :</head><label>15</label><figDesc>The sampling performance on the von Kármán vortex street, the surface-mounted cylinder, the ABC flow, and the Dark Sky dataset.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>Fig. 5: Reconstruction of the sinc dataset using scattered data interpolation after taking 5000 samples with different strategies.</figDesc><table><row><cell></cell><cell cols="2">Random 19.75 SNR (DB)</cell><cell cols="3">Entropy Random 21.9 SNR (DB)</cell><cell></cell><cell>kd-Tree Stratified 19.8 SNR (DB)</cell><cell>Poisson Disk 26.02 SNR (DB)</cell><cell>LCCVD Uniform 22.89 SNR (DB)</cell><cell>V&amp;C Uniform 29.33 SNR (DB)</cell><cell>V&amp;C Entropy 29.58 SNR (DB)</cell></row><row><cell></cell><cell></cell><cell></cell><cell>Sinc</cell><cell></cell><cell></cell><cell></cell><cell>Sinc: Iterative error</cell></row><row><cell></cell><cell></cell><cell></cell><cell>Random</cell><cell></cell><cell></cell><cell></cell><cell>V&amp;C Uniform</cell></row><row><cell>Wasserstein distance</cell><cell>0.001 0.002 0.003</cell><cell></cell><cell>Entropy Random kd-Tree Stratified Poisson Disk LCCVD V&amp;C Uniform V&amp;C Entropy</cell><cell>Wasserstein distance</cell><cell>0.1 0.2 0.3</cell><cell></cell><cell>V&amp;C Entropy</cell></row><row><cell></cell><cell>0.000</cell><cell cols="2">1 10 2 10 3 10 4 10 5 10</cell><cell></cell><cell>0.0</cell><cell>0</cell><cell>1000</cell><cell>2000</cell><cell>3000</cell></row><row><cell></cell><cell></cell><cell cols="2">Number of samples</cell><cell></cell><cell></cell><cell></cell><cell>Void filling iteration</cell></row><row><cell cols="8">Fig. 6: Left: Comparison of different sampling strategies using our</cell></row><row><cell cols="8">proposed error measure. Right: Error measured during sampling.</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>5] 2 and by evaluating for each point p ∈ [−5, 5] 2</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>the function</cell><cell>sinc( p ) =</cell><cell>sin(π p ) π p</cell><cell>.</cell><cell>(14)</cell></row></table><note></note></figure>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Improved post hoc flow analysis via lagrangian representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Agranovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Camp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Garth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">W</forename><surname>Bethel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Childs</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/LDAV.2014.7013206</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="67" to="75" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Capacity-constrained point distributions: A variant of lloyd&apos;s method</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Balzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schlömer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Deussen</surname></persName>
+		</author>
+		<idno type="DOI">10.1145/1531326.1531392</idno>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1" to="86" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">In situ data-driven adaptive sampling for large-scale simulation data summarization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Biswas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dutta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Pulido</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<idno type="DOI">10.1145/3281464.3281467</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Workshop on In Situ Infrastructures for Enabling Extreme-Scale Analysis and Visualization</title>
+		<meeting>the Workshop on In Situ Infrastructures for Enabling Extreme-Scale Analysis and Visualization</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2018" />
+			<biblScope unit="page" from="13" to="18" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Fast poisson disk sampling in arbitrary dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bridson</surname></persName>
+		</author>
+		<idno>doi: 10. 1145/1278780.1278807</idno>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH 2007 Sketches</title>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page">22</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">By chance enhancing interaction with large data sets through statistical sampling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dix</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Ellis</surname></persName>
+		</author>
+		<idno type="DOI">10.1145/1556262.1556289</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Working Conference on Advanced Visual Interfaces</title>
+		<meeting>the Working Conference on Advanced Visual Interfaces</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="167" to="176" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">In situ distribution guided analysis and visualization of transonic jet engine simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dutta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Heinlein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">P</forename><surname>Chen</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2016.2598604</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="811" to="820" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Homogeneity guided probabilistic data summaries for analysis and visualization of largescale data sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dutta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">P</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/PACIFICVIS.2017.8031585</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="111" to="120" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Efficient high-quality volume rendering of sph data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Fraedrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Auer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2010.148</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1533" to="1540" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Loose capacity-constrained representatives for the qualitative visual analysis in molecular dynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Frey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schlömer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Grottel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Dachsbacher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Deussen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/PACIFICVIS.2011.5742372</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="51" to="58" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Megamol -a prototyping framework for particle-based visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Grottel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Krone</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Reina</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<idno>doi: 10. 1109/TVCG.2014.2350479</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="201" to="214" />
+			<date type="published" when="2015" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Codda: A flexible copulabased distribution driven analysis framework for large-scale multivariate data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hazarika</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dutta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chen</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2018.2864801</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1214" to="1224" />
+			<date type="published" when="2019" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Hierarchical line integration</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hlawatsch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2010.227</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="1148" to="1163" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Data reduction techniques for simulation, visualization and data analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Marsaglia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Garth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Clyne</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Childs</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/cgf.13336</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="422" to="447" />
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Why particle methods work</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Monaghan</surname></persName>
+		</author>
+		<idno type="DOI">10.1137/0903027</idno>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal on Scientific and Statistical Computing</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="422" to="433" />
+			<date type="published" when="1982" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Smoothed particle hydrodynamics. Annual review of astronomy and astrophysics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Monaghan</surname></persName>
+		</author>
+		<idno type="DOI">10.1146/annurev.aa.30.090192.002551</idno>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="page" from="543" to="574" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Visualization of big sph simulations via compressed octree grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Reichl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Treib</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/BigData.2013.6691717</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE International Conference on Big Data</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="71" to="78" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Visual debugging of sph simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Reinhardt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Huber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Dumitrescu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Krone</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Eberhardt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/iV.2017.20</idno>
+	</analytic>
+	<monogr>
+		<title level="m">21st International Conference Information Visualisation</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="117" to="126" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">A combined eulerian-lagrangian data representation for large-scale applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Xie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ma</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2016.2620975</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page" from="2248" to="2261" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Sparse pdf volumes for consistent multi-resolution volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Sicat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<idno>doi: 10. 1109/TVCG.2014.2346324</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2417" to="2426" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">W</forename><surname>Skillman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">S</forename><surname>Warren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">J</forename><surname>Turk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">H</forename><surname>Wechsler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">E</forename><surname>Holz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">M</forename><surname>Sutter</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1407.2600</idno>
+		<title level="m">Dark sky simulations: Early data release</title>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Effective and efficient data sampling using bitmap indices</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Su</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Agrawal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Myers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wendelberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<idno type="DOI">10.1007/s10586-014-0360-5</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Cluster Computing</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="1081" to="1100" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Flow above the free end of a surface-mounted finite-height circular cylinder: A review</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Sumner</surname></persName>
+		</author>
+		<idno type="DOI">10.1016/j.jfluidstructs.2013.08.007</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Fluids and Structures</title>
+		<imprint>
+			<biblScope unit="volume">43</biblScope>
+			<biblScope unit="page" from="41" to="63" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Analysis of large-scale scalar data using hixels</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Thompson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">A</forename><surname>Levine</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Bennett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">T</forename><surname>Bremer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Gyulassy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">P</forename><surname>Pébay</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/LDAV.2011.6092313</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Large Data Analysis and Visualization</title>
+		<imprint>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="23" to="30" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Dithering with blue noise</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Ulichney</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/5.3288</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the IEEE</title>
+		<imprint>
+			<biblScope unit="volume">76</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="56" to="79" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Void-and-cluster method for dither array generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Ulichney</surname></persName>
+		</author>
+		<idno type="DOI">10.1117/12.152707</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Human Vision, Visual Processing, and Digital Display IV</title>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="volume">1913</biblScope>
+			<biblScope unit="page" from="332" to="343" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Statistical visualization and analysis of large data using a value-based spatial distribution</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">H</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">W</forename><surname>Shen</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/PACIFICVIS.2017.8031590</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="161" to="170" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Information guided data sampling and recovery using bitmap indexing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Dutta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Shen</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/PacificVis.2018.00016</idno>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+		<imprint>
+			<date type="published" when="2018" />
+			<biblScope unit="page" from="56" to="65" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">In-situ sampling of a large-scale particle simulation for interactive visualization and analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Figg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wendelberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Habib</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Heitmann</surname></persName>
+		</author>
+		<idno type="DOI">10.1111/j.1467-8659.2011.01964.x</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1151" to="1160" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

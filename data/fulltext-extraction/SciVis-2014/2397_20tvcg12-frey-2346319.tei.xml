@@ -1,0 +1,938 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Interactive Progressive Visualization with Space-Time Error Control</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steffen</forename><surname>Frey</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Filip</forename><surname>Sadlo</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Fellow, IEEE</roleName><forename type="first">Kwan-Liu</forename><surname>Ma</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Thomas</forename><surname>Ertl</surname></persName>
+						</author>
+						<title level="a" type="main">Interactive Progressive Visualization with Space-Time Error Control</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+					<idno type="DOI">10.1109/TVCG.2014.2346319</idno>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T19:34+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Progressive visualization</term>
+					<term>error-based frame control</term>
+					<term>interactive volume raycasting</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>We present a novel scheme for progressive rendering in interactive visualization. Static settings with respect to a certain image quality or frame rate are inherently incapable of delivering both high frame rates for rapid changes and high image quality for detailed investigation. Our novel technique flexibly adapts by steering the visualization process in three major degrees of freedom: when to terminate the refinement of a frame in the background and start a new one, when to display a frame currently computed, and how much resources to consume. We base these decisions on the correlation of the errors due to insufficient sampling and response delay, which we estimate separately using fast yet expressive heuristics. To automate the configuration of the steering behavior, we employ offline video quality analysis. We provide an efficient implementation of our scheme for the application of volume raycasting, featuring integrated GPU-accelerated image reconstruction and error estimation. Our implementation performs an integral handling of the changes due to camera transforms, transfer function adaptations, as well as the progression of the data to in time. Finally, the overall technique is evaluated with an expert study.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>The complexity of phenomena that need to be analyzed using visualization techniques increases at a rapid pace. Impressive advances have been made in the last decades to deal with this by means of new and improved visual representations as well as performance optimization. However, in many cases, the demands for both responsiveness and high quality rendering in interactive visualization can still not be satisfied with the available compute resources. Since science and engineering typically involve applications that are at the limit or even beyond the capabilities of available hardware, considerable effort is put into the development of strategies that shift this limit with respect to certain needs. One widely pursued approach is optimization "from the problem side", e.g., by making use of techniques that are able to efficiently model desired aspects of the investigated phenomena. Despite their wide success in graphics and visualization, these techniques have the drawback that they are specific to the investigated problem, reducing versatility, and potentially introducing significant preprocessing overhead. Another approach is "from the observer side", e.g., by quantization and discretization with respect to image-space sampling. As an example thereof, progressive rendering continuously enhances a view when the exact rendering would take too long to compute.</p><p>Despite these efforts, achieving a fluent, interactive user experience during exploration is challenging, as it needs to fulfill several requirements, like fast response to user input, and adequate rendering quality. It should further avoid repeated manual parameter tuning, yet still provide degrees of freedom to accommodate user preferences. The traditional approach to handle the inherent trade-off by choosing a fixed setting with respect to frame rate or quality has significant shortcomings in many situations <ref type="figure">(Fig. 1)</ref>. Choosing a good setting and maintaining it during a visualization session can impede proper analysis. This difficulty is not limited to image quality and frame rate-it also applies to computation resource utilization, which is a major factor in a variety of scenarios, e.g., due to its impact on power consumption in mobile or supercomputing environments.</p><p>In this work, after reviewing related work (Sec. 2) and formulating a generic model of progressive visualization (Sec. 3), we propose and evaluate a dynamic model to optimize the efficiency of flexible progressive rendering in visualization. Our contributions include: • We introduce a model for dynamic minimization of spatiotemporal error and resource utilization in progressive visualization (Sec. 4), which can easily be integrated with existing systems.</p><formula xml:id="formula_0">• Steffen</formula><p>• For this model, we present an approach for automatic parameter optimization using video quality metrics (Sec. 4.4).</p><p>• We provide an efficient implementation of the model for progressive volume raycasting that can handle different types of interactive changes in an integral and expressive manner (Sec. 5).</p><p>• We systematically demonstrate the utility of dynamically adjusting the rendering cost for good spatio-temporal behavior. The evaluation employs a video metric and an expert study (Sec. 6).</p><p>Finally, Sec. 7 provides a conclusion and an outlook to future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>The importance of frame rate and quality has been shown in several studies for both videos and interactive applications <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b14">15]</ref>. In general, both factors are equally significant for user experience and performance, as concluded, for instance, by Claypool and Claypool <ref type="bibr" target="#b9">[10]</ref> from a user study featuring over 25 participants that evaluated the impact of frame rate and resolution in the context of video games. In this paper, we conduct a user study with visualization researchers to compare the suitability of different methods and determine good parameter settings for our dynamic steering. User studies in visualization have recently been reviewed by Isenberg et al. <ref type="bibr" target="#b15">[16]</ref>. Tory and Möller <ref type="bibr" target="#b32">[33]</ref> discuss human factors in user studies and visualization design. Anderson et al. <ref type="bibr" target="#b0">[1]</ref> explore brain activity recorded using electroencephalography (EEG) to compare different visualization techniques by means of the impact on a viewer's cognitive resources. Notable uses of user studies in scientific visualization include the evaluation of perception for common techniques in uncertainty visualization <ref type="bibr" target="#b28">[29]</ref>. Laidlaw et al. <ref type="bibr" target="#b19">[20]</ref> compare visualization methods for two-dimensional vector data by means of simple yet representative tasks. To achieve good results with our volume raycaster even with only few samples, we employ an image-space sampling scheme based on the capacity-constrained point distributions by Balzer et al. <ref type="bibr" target="#b3">[4]</ref> and Gaussian filters for reconstruction. Early image-space acceleration techniques for volume raycasting were presented by Levoy (e.g., casting one ray for multiple pixels <ref type="bibr" target="#b20">[21]</ref>). Kratz et al. <ref type="bibr" target="#b18">[19]</ref> use an error estimator from the field of finite element methods for adaptive screenspace sampling. For unstructured volumes, Callahan and Silva <ref type="bibr" target="#b7">[8]</ref> propose to employ the combination of a low resolution image of the whole data set and a high resolution image of the boundary geometry. In contrast to these techniques, which consider the current frame 9 Nov.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>D .</head><p>Digital Object Identifier 10.1109/TVCG.2014.2346319</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Reference</head><p>Fixed sampling rate (5%)</p><p>Fixed frame rate (30 fps) Our error-based frame control (ρ = 0.6) (a) Slow movement: strong loss of detail for fixed frame rate (frame 1280 shown).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Reference</head><p>Fixed sampling rate (5%) Fixed frame rate (30 fps)</p><p>Our error-based frame control (ρ = 0.6) frames 410 430 450 470 490 (b) Rapid movement: severe lag for fixed sampling rate (e.g., at frame 450).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Fig. 1:</head><p>In interactive visualization, different sampling rate or frame settings are desirable for different user actions (see Sec. 5.1 for our definition of sampling rate). In contrast to static frame rate or sampling rate settings, our error-based approach adjusts dynamically to optimize the utility for a user. The frame numbers are given with respect to the video used for automatic evaluation in Sec. 6.2 (30 frames per second).</p><p>only, Qu et al. <ref type="bibr" target="#b24">[25]</ref> and Shen and Johnson <ref type="bibr" target="#b31">[32]</ref>, among others, exploit frame coherence by reutilizing pixel values from the previous frame by warping the positions to the current frame. Frey et al. <ref type="bibr" target="#b12">[13]</ref> propose volumetric depth images, a view-dependent representation that can be generated quickly and allows to render frames from arbitrary camera configurations at low cost for computation and storage.</p><p>In contrast to the image-space acceleration techniques for raycasting that are geared toward good quality for undersampling, Monte Carlo techniques for photorealistic rendering mostly employ oversampling that can also be steered adaptively. Overbeck et al. <ref type="bibr" target="#b21">[22]</ref> dynamically adjust the distribution of samples to reduce the variance in wavelet space. However, several key points of their algorithm require separate tuning of quality and speed parameters. Also for global illumination, Farrugia and Péroche <ref type="bibr" target="#b11">[12]</ref> present a perceptually-based approach for progressive rendering. Bolin and Meyer <ref type="bibr" target="#b6">[7]</ref> employ perceptually-based adaptive sampling based on an extended image processing vision model. Rousselle et al. <ref type="bibr" target="#b27">[28]</ref> present a greedy sampling strategy for Monte Carlo rendering. Ramasubramanian et al. <ref type="bibr" target="#b25">[26]</ref> utilize a physical error metric in global illumination algorithms.</p><p>Automatic parameter tuning evaluates the performance of different settings to find those with the best performance. For volume rendering on a GPU, Bethel and Howison <ref type="bibr" target="#b4">[5]</ref> optimize the run time by exploring different variations of raycasting kernels and their execution configuration. In this work, we use a video quality metric to assess performance, both for the purpose of evaluation and automatic parameter tuning. Video quality metrics are commonly employed to monitor video quality, compare the performance of video processing systems and algorithms, or optimize the algorithms and parameter settings for a video processing system. We use MOVIE (MOtion-based Video Integrity Evaluation) by Seshadrinathan and Bovik <ref type="bibr" target="#b29">[30]</ref>, whose source code is publicly available for research purposes. It is classified as a full reference metric, i.e., it compares a video to its respective reference. Other notable metrics include DRIVQM <ref type="bibr" target="#b2">[3]</ref>, and the software package VQMT, which contains a variety of different metrics (e.g., <ref type="bibr" target="#b30">[31]</ref>).</p><p>In our model, one of the considered factors that is the resource utilization of the computation device (a GPU in our case). This aspect has been of significantly rising interest in recent years not only for mobile devices but also supercomputers. Johnsson et al. <ref type="bibr" target="#b17">[18]</ref> thoroughly evaluate the relation between rendering algorithms and power consumption. Pool et al. <ref type="bibr" target="#b23">[24]</ref> influence the power consumption by adjusting the precision of computations in pixel shader cores. Ribble <ref type="bibr" target="#b26">[27]</ref> suggests to limit the frame rate to a minimum and emphasizes the importance of continuing to optimize the code of an application even if the frame rate goal has been reached. For scientific computing applications, Huang et al. <ref type="bibr" target="#b13">[14]</ref> evaluate the energy efficiency of GPUs against CPUs.</p><p>Real-world systems commonly fix either rendering quality or frame rate during user interaction <ref type="bibr" target="#b1">[2]</ref>. For real-time rendering, Wong and Wang <ref type="bibr" target="#b34">[35]</ref> model the image generation process by an open-loop approach underpinned by constraints and estimations of its constituents with the goal to achieve as constant frame rates as possible. Their heavy-weight approach describes different rendering processes in detail with all their complexities involved to gain a nonlinear model to relate inputs and outputs using neural networks and fuzzy models. In contrast, Woolley et al. <ref type="bibr" target="#b35">[36]</ref> use simple metrics based on image-space distances to steer progressive raytracing. We also take a light-weight approach, requiring only minimal knowledge about the underlying visualization approach, and only requiring minimal assumptions or predictions. In addition, we further concern ourselves with the question of what actually describes an acceptable performance range by means of a perceptual metric as well as a study with visualization researchers.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">PROGRESSIVE VISUALIZATION MODEL</head><p>Our technique is based on an idealized model of interactive progressive visualization. We derived it from a simple standard workstation setup with a single display. Its extension to setups with more than one camera like stereo rendering, more than one display like multiprojector configurations, or limited display throughput like in remote rendering, is beyond the scope of this paper and remains for future work.</p><p>Our model ( <ref type="figure" target="#fig_1">Fig. 2a</ref>) consists of three basic processes: dynamic change, progressive renderer, and frame control. Dynamic change comprises the factors that alter a render configuration over time, like user interaction or change due to time-varying data. In this work, we address frame-based progressive visualization by means of a progressive renderer. This is by far the most widespread variant, an alternative being frameless rendering techniques <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b10">11]</ref>. The progressive renderer continually refines the active frame, which reflects an individual render configuration. In this sense, a frame consists of both an (intermediate) rendering result of the active frame together with the render configuration of the active frame.</p><p>The model follows the principle of double buffering <ref type="figure" target="#fig_1">(Fig. 2b)</ref>. In progressive visualization, a rendering result of the active frame is typically already shown while the active frame is further refined in the background. In our model, this is triggered by the show control function, which copies the active frame to the shown frame including the respective render configuration. If the active frame changes through an issued restart control function, i.e., the active frame is supplied with a new render configuration, the progressive renderer immediately starts to render a new image of the active frame from scratch. How fast  the refinement advances can vary significantly, both depending on the render configuration (e.g., data set or camera position) as well as the compute resources allotted by the resources control function.</p><p>In total, our model requires three basic decisions: when to restart an active frame, when to show it, and what share of resources to consume in the progressive renderer. These three decisions are managed by frame control, using the available information about the (previous states of the) interactive system, and based on the frame control parameters. In these terms, (traditional) fixed-quality settings only consider the quality of the rendered image of the active frame, while (traditional) fixed-frame-rate settings take only into account the time stamp of the last rendered image. As long as there are no changes to the render configuration, i.e., dynamic change is idle, the image is progressively refined beyond the quality or frame rate limits.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">ERROR-BASED FRAME CONTROL</head><p>The fixed limits in typical progressive visualization systems cannot adapt flexibly to dynamic change due to camera rotations, transfer function changes, progressing time-dependent data, etc. As exemplified in <ref type="figure">Fig. 1</ref>, this can lead to significant shortcomings in computeintense interactive visualization sessions. In this section, we introduce a new dynamic frame control approach, based on sampling error and response delay, to overcome these issues.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Motivation and Overview</head><p>The main goal of our error-based frame control is to minimize the perceived error in the shown frame over the course of an interactive visualization session. The error may additionally be balanced against the utilization of resources, which, however, heavily depends on the hardware-related setting, involving several questions. For instance, are the resources shared with other processes or users in the context of a remote visualization server? How are priorities determined? Is power consumption above a certain threshold problematic in the context of mobile devices? Under which circumstances may this threshold be exceeded temporally? While our progressive visualization model can cover these aspects, we use a simplified resource model in our exemplary implementation-a detailed consideration of these questions for different scenarios has to remain for future work.</p><p>In this paper, we focus on optimizing frame control by minimizing the error during interaction. Hence, offline optimization, i.e., a posteriori error evaluation by means of user studies or video quality metrics <ref type="bibr" target="#b29">[30,</ref><ref type="bibr" target="#b2">3,</ref><ref type="bibr" target="#b30">31]</ref> is not practicable. Instead, error minimization by frame control has to take place online, during user interaction, and introduce very low overhead to avoid delay. This means that neither costly quality evaluation algorithms nor constant manual user adjustment are affordable during interactive visualization.</p><p>As a consequence, we split the quality evaluation into an online component (spatial error estimator and temporal error estimator) and an offline component (frame control parameters optimization). Akin to the notion of spatial and temporal errors from video encoders and quality metrics (e.g., <ref type="bibr" target="#b29">[30]</ref>), our online component consists of a spatial error estimator and a temporal error estimator (Sec. 4.2), both providing error estimates at very low overhead. These estimates are then used by our heuristics to operate restart, show, and resources (Sec. 4.3). The heuristics itself is steered by the frame control parameters, which are determined and optimized by means of user adjustment, video quality analysis algorithms (Sec. 4.4), or user studies.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Space-Time Error Estimation</head><p>In an interactive visualization system, the temporal error τ shall reflect delayed response to changes, while the spatial error ς reflects compromises in image quality. Naturally, ς and τ are subject to a trade-off: while ς is typically monotonically decreasing with the time spent for rendering, τ is monotonically increasing. This partitioning into two types of error is a good fit for the frame generation pipeline in interactive visualization. The easiest way to implement the spatial error estimator would be to directly take the sampling density (e.g., <ref type="bibr" target="#b35">[36]</ref>). However, we take a more expressive, yet slightly more expensive contentaware approach that considers color variance (Sec. 5.2). The temporal error estimator can be derived directly from the difference between subsequent images, or indirectly by measures operating on subsequent render configurations. For instance, a simple indirect approach would be to project a precomputed set of vertices surrounding a geometric model to the screen, and then determine the largest difference to the previous projection <ref type="bibr" target="#b35">[36]</ref>. However, among other issues, this approach would ignore the degree of detail in the data. In contrast, we use a direct approach and assess the error analogously to the spatial error estimator directly from the images (Sec. 5.2). Inherently, this considers the spatial complexity of the data set and allows, e.g., to account for frame that are rich in detail by lowering the frame rate.</p><p>favor lower frame rates for frames that are rich in detail.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Control Heuristics</head><p>The temporal and spatial errors determined by the error estimators are used to control restart, show, and resources. For this, we employ the following heuristics. Restart strives to achieve the best-possible result for the current active frame with respect to errors in time τ and errors space ς . This is based on the active frame and does not consider the shown frame. For show, both the errors of the current shown frame as well as those of the active frame are taken into account. The rationale behind this is that the frame control parameters are used to determine which combination of temporal and spatial error gives the lower overall error. For resources, as good settings highly depend on the use case, no clear, objective metric exists to balance the power or computation time consumed by the progressive renderer against the quality of the output. Here, we utilize the spatial error of the active frame to determine a maximum spatial error that is acceptable during interaction. In case the progressive renderer is capable of overachieving this value, resource usage can be reduced. While errors could be related directly (e.g., <ref type="bibr" target="#b35">[36]</ref>), more flexible approaches are required to introduce a degree of freedom that allows the consideration of advanced aspects in dynamic frame control, like user preferences (Sec. 6.3). At the same time, parameters should be intuitively adjustable for a user and enable efficient automatic optimization. To achieve these goals, we introduce the frame control parameters consisting of a single parameter for each restart, show, and resources, denoted as ρ, ϑ , χ ∈ [0, 1], respectively. These parameters are defined by the user or by the automatic optimization process. The frame control can be represented by a function φ as follows, with multiple actions possible (note that restart automatically triggers show in our heuristics):</p><formula xml:id="formula_1">φ =      restart, if r(ρ) • τ a t − ς a ≥ 0 show, if r(ϑ ) • (τ a t − τ s t ) + (ς a t − ς s t ) ≥ 0 resources if χ &gt; ς a t ∨ δ χ t &gt;δ χ ,<label>(1)</label></formula><p>where ς a and ς s denote the spatial error of the active and the shown frame, respectively, τ a t and τ s t the temporal error of the active and the shown frame, and µ(•) maps the parameters from their original range</p><formula xml:id="formula_2">[0, 1] to [0, ∞): µ(s) = tan(s • π/2), δ χ t</formula><p>gives the idle time of the resource at time t, andδ χ denotes the respective threshold value. The rationale behind the triggering of restart, show, and resources is discussed in detail next.</p><p>Restart. The temporal error τ a t of the active frame is weighted with ρ against the spatial error ς a t , thus defining the desired trade-off between the two quantities. Note that τ a t continuously increases with t, while ς a t is continuously decreasing. Show. Similar to restart, we weight temporal against spatial error, but this time with respect to the differences between the active frame and the shown frame. Practically, the goal is to determine when the decrease in temporal error compensates for the higher spatial error. For all possible settings of ϑ , the active frame is shown as soon as</p><formula xml:id="formula_3">ς a t &gt; ς s t , because (τ a t − τ s t )</formula><p>should always be nonnegative according for reasonable implementations.</p><p>Resources. In our simple implementation, the resource usage is binary, i.e., either we are progressively refining a frame or idling. Here, the parameter χ defines a static target error value. If the spatial error estimation ς a t falls below χ t during interaction, we pause rendering until the frame is restarted. We also limit the pause time δ χ t to a maximum valueδ χ (we usedδ χ = 1 s), to ensure that the full (spatial) sampling rate is achieved eventually.</p><p>For the purpose of comparison, we also implement an alternative frame control φ for the commonly used fixed image quality ω settings and fixed render time per frame δ settings.</p><formula xml:id="formula_4">φ = restart, if (ω a t ≥ ω ∨ δ ≥ δ a t ) ∧ τ a &gt; 0 show, if (ω a t ≥ ω ∨ δ ≥ δ a t ) ∧ τ a = 0. ,<label>(2)</label></formula><p>where δ a t denotes the time since the rendering of the active frame has been started, and ω a t gives the current sampling rate. Practically, this means that for fixed settings, the progressive renderer proceeds until the target value is reached, and the shown frame is iteratively updated toward the full quality beyond these restrictions only when the render configuration is not modified, e.g., by changing the camera configuration (i.e., the temporal error τ a is zero).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Parameter Optimization</head><p>The goal of the parameter optimization is to determine frame control parameters such that frame control delivers the best result according to a metric or user assessment. We distinguish between the following two basic variants: user evaluation and automatic evaluation by means of video quality metrics. In the former, a user simply assesses how well settings for ρ, ϑ , and χ are suited for the scenarios he works on (i.e., a data set, a task to accomplish, etc.) during an interactive session, and chooses the parameters accordingly. In the latter, automatic evaluation makes use of interaction logs recorded previous interactive visualization sessions. Each interaction log defines a render configuration sequence, that along with different hardware settings define scenarios. Each scenario is rendered with a range of different frame  Progressive visualization model ( <ref type="figure" target="#fig_1">Fig. 2a</ref>) <ref type="figure">Fig. 3</ref>: Our optimization scheme for frame control parameters with different variants for user-based (red) and automatic evaluation (blue).</p><p>control parameters and evaluated by means of a video quality metric. The output of the quality evaluation finally provides the basis for parameter evaluation to determine the best setting over all scenarios <ref type="figure">(Fig. 3)</ref>. The respective components are implemented as follows.</p><p>(a) Scenarios. In our case, each scenario features a specific data set that is explored by means of a sequence of render configurations (c). We consider the exploration of different volumes in the following. A scenario may include computationally weaker systems, which might be simulated by virtually slowing down the test machine through different hardware settings. Optimally, scenarios should be representative in terms of the data sets, camera positioning, and so on, with respect to the target field of application.</p><p>(b) Parameter Tuples. Numerous parameter setting tuples (ρ, ϑ , χ) are considered for evaluation. Previous experience with the system or explicit pre-evaluation can help to narrow down the considered range of parameters, thus pruning clearly undesirable settings early for a more efficient evaluation.</p><p>(c) Render Configuration Sequence. In the course of a user evaluation, the user may simply interact with the respective tool. For the automatic evaluation of our implementation, we use timelined series of changes to the camera setup and the transfer function. In our case, they come from recorded user interaction logs taken from previous sessions.</p><p>(d) Quality Evaluation. When a user is evaluating the interactive application, he or she may explicitly provide a score for the experience. Such a score could be determined automatically by measuring the user's performance for predefined tasks. In contrast, in our evaluation in this paper, we do not assess such explicit performance scores, but instead let the user provide his choice of parameters directly (Sec. 6.3). For automatic evaluation, algorithmic video metrics have been used for many years to assess the perceived quality of a video without the need for a user study. We use MOVIE <ref type="bibr" target="#b29">[30]</ref> for the evaluation of interactive visualization, due to its high quality results and the availability of the source code. This gives us the possibility to seamlessly integrate it within our parameter optimization pipeline in a distributed environment. MOVIE is a full reference metric that compares a candidate video against a reference, and delivers a single error value as result. We generate these candidate videos by capturing the image from the display buffer 30 times per second. After completing a render configuration sequence for a certain parameter setting, we write the respective image files to disk, convert them to the required YUV video format using FFmpeg, and analyze it with the metric. The whole process runs automatically for given parameter tuples and scenarios. It also generates a script file that can be used directly as input to the grid engine of our compute cluster. This script file defines a job array that invokes as many parallel instances of MOVIE as there are videos that need to be evaluated. As output, among others, MOVIE writes a text file containing a single overall scalar error value for each test, which we use for parameter evaluation in the following. Although these metrics have been extensively researched and evaluated over the past 20 years, they can only be an approximation to the ground truth, the quality assessment by a human user. A detailed discussion of this aspect can be found at the end of Sec. 6.3.</p><p>(e) Parameter Evaluation. As indicated above, in the case of manual user evaluation, we simply let the user choose his favorite setting according to his interactive experience (Sec. 6.3). For the automatic evaluation, we the error values determined by the video quality analysis for the m scenarios and the n parameter tuples to determine the most favorable setting. This is accomplished by minimizing the leastsquares relative error ε on the basis of the error measure γ a</p><p>• <ref type="figure">(•, •, •</ref>) from the video metric:</p><formula xml:id="formula_5">ε = min 0&lt;i≤n m−1 ∑ j=0 (γ a j (ρ i , ϑ i , χ i )/γ a j (ρ b(m) , ϑ b(m) , χ b(m) ) − 1) 2 ,<label>(3)</label></formula><p>with b(m) ∈ [0, n] denoting the index of the parameter setting giving the lowest error for scenario m. We use relative errors to account for the fact that the absolute error values given by a metric can vary significantly (e.g., with the length of an image sequence). In particular, this allows us to avoid any bias toward scenarios with higher error values overall, and to support the combined use of different error metrics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">ERROR-BASED PROGRESSIVE VOLUME VISUALIZATION</head><p>Despite significant improvements in algorithms and hardware, volume rendering is still computationally challenging for the data sets produced by up-to-date scanners and simulations. Thus, in this section, we discuss the implementation of a progressive, multiresolution GPU volume raycasting scheme for illustrating and evaluating our error-based frame control (Sec. 5.1). In particular, we provide an efficient integrated implementation for the spatio-temporal error estimates (Sec. 5.2).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Progressive Volume Visualization</head><p>The main goals of our progressive rendering scheme are performance, flexibility, and simplicity, both with respect to implementation and integration with existing renderers. By flexibility, we mean both the capability to interrupt the renderer at virtually any time, and the absence of any kind of preprocessing or assumptions of coherence across frames. We utilize a multiresolution volume raycaster with an optimized point distribution <ref type="bibr" target="#b3">[4]</ref>. Sampling. The renderer uses multiple resolution levels in image space, each of which is subdivided into tiles. The goal is to achieve both flexible interruptability of the progressive renderer as well as efficient usage of the hardware. Thus, the granularity (i.e., the tile size) needs to be chosen according to device characteristics. For our CUDA implementation, we determined by experiment that 16K samples per tile are sufficient to efficiently utilize the 512 stream processors of a NVIDIA GTX580 without introducing significant overhead. For the chosen aspect ratio, we generate sample points by means of capacityconstrained point distributions with periodic boundary conditions <ref type="bibr" target="#b3">[4]</ref> ( <ref type="figure" target="#fig_3">Fig. 4)</ref>. Next, following a quad-tree approach, we subdivide the image space into tiles of increasing resolution levels until there is more than one sample point per pixel. For each resolution level, starting from our original set of samples, we add the required periodic copies to the list of samples. In our experiments, we use WXGA+ (1440 × 900) as the screen resolution for our renderer, because this constitutes a good trade-off between screen space and the induced cost for automatic video analysis. In total, this results in 5 resolution levels and 341 tiles in total <ref type="figure">(Fig. 5)</ref>. In this paper, we measure the sampling rate by means of the ratio of completed to total tiles. Akin to the image-space sampling, the sampling distance along rays in object space is doubled, starting from the highest, most detailed resolution level. To render a frame, the tiles are processed from the lowest to highest resolution level. Within each resolution level, they are ordered from the screen center to the outside. Error estimation and frame control are carried out between the computation of tiles. The achieved high, sub-frame granularity is essential to be able to react quickly to sudden changes. Our volume raycaster uses a simple local lighting model, making use of gradients that are determined on-the-fly using central differences. The raycaster further makes use of early ray termination, and lighting computations are only executed in non-empty space.</p><p>Image Reconstruction and Blending. Pixel color values are reconstructed from the sample points using a Gaussian filter kernel</p><formula xml:id="formula_6">f (d) = e −αd 2 − e −αr 2 ,<label>(4)</label></formula><p>with d denoting the distance in image space, α controlling the falloff, and the radius r ensuring that the filter goes to zero at the boundary of its support <ref type="bibr" target="#b22">[23]</ref>. On this basis, in a precomputation step, we generate the sampling table S, that lists for each pixel (x, y) of a tile of sampling resolution l which samples are required for its reconstruction along with their respective weights <ref type="figure" target="#fig_3">(Fig. 4)</ref>. S is then used at runtime in a CUDA kernel to compute the color value of each pixel of a tile (Alg. 1). Finally, for display, we use OpenGL to blend the boundary between tiles of different levels to reduce visual disturbances occurring from visible edges. This is implemented by employing precomputed opacity maps which are generated with respect to the distance of the pixels to the border between tiles of different resolution levels. Results for different sampling rates are shown in <ref type="figure">Fig. 6</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Error Estimation</head><p>As the basis for frame control, fast yet expressive metrics are required for the spatial and temporal error estimators to provide updated values after the rendering of each tile. Spatial Error Estimation. For each pixel, the spatial error estimation ς can be efficiently computed along with image reconstruction such that it only induces marginal computational and no memory lookup overhead (Alg. 1, green). In our implementation, the spatial error is determined by the magnitude of the weighted RGB variance vector over the considered sample RGB color values C(•) <ref type="figure">(Alg. 1, line 15)</ref>. The underlying incremental algorithm to compute the weighted variance is due to West <ref type="bibr" target="#b33">[34]</ref>. Pixel error values are then summed up using a hierarchical reduction scheme on the GPU that makes use of shared memory. Finally, the average pixel error value serves as spatial error estimation. Note that after the completion of each tile only a partial update to the previous error value is required, as only the image region covered by the respective tile needs to be considered. In our implementation, for each pixel covered by the tile, the difference between the previous and the current error value is added to the total value. When restart is issued, the spatial error of the active frame ς a is simply carried over to the shown frame error value ς s .     Temporal Error Estimation. For temporal error estimation, we first generate a quick approximation of the frame with the current render configuration, i.e., the latest camera position, transfer function, and data time step. In detail, we omit lighting, and sample the volume only sparsely during raycasting by using the lowest resolution tile and significantly increase the step size along rays (we use a factor of 50 with respect to the highest level). The respective temporal error is computed by means of per-pixel color differences of the current to the previous iteration of this approximated rendering (Alg. 1, line 16). Next, the temporal error values τ of all pixels are summed up by employing the hierarchical scheme that is also used for spatial error estimation. This value is added to the total temporal error value τ a of the active frame and the shown frame τ s , with τ a = 0 after each restart. As with the spatial error value, the temporal error value of the active frame τ a is carried over to the error of the shown frame τ s in case of a show or restart. Note that in contrast to the spatial error that is computed during the reconstruction of every tile for display, the temporal error is only evaluated in case of changes to the render configuration since the last assessment.</p><formula xml:id="formula_7">m 2 ← m 2 + w Σ • d • d</formula><formula xml:id="formula_8">σ 2 ← ( m 2 /w Σ ) • |S(x, y)|/(|S(x, y)| − 1)</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">APPLICATION AND EVALUATION</head><p>For running our measurements, we use a NVIDIA GTX580 and an Intel Core i7 with 3.4 GHz. We employ four data sets from both CT scans and simulations in our evaluation (references to renderings and data set resolution are given in brackets): the Chameleon data set <ref type="figure" target="#fig_1">(Fig. 6, 1024 × 1024 × 1080)</ref>, the Jet data set <ref type="figure" target="#fig_8">(Figs. 8(a)</ref> and (b), 720×320×320), the Flower data set <ref type="figure" target="#fig_1">(Fig. 1, 1024×1024×1024)</ref>, and the time-dependent Vortex data set <ref type="figure" target="#fig_8">(Figs. 8(c)</ref>-(e), 529 × 529 × 529, with 60 time steps). All compute-intense steps required for interactive rendering are executed in parallel on the GPU using CUDA, particularly including the volume raycaster and the reconstruction along with the error estimation. For our 1440 × 900 screen resolution, the image reconstruction takes 5 ms for the lowest level, 1.5 ms for the secondlowest level, and below half a millisecond for all subsequent levels. This decrease in reconstruction time exhibits a roughly linear dependence on the decreasing number of pixels covered by a tile <ref type="figure">(Fig. 5</ref>). To reduce this cost for higher levels, a hybrid reconstruction and upscaling approach could be investigated for future work.</p><p>As discussed in Sec. 5.2, computing the spatial error through the variance of the samples can be done without significant overhead, basically requiring only a couple of additional floating point operations. Determining the temporal error basically consists of two steps, namely the approximate rendering and the integrated reconstruction and difference computation to the previous approximation. In our measurements, the approximate sampling was in the range of 1% to maximally 10% of the full render time of a tile, while the subsequent reconstruction and error computation always took around 0.5 ms (e.g., for reference, the sampling of tile 22 in <ref type="figure" target="#fig_1">Fig. 6 took 24 ms)</ref>. This means that the computational overhead for assessing the temporal error is fairly low, particularly when considering that this is only done in case of changes to the render configuration.</p><p>In the following, we first demonstrate the adaptive behavior of error-based frame control by means of a specific example (Sec. 6.1). Second, we perform automatic parameter optimization and evaluation using the MOVIE video quality metric (Sec. 6.2). Third, we conduct an expert study with visualization researchers to optimize the parameter settings, evaluate the utility of our approach against alternatives, and compare the results to the results of automatic evaluation (Sec. 6.3). </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Practical Example of Error-Based Frame Control</head><p>We showcase the characteristics of error-based frame control at the example of the interactive exploration of the Chameleon data set <ref type="figure" target="#fig_7">(Fig. 7)</ref>.</p><p>In the first 100 frames the data set is quickly rotated. This induces a high temporal error and accordingly frame rates around 25 fps for more fluent navigation. From frame 110 to 140, no changes occur for almost a second, which leads to a continuous refinement of the current frame, as can also be seen from the increasing sampling rate. Then, there is a sequence of slower camera movement (frames 150-250), followed by another phase of no change (frames 250-300). Then, after slower changes to the camera position (frames 300-380), a certain feature is investigated in detail. This requires a high sampling rate to enable the user to assess fine details. We refer the readers to the accompanying video for further details.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Automatic Evaluation Using a Video Quality Metric</head><p>By means of automatic evaluation, we aim to optimize the parameters ρ for restart and ϑ for show, and study the impact of the power reduction parameter χ. We considered seven scenarios in total: the Chameleon, Jet, and Flower data sets, each with one sequence adjusting the camera path and one adjusting the transfer function, and the Vortex data set receiving a new time step every 100 ms. As input for MOVIE, we compute a video for each parameter setting along with a reference video that batch renders a full quality image for every frame. The videos are generated from transformations that were recorded from user interaction. To be representative for a variety of user actions, they contain both slow and fast-paced changes. These videos are only between six and twenty seconds long to keep computation time both for generation and subsequent evaluation within reasonable limits.</p><p>In our experiments, the evaluation of a video with a resolution of 1440 × 900 and 30 frames per second using MOVIE took twelve to sixteen hours on an Intel Xeon processor running at 2.4 GHz. By using a small cluster, we could process up to 64 videos in parallel. However, considering variations of multiple parameter values in one measurement series would still take a prohibitively long time. Thus, we use a multi-stage process to significantly cut down the number of evaluations. First, we optimize the restart parameter ρ, which has been shown by our previous experiments to be of predominant impact in comparison to the show parameter ϑ . Then, for the resulting optimal setting for ρ, we evaluate different parameter settings for ϑ . On this basis, we finally examine the impact of the resource parameter χ.</p><p>For the restart parameter ρ, we consider values from 0.1 to 0.9 in steps of 0.1. We further include static frame rates with 10 and 30 fps as well as static sampling rates of 5% and 20% in our evaluation. <ref type="figure" target="#fig_10">Fig. 9a</ref> shows the resulting least-squares relative error over all scenarios (as discussed in Sec. 4.4). According to this, error-based frame control with ρ = 0.6 achieves the smallest error value overall. The relatively high static sampling rate (20%) that delivers high-quality renderings but frame rates below 1 fps delivers the worst result. Here, low quality settings (5%) favoring higher frame rates improve the results significantly. For static frame rates, 10 fps delivers significantly lower errors than 30 fps, meaning that it provides a better trade-off between sampling rate and responsiveness for the considered cases.</p><p>As indicated by the low slope of error values for ρ across a wide range of values in <ref type="figure" target="#fig_10">Fig. 9a</ref>, a variety of different settings are potential candidates for delivering the best result in one specific scenario <ref type="figure" target="#fig_10">(Fig. 9b)</ref>. However, it can be seen that the determined optimal setting ρ = 0.6 is only marginally worse in any scenario, with respect to the best result for each scenario individually. Our error-based control further yields the lowest error for each scenario individually, except for the Vortex series. Naturally, its discrete refreshes 10 times a second yields good results with the 10 fps setting. In total, it can be seen that error-based frame control with ρ = 0.6 can be used successfully across all considered use cases without requiring further adjustment.</p><p>Based on ρ = 0.6, we then investigate the impact of the show parameter for the same scenarios with the following settings: ϑ ∈ {0., 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.2, 0.5}. Our results indicate that the lowest overall error is achieved with ϑ = 0. This means that show is only issued when a frame is restarted or when the spatial error of the active frame is smaller than that of the shown frame. While a more early show operation can reduce the visible temporal error and allow the frame to still refine further, we think this result is due to the induced strong variation of displayed image quality, leading to significant flickering.</p><p>Finally, <ref type="figure">Fig. 10</ref> shows the impact of the power parameter χ on the resource usage and the error determined by MOVIE. In our implementation, χ defines an error threshold with respect to our spatial error estimation (Sec. 5.2). Most prominently, it can be seen that a quite significant reduction of resource usage can be achieved with only little increase in error. This is due to the fact that an increasing sample count has decreasing impact on the perceived image quality, i.e., the resource usage can be lowered for sampling rates beyond a certain  threshold with merely sub-linear quality impact. The negative effect of trading resource usage against sampling rate is further significantly dampened by the adaptivity of our approach, i.e., resource utilization is only reduced in adequate situations as defined by the user. More elaborate schemes and a more detailed evaluation of its effects, e.g., on explicit power consumption, remain for future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Expert Review</head><p>Scope and Structure. The primary goal of our expert review was to evaluate the usefulness of our approach for volume rendering against fixed settings for frame rate and quality (denoted as modes below). Further objectives of the study were to identify preferred parameter settings, and to assess similarities and differences to the automatic evaluation from Sec. 6.2. Five visualization researchers evaluated our implementation by interactively exploring the Chameleon and the Jet data set. They are primarily concerned with the development of new visualization techniques, but also use their own and other interactive tools for analysis on a regular basis. Each participant spent 45 minutes to 1 hour interacting with our implementation. The procedure was loosely structured into three phases. First, we asked the participants to make themselves familiar with the volume rendering tool and the different modes of the program. Second, we gave them a number of exploration tasks to accomplish and asked them to evaluate the usefulness of our tool along the way. In this phase, the parameter values of the different modes were fixed as follows: the static frame rate was set to 30 fps, while the sampling rate was at 20%, and the restart parameter ρ was set to 0.6. For simplicity and time constraints, the show and power parameters were set to 0 and ignored throughout the study. A task consisted either of matching a certain camera view or transfer function to a precomputed visualization result. Twenty randomly distributed and uniformly colored marker crosses were added to the volume to support the matching. Tasks were structured into groups of three (one for each mode), and the order in which the modes had to be used was shuffled quasi-randomly. Finally, there was a free exploration phase in which we asked the participants to explore different parameter settings, and compare the different modes freely to determine the one they like best. After phase two, the participants were handed a small questionnaire. They were asked to complete the part about their experience so far right away, and fill in the remaining parts during the final phase three. The questionnaire contained both multiple choice fields regarding the preferred modes as well as text fields for providing comments regarding different aspects. In brief, we asked them to answer the following questions (answers given to quantitative questions are listed in <ref type="table">Table 1</ref>):</p><p>• Order of suitability of the modes for the assigned tasks for the fixed parameter settings ( <ref type="table">Table 1</ref>, O Tasks)?</p><p>• Best parameter setting for each mode for the free exploration of the Chameleon (P Cham.) and Jet data set (P Jet)?</p><p>• Remarks regarding the parameter choice? • Order of suitability of the modes to gain a fast overview of the data set (O Overv.), a detailed analysis of certain features (O Det.), and overall (O Tot.)?</p><p>• Justification for the preference ratings?</p><p>• Miscellaneous comments regarding this study?</p><p>User Comments. First, the participants were asked to assess the usefulness of the different modes with respect to the camera configuration and transfer function matching tasks. Overall, all participants found the fast response time of the static frame rate very helpful, particularly for quick camera rotations. However, Participants 2 and 4 noted that this also loses a significant amount of detail in the data set. With respect to the provided static sampling rate, all participants complained that while providing detailed renderings, its significant delays impede precise navigation. Our error-based frame control was rated as being a good compromise between responsiveness and detail (Participant 4), which adaptively allows for a high enough frame rate but also provides detail (Participants 0 and 3). Participants 0 and 1 additionally noted that they found it particularly helpful for matching transfer functions. However, also for transfer function matching, Participant 2 perceived the delays for small changes to be a little too long with our error-based control. In summary, error-based frame control was chosen over static frame rate or quality as the overall preferred method for the task phase. However, there were some remarks that the tasks were not emphasizing the properties and characteristics of the different modes strongly enough. For instance, Participant 0 noted that the disadvantage of low quality for static frame rate did not affect the tasks that much because the provided orientation markers were still visible. For future work, we would like to more closely emulate real world tasks in a more extensive study.</p><p>Next, in the exploration phase, the participants were asked to navigate freely, i.e., to explore the data set on their own and determine their personal preferences this way. We summarize their comments in the following. It was noted that the required sampling rate in general strongly depends on the data set and that it is thus hard to set for general purposes (Participants 0, 3, and 4). According to Participant 3, it also always bears the potential of sudden drops in frame rate should the rendering cost change quickly. Thus, the parameter setting highly depends on what the goal of the exploration is (Participant 0). As a result, Participant 2 found the static sampling rate unpleasant to use, particularly for longer sessions. Most of the time during interactive exploration, the effects of static sampling rate are either choppy movement or low rendering quality that misses important features (Participant 1). While static frame rate delivers better results more independently from the underlying data set (Participant 4), the strong loss of quality that occurs even for only slight changes was found unpleasant, particularly for cases in which details are of importance (Participant 3). Error-based frame control was generally found to be "a good compromise between static frame rate and static sampling rate" (Participant 3). Participant 1 stated that error-based frame control is most appropriate for adjusting transfer functions and the camera position, both when it comes to slow and fast movement. Participant 0 particularly preferred error-based frame control for detailed adjustments of the transfer function because more detailed and thus more helpful renderings were available during interaction.</p><p>Ratings and Parameter Settings. Like the participant's comments discussed above, the order of suitability selected by the participants in the questionnaire clearly reflect a preference toward error-based frame control <ref type="table">(Table 1</ref>). They favored it four to one for detailed investigation of the data set as well as for overall usage, with the other one being static frame rate. While a static frame rate delivering high quality would be great for detailed investigation once an interesting spot has been reached, getting there is cumbersome due to the involved sluggishness. For just getting a quick, rough overview of the data sets, comments and selected preferences suggest that both a high static frame rate and error-based frame control are well suited for this use case. This could be expected, as for faster movement, error-based frame control leads to high fps as well. However, the parameter settings vary in a certain range with specific settings depending on general user preferences toward high quality or responsiveness. For the static sampling rate, parameter settings in the low range between 2% and 7.5% were chosen, despite the significant visual disturbances associated with that (e.g., <ref type="figure">Fig. 6b</ref>). For static frame rate settings, preferred settings vary between 10 or 30 fps, with a slight preference overall toward the lower end for higher visual quality. Parameter settings for the restart parameter ρ range between 0.3 and 0.7, with a preference toward the higher end, i.e., toward higher frame rates. Furthermore, preferred settings may vary with the data set, with lower values for the both more expensive to render and complex structured Chameleon in comparison the Jet data set. Relating to this, Participant 1 stated that the Jet data set contains less detail, and thus different settings seem adequate as compared to the Chameleon data set.</p><p>Comparison to Automatic Evaluation. In essence, the results from the user study confirm the basic trend from the automatic evaluation (Sec. 6.2 and <ref type="figure" target="#fig_10">Fig. 9</ref>). For the static sampling rate, relatively low quality settings are preferred by the users, as they allow for fluid interaction for a wide range of camera and transfer function configurations. In the automatic evaluation, this is reflected by the much lower relative least-squares error ε for the lower sampling rate setting in <ref type="figure" target="#fig_10">Fig. 9a</ref>. For static frame rate, user preferences range approximately between 10 or 30 fps, i.e., varying in its trend toward image quality or responsiveness. Automatic evaluation exhibits basically the same trend, yet a lot more distinctively <ref type="figure" target="#fig_10">(Fig. 9a)</ref>. For error-based frame control, the restart parameter ρ = 0.6 was determined as the best setting by the automatic evaluation, with lower values exhibiting only slightly, yet continuously worse results. Similar settings were also popular with the participants.</p><p>Regarding the chosen preferences with respect to the mode, both the user study and the automatic evaluation clearly favored our errorbased frame control. However, while user preferences lean toward fixed frame rate when compared to fixed sampling rate, they perform about equally well with their optimal parameter setting according to <ref type="table">Table 1</ref>: Ratings given by the visualization experts in the following order: fixed frame rate, fixed sampling rate, error-based frame control. O stands for the order of preference, 1 being the most preferable to 3 being the least preferable. P stands for the selection of the best-suited parameter value for each of these. Tasks denotes the rating of the task phase of our evaluation. Overv. denotes the suitability for getting a quick overview of the data set, while Det. stands for the suitability for the detailed analysis of a certain feature. Tot. gives the overall rating.</p><p>Id O <ref type="table">Tasks</ref>  automatic evaluation <ref type="figure" target="#fig_10">(Fig. 9a)</ref>. Note that for the results in Sec. 6.2, four different data sets were used, while only two were part of the expert study here. More definite qualitative and quantitative statements would require an automatic evaluation with a wider range of data sets and performed interactions, a more extensive expert study with more participants, and possibly additional video metrics. In particular, while video metrics have the important advantage of allowing for automatic evaluation and optimization, they are optimized for determining the quality of videos, which might differ from the user experience of an interactive visualization tool. Here, we believe that more research is required to better quantify these differences.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION</head><p>We presented a novel scheme for progressive rendering in interactive visualization that is capable to dynamically adapt to the different situations that occur during data exploration. For this error-based frame control model, we provided an efficient implementation of a volume raycaster, featuring integrated GPU-accelerated image reconstruction and error estimation. Our implementation uniformly handles changes due to camera transforms, transfer function adaptations, as well as the progression of volume data to new time steps. We further demonstrated an automatic parameter optimization scheme using a video metric to optimize our frame control, and finally showed its practical utility by means of an expert study with visualization researchers. For future work, we plan to significantly expand the aspect of resource utilization and study the possibilities of intelligently decreasing power consumption in more detail. We would further like to extend our evaluation by means of other video metrics (like DRIVQM <ref type="bibr" target="#b2">[3]</ref>) and a more extensive user study. This user study should incorporate a more diverse group of users, particularly featuring application domain scientists, and consider the experiences of users utilizing it in their everyday work. In this context, taking the characteristics of human interaction into account more comprehensively could also be a promising direction. We would further like to implement and evaluate our error-based control scheme for an extended raycaster (featuring other data types and out-of-core rendering), as well as other visualization techniques beyond volume rendering. In addition, limiting ourselves to one technique for generating frames, like to raycasting in this paper, cannot avoid significant (temporal and/or spatial) artifacts in cases in which the gap is too large between the cost of this technique and the power of the available compute resources. The extension to hybrid approaches that switch to other, computationally cheaper techniques (like warping <ref type="bibr" target="#b24">[25,</ref><ref type="bibr" target="#b31">32]</ref>) when required could help handling these cases in a more suitable way for the user. Finally, considering additional information like the rate of incoming data (e.g., with simulations running in parallel), or outgoing images over the network in remote rendering could allow for more efficient frame control in such scenarios, too</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>For</head><label></label><figDesc>information on obtaining reprints of this article, please send e-mail to: tvcg@computer.org. Manuscript received 31 Mar. 2014; accepted 1 Aug. 2014 ate of publication 2014; date of current version 2014. 11 Aug.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 :</head><label>2</label><figDesc>(a) Progressive visualization model and (b) an illustrating example. Restart triggers when to stop the refinement of the active frame (back buffer) and start computing a new one instead with the current render configuration. Show determines when to copy the active frame to the shown frame (front buffer) for display. Resources controls the share of the compute capacity that is consumed by the progressive renderer.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>(</head><label></label><figDesc></figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 :</head><label>4</label><figDesc>Original sample from capacity-constrained pointsSample from periodic boundary conditions Selected pixel Link to sample used for reconstruction (width = weight) Single tile Reconstruction of pixels from samples and their weight according to a Gaussian filter kernel (Eq. 4), illustrated for colored pixels. Periodic boundary conditions of the sample distribution are explicitly considered. In our implementation, sample weights are precomputed for each tile resolution and stored in sampling table S.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 :Algorithm 1</head><label>61</label><figDesc>Different sampling rate settings and achieved frame rates with our renderer for the Chameleon data set. Integrated image reconstruction and error estimation. Spatial error estimation implementation is based on incremental variance computation and depicted in blue. Temporal error is simply computed from the difference to the previous color as shown in green.1: procedure RECONSTRUCTION(x, y, l) pixel coordinates (x, y) in tile with resolution level l 2: w Σ , c Σ ← 0 initialize sum of weights and sum of colors 3: m, m 2 ← 0 initialize mean and squared differences from mean 4: for all (i, w) ∈ S(x, y, l) do fetch sample index i and weight w from sampling table S 5: c t ← C(i) lookup sample color from output of renderer 6: c Σ ← c Σ + w • c t update weighted color sum 7: w Σ ← w Σ back up sum of weights from previous iteration 8: w Σ ← w Σ + w update sum of weights 9: d ← c t − m deviation from current mean 10: d w ← d • w w Σ relative weighted deviation from current mean 11: m ← m + d w update mean 12:</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>σ 2 |</head><label>2</label><figDesc>spatial error ς is length of variance vector 16:τ ← | c − c prev | τ is difference between c and previous color c prev17:    return ( c, ς ) or ( c, τ ) return resulting pixel and respective error</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 7 :</head><label>7</label><figDesc>Camera path for the Chameleon data set. Top: Sampling rate and frame rate for ρ = 0.6. Bottom: Renderings for selected frames with close-up.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 8 :</head><label>8</label><figDesc>Key frames of the videos from the simulation data sets that were used for automatic evaluation. In the respective camera path, the Jet data set was quickly rotated from the side view (a) to the tip of the pressure advancement (b), which was then investigated in detail. The Vortex series (c)-(e) shows the temporal development of the vortex cascade, visualized with the λ 2 criterion<ref type="bibr" target="#b16">[17]</ref>.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head></head><label></label><figDesc>Least-squares relative errors over all considered scenarios for different values for ρ. Error of the most optimal restart parameter setting for each scenario, plotted against the most optimal setting of ρ = 0.6 from (a).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 9 :</head><label>9</label><figDesc>Automatic optimization of the restart parameter ρ using the MOVIE video metric and a variety of different scenarios.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>2 Fig. 10 :</head><label>210</label><figDesc>Scenarios u, χ =.01 γ * , χ =.01 u, χ =.02 γ * , χ =.02 u, χ =.04 γ * , χ =.04 u, χ =.06 γ * , χ =.06 u, χ =.15 γ * , χ =.15 u, χ =.2 γ * , χ =.Impact of power parameter settings χ on resource usage u and error γ * for the camera path scenarios with ρ = 0.6 and ϑ = 0.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>Frey, Filip Sadlo, and Thomas Ertl are with University of Stuttgart.</figDesc><table /><note>E-mail: {steffen.frey, filip.sadlo, thomas.ertl}@visus.uni-stuttgart.de.• Kwan-Liu Ma is with UC Davis. E-mail: klma@ucdavis.edu.</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head></head><label></label><figDesc>Tiles at different resolution levels generated for a 1440 × 900 screen. Their order of processing is depicted by numbers and colors.</figDesc><table><row><cell></cell><cell></cell><cell>19</cell><cell>11</cell><cell>12</cell><cell>20</cell><cell>79 63 43 36 35 44 64 80 83 68 57 47 48 58 67 84</cell></row><row><cell></cell><cell></cell><cell>15</cell><cell>7</cell><cell>8</cell><cell>16</cell><cell>71 51 31 24 23 32 52 72 76 59 39 28 27 40 60 75</cell></row><row><cell></cell><cell></cell><cell>13</cell><cell>5</cell><cell>6</cell><cell>14</cell><cell>74 56 37 26 25 38 55 73 69 50 30 22 21 29 49 70</cell></row><row><cell></cell><cell></cell><cell>17</cell><cell>9</cell><cell>10</cell><cell>18</cell><cell>81 65 53 46 45 54 66 82 78 62 41 33 34 42 61 77</cell></row><row><cell cols="2">Level 1: 720×450 (2×2),</cell><cell cols="4">Level 2: 360×225 (4×4),</cell><cell>Level 3: 180×113 (8×8),</cell><cell>Level 4: 90×57 (16×16),</cell></row><row><cell cols="2">sampling rate 0.3-1.5%</cell><cell cols="4">sampling rate 1.5-6.2%</cell><cell>sampling rate 6.2-24.9%</cell><cell>sampling rate 24.9-100%</cell></row><row><cell>Fig. 5: (a) sampling rate 0.3%, 103.3 fps</cell><cell cols="2">(b) sampling rate 3%, 6.4 fps</cell><cell></cell><cell></cell><cell>(c) sampling rate 10%, 1.5 fps</cell><cell>(d) sampling rate 100%, 0.2 fps</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>The authors would like to thank the German Research Foundation (DFG) for supporting the project within the Cluster of Excellence in Simulation Technology (EXC 310/1).</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">A user study of visualization effectiveness using eeg and cognitive load</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">W</forename><surname>Anderson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">C</forename><surname>Potter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">E</forename><surname>Matzen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">F</forename><surname>Shepherd</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">A</forename><surname>Preston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="791" to="800" />
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Optimize hardware rendering for frame rate or quality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Inc</forename><surname>Autodesk</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Video quality assessment for computer graphics applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">O</forename><surname>Aydin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Čadík</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Myszkowski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Seidel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH Asia 2010 Papers, SIGGRAPH ASIA &apos;10</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2010" />
+			<biblScope unit="volume">161</biblScope>
+			<biblScope unit="page" from="1" to="161" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Capacity-constrained point distributions: A variant of lloyd&apos;s method</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Balzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Schlömer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Deussen</surname></persName>
+		</author>
+		<idno>86:1-86:8</idno>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Multi-core and many-core shared-memory parallel raycasting volume rendering optimization and tuning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">W</forename><surname>Bethel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Howison</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IJHPCA</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="399" to="412" />
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Bishop</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Fuchs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Mcmillan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">J S</forename><surname>Zagier</surname></persName>
+		</author>
+		<title level="m">Frameless rendering: Double buffering considered harmful. SIGGRAPH &apos;94</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="175" to="176" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">A perceptually based adaptive sampling algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">R</forename><surname>Bolin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">W</forename><surname>Meyer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 25th annual conference on Computer graphics and interactive techniques, SIGGRAPH &apos;98</title>
+		<meeting>the 25th annual conference on Computer graphics and interactive techniques, SIGGRAPH &apos;98</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="299" to="309" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Accelerating unstructured volume rendering with joint bilateral upsampling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">P</forename><surname>Callahan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">GPU, &amp; Game Tools</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="page" from="1" to="15" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">On frame rate and player performance in first person shooter games</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Claypool</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Claypool</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Springer Multimedia Systems Journal (MMSJ)</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="page" from="3" to="17" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Perspectives, frame rates and resolutions: It&apos;s all in the game</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Claypool</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Claypool</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 4th International Conference on Foundations of Digital Games, FDG &apos;09</title>
+		<meeting>the 4th International Conference on Foundations of Digital Games, FDG &apos;09<address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="42" to="49" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Adaptive frameless rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dayal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Woolley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Watson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Luebke</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH 2005 Courses, SIGGRAPH &apos;05</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">A progressive rendering algorithm using an adaptive perceptually based image metric</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-P</forename><surname>Farrugia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Péroche</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Graph. Forum</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="605" to="614" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Explorable volumetric depth images from raycasting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Frey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">26th Conference on Graphics, Patterns and Images (SIB-GRAPI)</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="123" to="130" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">On the energy efficiency of graphics processing units for scientific computing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Xiao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Feng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2009 IEEE International Symposium on Parallel&amp;Distributed Processing, IPDPS &apos;09</title>
+		<meeting>the 2009 IEEE International Symposium on Parallel&amp;Distributed Processing, IPDPS &apos;09<address><addrLine>Washington, DC, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="1" to="8" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Temporal aspect of perceived quality in mobile video broadcasting. Broadcasting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Huynh-Thu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ghanbari</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on</title>
+		<imprint>
+			<biblScope unit="volume">54</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="641" to="651" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">A systematic review on the practice of evaluating visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Isenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Isenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sedlmair</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Moller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2818" to="2827" />
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">On the identification of a vortex</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Jeong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Hussain</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Fluid Mechanics</title>
+		<imprint>
+			<biblScope unit="volume">285</biblScope>
+			<biblScope unit="page" from="69" to="94" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Power efficiency for software algorithms running on graphics processors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Johnsson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ganestam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Doggett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Akenine-Möller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Fourth ACM SIGGRAPH / Eurographics Conference on High-Performance Graphics, EGGH-HPG&apos;12</title>
+		<meeting>the Fourth ACM SIGGRAPH / Eurographics Conference on High-Performance Graphics, EGGH-HPG&apos;12</meeting>
+		<imprint>
+			<date type="published" when="2012" />
+			<biblScope unit="page" from="67" to="75" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Adaptive screenspace sampling for volume ray-casting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kratz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Reininghaus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Hotz</surname></persName>
+		</author>
+		<idno>11-04</idno>
+	</analytic>
+	<monogr>
+		<title level="j">ZIB</title>
+		<imprint>
+			<date type="published" when="2011" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Comparing 2d vector field visualization methods: a user study. Visualization and Computer Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Laidlaw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Kirby</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Jackson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Davidson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Warren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Tarr</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="59" to="70" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Volume rendering by adaptive refinement. The Visual Computer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="page" from="2" to="7" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Adaptive Wavelet Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">S</forename><surname>Overbeck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Donner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ramamoorthi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics (SIGGRAPH Asia</title>
+		<imprint>
+			<biblScope unit="volume">09</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1" to="12" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Physically Based Rendering, Second Edition: From Theory To Implementation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pharr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Humphreys</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2010" />
+			<publisher>Morgan Kaufmann Publishers</publisher>
+			<pubPlace>San Francisco, CA, USA</pubPlace>
+		</imprint>
+	</monogr>
+	<note>2nd edition</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Precision selection for energy-efficient pixel shaders</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Pool</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lastra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Singh</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM SIGGRAPH Symposium on High Performance Graphics, HPG &apos;11</title>
+		<meeting>the ACM SIGGRAPH Symposium on High Performance Graphics, HPG &apos;11<address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="159" to="168" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Image based rendering with stable frame rates</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Qu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Qin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on Visualization &apos;00, VIS &apos;00</title>
+		<meeting>the conference on Visualization &apos;00, VIS &apos;00</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="251" to="258" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">A perceptually based physical error metric for realistic image synthesis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ramasubramanian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">N</forename><surname>Pattanaik</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">P</forename><surname>Greenberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;99</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM Press/Addison-Wesley Publishing Co</publisher>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="73" to="82" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Power friendly gpu programming</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ribble</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH 2012 Course: Beyond Programmable Shading</title>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2012" />
+			<biblScope unit="page">29</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Adaptive sampling and reconstruction using greedy error minimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Rousselle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Knaus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zwicker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2011 SIGGRAPH Asia Conference, SA &apos;11</title>
+		<meeting>the 2011 SIGGRAPH Asia Conference, SA &apos;11</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="1" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">A user study to compare four uncertainty visualization methods for 1d and 2d datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sanyal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Bhattacharya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Amburn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Moorhead</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1209" to="1218" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Motion tuned spatio-temporal quality assessment of natural videos</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Seshadrinathan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">C</forename><surname>Bovik</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Transactions on Image Processing</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="335" to="350" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Image information and visual quality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Sheikh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bovik</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Image Processing</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="430" to="444" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Differential volume rendering: a fast volume visualization technique for flow animation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the conference on Visualization &apos;94, VIS &apos;94</title>
+		<meeting>the conference on Visualization &apos;94, VIS &apos;94</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="180" to="187" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Human factors in visualization research</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Tory</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="72" to="84" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Updating mean and variance estimates: An improved method</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">H D</forename><surname>West</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Commun. ACM</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="532" to="535" />
+			<date type="published" when="1979" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title level="m" type="main">Real-time rendering: Computer graphics with control engineering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Wong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wang</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2014" />
+			<publisher>CRC Press</publisher>
+			<pubPlace>Boca Raton, FL</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Interruptible rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Woolley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Luebke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Watson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Dayal</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2003 Symposium on Interactive 3D Graphics, I3D &apos;03</title>
+		<meeting>the 2003 Symposium on Interactive 3D Graphics, I3D &apos;03<address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="143" to="151" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

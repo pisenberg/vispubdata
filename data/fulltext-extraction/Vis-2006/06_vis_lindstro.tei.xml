@@ -1,0 +1,710 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Fast and Efficient Compression of Floating-Point Data</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Peter</forename><surname>Lindstrom</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Martin</forename><surname>Isenburg</surname></persName>
+						</author>
+						<title level="a" type="main">Fast and Efficient Compression of Floating-Point Data</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:42+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>High throughput</term>
+					<term>lossless compression</term>
+					<term>file compaction for I/O efficiency</term>
+					<term>fast entropy coding</term>
+					<term>range coder</term>
+					<term>predictive coding</term>
+					<term>large scale simulation and visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Large scale scientific simulation codes typically run on a cluster of CPUs that write/read time steps to/from a single file system. As data sets are constantly growing in size, this increasingly leads to I/O bottlenecks. When the rate at which data is produced exceeds the available I/O bandwidth, the simulation stalls and the CPUs are idle. Data compression can alleviate this problem by using some CPU cycles to reduce the amount of data needed to be transfered. Most compression schemes, however, are designed to operate offline and seek to maximize compression, not throughput. Furthermore, they often require quantizing floating-point values onto a uniform integer grid, which disqualifies their use in applications where exact values must be retained. We propose a simple scheme for lossless, online compression of floating-point data that transparently integrates into the I/O of many applications. A plug-in scheme for data-dependent prediction makes our scheme applicable to a wide variety of data used in visualization, such as unstructured meshes, point sets, images, and voxel grids. We achieve state-of-the-art compression rates and speeds, the latter in part due to an improved entropy coder. We demonstrate that this significantly accelerates I/O throughput in real simulation runs. Unlike previous schemes, our method also adapts well to variable-precision floating-point and integer data.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Data sets from scientific simulation and scanning devices are growing in size at an exponential rate, placing great demands on memory and storage availability. Storing such data uncompressed results in large files that are slow to read from and write to disk, often causing I/O bottlenecks in simulation, data processing, and visualization that stall the application. With disk performance lagging increasingly behind the frequent doubling in CPU speed, this problem is expected to become even more urgent over the coming years.</p><p>A large scale simulation may run on a cluster of hundreds to thousands of supercomputer nodes that write the results of each time step to a shared file system for subsequent analysis and visualization <ref type="bibr" target="#b23">[24]</ref>. Typically this involves storing large amounts of single-or double-precision floating-point numbers that represent one or more variables of simulation state per vertex/cell. When the CPU speed with which the simulation can be updated exceeds the available I/O bandwidth, the simulation stalls and the CPUs are idle.</p><p>Data compression strategies have the potential to combat this problem. By making use of excess CPU cycles, data can be compressed and uncompressed to reduce the number of bytes that need to be transferred between memory and disk or across file systems, effectively boosting I/O performance at little or no cost while reducing storage requirements.</p><p>The visualization community has developed compression schemes for unstructured data such as point sets <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b5">6]</ref>, triangular <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b26">27]</ref>, polygonal <ref type="bibr" target="#b12">[13,</ref><ref type="bibr" target="#b18">19]</ref>, tetrahedral <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b10">11]</ref>, and hexahedral <ref type="bibr" target="#b13">[14]</ref> meshes, and for structured data such as images and voxel grids <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b11">12]</ref>. However, most of these schemes are designed to maximize compression rate rather than data throughput. They are commonly applied as an offline process after the raw, uncompressed data has already been stored on disk. In order to maximize effective throughput, one must consider how to best balance compression speed and available I/O bandwidth, and at the same time support sufficiently efficient decompression. While higher compression rates improve effective bandwidth, this gain often comes at the expense of a slow and complex coding scheme. Furthermore, prior methods often expect that vertex positions and field values can be quantized onto a uniform integer grid for efficient (but lossy) predictive compression. This alters the original data as the non-linear precision of floatingpoint numbers generally cannot be preserved during quantization. In many science and engineering applications, however, exact values must be retained, e.g. for checkpoint dumps of simulation state and for accurate analysis and computation of derived quantities such as magnitudes, curls, fluxes, critical points, etc. The use of uniform quantization is also prohibited for data sets that exploit the non-linearity of the floating-point representation to allocate more precision to important features by specifically aligning them with the origin. Quantization can also change geometric relationships in the data (e.g. triangle orientation, Delaunay properties). Finally, scientists are often particular about their data and will simply refrain from using a compression scheme that does not exactly preserve their data.</p><p>To address these needs, we propose a novel and surprisingly simple scheme for fast, lossless, online compression of floating-point data based on predictive coding. Our method provides a well balanced trade-off between computation speed and data reduction and can be integrated almost transparently with standard I/O. Our scheme furthermore makes no assumption on the nature of data to be compressed, but relies on a plug-in scheme for computing data-dependent predictions. It is hence applicable to a wide variety of data sets used in visualization, such as unstructured meshes, point sets, images, and voxel grids. In contrast to many previous schemes, our method naturally extends to compression of adaptively quantized floating-point values and to coding of integer data.</p><p>We present results of lossless and lossy floating-point compression for scalar values of structured 2D and 3D grids, fields defined over point sets, and for geometry coding of unstructured meshes. We compare our results with recent floatingpoint compression schemes to show that we achieve both stateof-the-art compression rates and speeds. The high compression speed can be attributed in part to the use of an optimized, high-speed entropy coder, described here. As a result, our compressor is able to produce substantial increases in effective I/O rate for data-heavy applications such as large scale scientific simulations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>This paper is primarily concerned with lossless floating-point compression and we now discuss prior work in this area. While our scheme extends to lossy compression of quantized floatpoint data and integer coding, covering the extensive work done in these areas is beyond the scope of this paper.</p><p>One approach to lossless float compression is to expand the non-linear floating-point representation to a wider linear integer representation, and to use standard compression schemes for uniformly quantized data. Usevitch <ref type="bibr" target="#b28">[29]</ref> proposes expanding single-precision floats to large, 278-bit integers scaled by a least common exponent for coding JPEG2000 floating-point images. Similarly, Trott et al. <ref type="bibr" target="#b27">[28]</ref> suggest expanding singleprecision floats to common-exponent double-precision numbers whose 52-bit mantissas are assumed to be sufficient for representing the range of the single-precision data. Liebchen et al. <ref type="bibr" target="#b19">[20]</ref> take a hybrid approach by choosing a suitable quantization level for MPEG audio data, applying integer compression on the quantized data, and compressing floating-point quantization residuals using Lempel-Ziv coding. The audio compressor by Ghido <ref type="bibr" target="#b9">[10]</ref> makes a similar analysis pass over the data to discover its range and intrinsic precision to eliminate redundant bits, which due to limited sampling accuracy often occur in audio data. Gamito and Dias <ref type="bibr" target="#b8">[9]</ref> propose a lossless wavelet coding scheme for use in JPEG2000 that separates sign, exponent, and mantissa, and that identifies regions of constant sign and exponent for efficient mantissa compression.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Streaming Floating-Point Compression</head><p>The latter three approaches <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b9">10,</ref><ref type="bibr" target="#b19">20]</ref> are not applicable in a streaming I/O setting as they require multiple passes over the data. Streaming compression, where data is compressed as it is written, avoids excessive delay due to buffering, is memory efficient and therefore scalable, and integrates easily with applications that produce (and consume) streams of data. Recent techniques for streaming compression of geometric data <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b14">15,</ref><ref type="bibr" target="#b16">17]</ref> compress vertex coordinates and field values using predictive coding. To operate losslessly on floating-point data these schemes need compatible predictive coders. We here review three floating-point compression schemes that are suitable for streaming compression. Later, we will compare our new compressor with these methods.</p><p>RKB2006 <ref type="bibr" target="#b21">[22]</ref> The scheme by Ratanaworabhan et al. is noteworthy for its generality and independence of a geometric structure. This method compresses any linear stream of data by constructing a hash key from the last few sample differences in an attempt to find recurring patterns in the data. This allows geometry-free prediction, which works well if the data is traversed in a coherent manner so as to expose patterns, but it is not clear how well this scheme generalizes to coding of unstructured data (e.g. meshes) that has no natural traversal order. Prediction residuals are computed via an exclusive or operation, and are encoded using a fixed-width leading-zero count followed by raw transmission of all trailing bits, which makes for efficient I/O. EFF2000 <ref type="bibr" target="#b6">[7]</ref> The main difference in the method by Engelson et al. lies in the predictor used. Instead of hashing, values in time-varying data are predicted using 1D polynomial extrapolation of corresponding values in previous time steps. As in <ref type="bibr" target="#b21">[22]</ref>, residuals are computed by treating the binary representation of actual and predicted floats as integers. Two's complement integer subtraction results in a compressible run of leading zeros or ones. The drawback of both techniques is that they can not exploit the non-uniform distribution of leading bit counts, and that they are wasteful when the number of bits of precision is not a power of two.</p><p>ILS2005 <ref type="bibr" target="#b15">[16]</ref> Our previous scheme for single-precision floating-point compression tends to give the best compression rates compared to other schemes at the expense of higher computational complexity. The idea is to separate and compress in sequence the difference in sign, exponent, and mantissa between a float and its prediction using context-based arithmetic coding <ref type="bibr" target="#b30">[31]</ref>. A successful prediction of the exponent, for example, is used as context for coding of mantissa differences. While effective at eliminating redundancy in the data, the implementation is riddled with conditionals and overly complicated bit manipulations, requires entropy coding of 3-5 symbols per float (even though many of these symbols are incompressible), uses up to 500 different contexts, and maintains probabilities for as many as 20,000 distinct symbols. Moreover, extending this scheme to double-and variable-precision floating-point numbers and integer data would require careful design decisions.</p><p>By contrast, the new algorithm presented here is more general in the sense that it compresses floating-point and integer values of any precision, and is also much simpler in the sense that it requires fewer operations per compressed value and fewer lines of code. As a result it is significantly faster and more memory efficient while yielding comparable compression rates. We now describe our method in detail and will return to comparisons with prior methods in Section 5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Floating-Point Compression Algorithm</head><p>Our compressor has been designed for IEEE floating-point numbers <ref type="bibr" target="#b0">[1]</ref>, although it should be easily generalizable to similar formats. An IEEE single (double) precision number is made up of a sign bit s, an ne = 8 (11) bit exponent e, and a nm = 23 (52) bit mantissa m that generally represent the number</p><formula xml:id="formula_0">(−1) s 2 e−2 ne−1 −nm+1 (2 nm + m)<label>(1)</label></formula><p>From here on, we will use the term "float" to generically refer to single-or double-precision floating-point numbers.</p><p>Our float compressor is not dependent on a particular prediction scheme or data type. To give this discussion context and focus, we will assume that the data to be compressed is a 3D regular grid of single-or double-precision floating-point scalar values; compression of other data types is discussed in Section 5. For completeness, we here also describe a prediction scheme for use with structured data.</p><p>In brief, our method works as follows. The data is traversed in some coherent order, e.g. row-by-row, and each visited data value is first predicted from a subset of the already encoded data, i.e. the data available to the decompressor. The predicted and actual values are transformed to an integer representation during which the least significant bits are optionally truncated if lossy compression is desired. Residuals are then computed and partitioned into entropy codes and raw bits, which are transmitted by the fast entropy coder discussed in Section 4.</p><p>Although the main steps of our algorithm are quite simple, efficient implementation requires some care. Therefore, we include source code to document each step. We begin by discussing the predictor used in our regular grid compressor.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Prediction</head><p>For regular grids we use the Lorenzo predictor <ref type="bibr" target="#b11">[12]</ref>, which generalizes the well-known parallelogram predictor <ref type="bibr" target="#b26">[27]</ref> to arbitrary dimensions. The Lorenzo predictor estimates a hypercube corner sample from its other, previously encoded corners by adding those samples reached via an odd number of edges and subtracting those that are an even number of edges away. As only immediate neighbors are needed for prediction, the compressor (and decompressor) must not keep track of more than an (n−1)-dimensional front (slice) from the n-dimensional data <ref type="bibr" target="#b11">[12]</ref>. Previously encoded samples f x−i,y−j,z−k relative to the current sample fx,y,z are indexed as f(i, j, k) in Listing 1 by representing the front as a circular array.</p><p>// compress 3 D array of scalars void compress ( const FLOAT * data , front &amp; f , int nx , int ny , int nz ) { f . advance (0, 0, 1); for ( int z = 0; z &lt; nz ; z ++) { f . advance (0, 1, 0); for ( int y = 0; y &lt; ny ; y ++) { f . advance (1, 0, 0); for ( int x = 0; x &lt; nx ; x ++) { FLOAT pred = f (1, 0, 0) -f (0, 1, 1) + // Lorenzo prediction f (0, 1, 0) -f (1, 0, 1) + f (0, 0, 1) -f (1, 1, 0) + f (1, 1, 1); FLOAT real = * data ++; // fetch actual value real = encode ( real , pred ); // encode difference f . push ( real ); // put on front } } } } Listing 1. Data prediction and compression loop for 3D grids.</p><p>To bootstrap the predictor and allow boundary samples to be predicted, one usually lowers the dimension of the Lorenzo predictor, so that the first layer is predicted using 2D prediction and the first row using 1D prediction. The first sample encoded is predicted as zero. For 3D data this results in eight different predictors and hence eight conditionals in the inner loop, which degrade performance. We make the observation that (n − 1)-dimensional Lorenzo prediction is equivalent to ndimensional prediction with the n th dimension samples set to zero. Hence, by padding the data set with one layer of zeros in each dimension, a single n-dimensional predictor can be used for all samples. Instead of copying and padding the entire data set, this padding can be done efficiently only to the front. The calls f.advance in Listing 1 apply this padding and advance the front by one layer, row, or column. In case of lossy compression, where we allow truncation of the floats, we must update the front (the f.push call) with the lossily encoded samples since those are the only ones available to the decompressor.</p><p>By default our compressor performs prediction using floating-point arithmetic. The order of operations and the precision used must match exactly between compressor and decompressor. This may be difficult to achieve due to compiler optimizations, roundoff policies, availability of extended precision (as on Intel architectures), and other platform dependent differences in floating-point arithmetic. In such cases, one may perform predictions using integer arithmetic at a small cost in compression rate by first mapping the floats to their binary representation. This mapping, which is applied to both predicted and actual samples regardless of how prediction is done, will be discussed next.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Mapping to Integer</head><p>We could compute prediction residuals via floating-point subtraction, however this might cause underflow with irreversible loss of information that precludes reconstruction of the actual value. Instead, as in <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b21">22]</ref>, we map the predicted and actual floats p and f to their sign-magnitude binary integer representation. On platforms implementing sign-magnitude integer arithmetic, we could now simply compute integer residuals via subtraction, however most current platforms implement two's complement arithmetic. To address this, we map the signmagnitude representation to unsigned integers by flipping either the most significant bit (for positive floats) or all bits (for negative floats). The result is a monotonic mapping of floats to unsigned integers that preserves ordering and even linearity of differences for floats with the same sign and exponent. This approach is also similar to <ref type="bibr" target="#b15">[16]</ref>, however we benefit by allowing a carry to propagate from mantissa to exponent in case p and f are close but separated by an exponent boundary, which would be signaled as a large misprediction in <ref type="bibr" target="#b15">[16]</ref>.</p><p>In case lossy compression is desired, we discard some of the least significant bits during the mapping stage. This can be thought of as logarithmic rather than uniform quantization, which in our experience is the quantization preferred by scientists. They often describe the precision of their data as the number of decimal digits in scientific notation. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Residual Computation and Coding</head><p>Once the actual and predicted values f and p have been mapped to integers, we apply a two-level compression scheme to the integer residuald (Listing 2). Using one symbol (and probability) per residual is not practical in our scheme for two reasons. First, because of the potentially large range (−2 n , +2 n ) of residuals for n-bit data, the probability tables would become prohibitively large. Second, because there are generally many more possible residuals than actual floats in a data stream, most residuals are expected to appear only once, making probability modeling unreliable at best. To address this problem, we use a two-level scheme that groups residuals into a small set of intervals. A residual can then be represented by interval number and position within the interval. We considered using the optimal two-level scheme by Chen et al. <ref type="bibr" target="#b3">[4]</ref>, which partitions a distribution so as to minimize the coding cost, but opted for a static and simpler scheme. Observing that most residual distributions are geometric and highly peaked aroundd = 0, grouping residuals into variable-size intervals ±[2 k , 2 k+1 ) makes for both a simple and effective scheme. This approach, equivalent to coding the number of leading zeros of |d|, is essentially the one taken by <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b21">22]</ref>, although our scheme differs in one important aspect: the manner in which the firstlevel intervals are coded.</p><p>Formally, we define the integer residuald as:</p><formula xml:id="formula_1">d =f −p = s(2 k + m)<label>(2)</label></formula><p>where s ∈ {−1, 0, +1} encodes the sign ofd, 0 ≤ k &lt; n is the position of the most significant bit of |d|, and m is a k-bit number. k can be computed quickly either by repeated right shifting or using the bsr Intel assembly instruction. Whereas both <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b21">22]</ref> would encode the tuple s, k using a fixed number of bits, we exploit the non-uniform distribution of k and use entropy coding. Ifd = 0, we entropy code only a single symbol g = 0. Otherwise, we first entropy code g = s(k + 1), followed by transmitting verbatim the remaining k bits representing m. (Note that k may be zero, e.g. whend = 1, in which case no additional bits are transmitted.) Whereas we could fold s, k into n distinct symbols via modular arithmetic, as in <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b15">16]</ref>, or using exclusive-or differencing, as in <ref type="bibr" target="#b21">[22]</ref>, we use all 2n + 1 symbols and rely on the range coder to (nearly) eliminate the cost of coding large, infrequent residuals. As we shall see later, using entropy coding to compress g can considerably improve the overall compression rate at little or no expense in speed. While the raw bit stream M could be transmitted independently of the symbol stream G, interleaving and synchronizing the two streams is a non-trivial problem as the stream G produced by our range coder contains symbols of "fractional" bit length. Moreover, our range coder is sufficiently fast that coding raw bits does not pose a significant overhead. In general, these raw bits do not have much regularity that could be exploited for further compression. One notable exception is when the data has less than full precision, in which case additional entropy coding can remove redundant bits <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b15">16]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Fast Entropy Coding</head><p>Range coding <ref type="bibr" target="#b20">[21]</ref> is an efficient variation on arithmetic coding <ref type="bibr" target="#b30">[31]</ref> that outputs data in byte increments. As in arithmetic coding, an interval [l, l + r) is maintained that uniquely represents a string of encoded symbols. During encoding of one of a set of possible symbols, the interval is partitioned such that symbols are assigned non-overlapping portions of the interval in proportion to their probability, and the interval is then narrowed to the sub-interval corresponding to the encoded symbol. The process repeats for the next symbol. Any number within the final near-infinite-precision interval then encodes an entire symbol sequence.</p><p>In practice, fixed-point integer arithmetic is used to represent a subset of [0, 1). To avoid working with infinite precision, the most significant bits of the interval can be output whenever they agree in both l and l + r. One problem arises when r becomes small but l and l + r straddle a bit (or byte, in case of range coding) boundary. To avoid running out of finite precision for r, two solutions have been proposed: (1) Output a zero bit and later correct it once it is determined that a carry would have turned this bit into a one. This may in the worst case require buffering many bits. This approach is implemented in Schindler's range coder <ref type="bibr" target="#b22">[23]</ref>, which was used in our previous compressor <ref type="bibr" target="#b15">[16]</ref>. <ref type="formula" target="#formula_1">2</ref>Since encoder and decoder are synchronized and agree on the value of r, they can both detect this condition and handle it by simply reducing r just enough that a carry can no longer occur. This computationally more efficient method was first proposed by Subbotin <ref type="bibr" target="#b25">[26]</ref>, and is the one used in our new compressor. We improve upon Subbotin's implementation by splitting the two conditions for outputting a byte and reducing the range r, and by making the observation that if no bytes can be output and the integer r &lt; 2 <ref type="bibr" target="#b15">16</ref> , the subsequent reduction of r implies that the top two bytes, and only the top two bytes, can always be output. Because these tests are performed for every encoded symbol, whether entropy coded or transmitted raw, this seemingly trivial improvement can have a measurable impact.</p><p>The code for our range coder is shown in Listing 3. Not included here is the code for probability modeling, which is done by the quasistatic probability modeler from <ref type="bibr" target="#b22">[23]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Results</head><p>We evaluated our compressor against our own implementations of the three streaming schemes <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b15">16,</ref><ref type="bibr" target="#b21">22]</ref> and the generic zlib compressor (the scheme used in Unix gzip). We compressed 2D and 3D single-and double-precision data sets from the fluid dynamics simulation code Miranda <ref type="bibr" target="#b4">[5]</ref> and the last time step of the hurricane Isabel data used in the Visualization 2004 contest <ref type="bibr" target="#b29">[30]</ref>. We also compressed a large point set from an atomistic simulation of shock propagation, as well as the benchmark triangle meshes lucy and david, laid out in their original triangle order (see <ref type="bibr" target="#b16">[17]</ref>), and tetrahedral meshes torso and rbl in breadth-first order (see <ref type="bibr" target="#b14">[15]</ref>). Whereas the original scheme by Engelson et al. <ref type="bibr" target="#b6">[7]</ref> uses 1D temporal prediction, we used Lorenzo prediction on the grid data for all schemes but <ref type="bibr" target="#b21">[22]</ref>, whose main distinguishing feature from <ref type="bibr" target="#b6">[7]</ref> is its hash-based predictor. We did this because we did not have access to multiple time steps for all data sets, and also to factor out the impact of different data predictors and their dependence on temporal versus spatial resolution. For all schemes but <ref type="bibr" target="#b21">[22]</ref>, we used as predictor the previous sample for the partially coherent point stream, parallelogram prediction <ref type="bibr" target="#b26">[27]</ref> for the triangle meshes, and the base triangle midpoint <ref type="bibr" target="#b10">[11]</ref> for the tetrahedral meshes. Our experiments were run on a dual 3.2 GHz Intel Xeon with 2 GB of main memory and a Seagate Cheetah 10K.6 Ultra 320 SCSI disk. // shift out top 8 bits } Listing 3. Fast range coder used in our compressor. The range coder makes use of an external probability modeler that periodically (e.g. every 1K symbols) updates the pmf and cdf arrays.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Compression Rates</head><p>Results of lossless compression on several quite different data sets <ref type="figure">(Fig. 1)</ref> are presented in <ref type="table">Table 1</ref> and <ref type="figure">Fig. 2</ref>. The Miranda Rayleigh-Taylor simulations involve two fluids of different density that initially are separated into mostly homogeneous regions. Hence the density fields have low entropy and compress well. Most of the other fields span negative and positive numbers, resulting in many different exponents (nearly all 32 respectively 64 bits are used for the single-and double-precision data). We note that the hurricane data uses the value 10 35 to indicate land at ground level (roughly 0.4% of all values). We did not specialize the compressors to ignore these values.</p><p>As can be seen, our compression rates are comparable to those of <ref type="bibr" target="#b15">[16]</ref> and significantly better than both <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b21">22]</ref>. We achieve lossless reductions in the range 1.4-15, and on average a compressed size of 10.7 bits/float on the Miranda singleprecision data and 18.0 bits/float on the hurricane data. Using the previous sample to predict the next, our compression results on the point data are dictated by the geometric coherence of the data stream. The atom data set is bucketed and roughly sorted along one axis, but is locally not particularly coherent. We achieve an average compression of 1.5. More sophisticated point compression techniques based on local point reordering and higher-order prediction would likely improve compression rates. On the double-precision Miranda data, the lossless reduction is only 1.4-2.7, with an average size of 40.3 bits/double. Double-precision floating point data is more challenging to compress as the increase from 23 to 52 mantissa bits adds 29 low-order bits to each value. It is well known that predictive coding mainly "predicts away" high-order bits so that the relative reduction rate decreases as low-order bits are added <ref type="bibr" target="#b12">[13,</ref><ref type="bibr" target="#b15">16]</ref>. Of course, it is possible that the low-order bits exhibit some predictable pattern, e.g. when some or all 29 additional loworder bits are everywhere zero, as would be the case if singleprecision floating-point numbers were cast to double precision. A similar situation arises in Marching Cubes isosurface extraction from regular grids, for which two of three coordinates of each vertex have much less precision than can be represented in floating-point, resulting in predictable (though not necessarily all zero) low-order bits. (Even scanned surfaces such as lucy and david are typically extracted from a volumetric represen-   <ref type="table">Table 1</ref>. Compression results for the Miranda (m2d, m3d, M3d) and hurricane (h3d) structured grids, the atom point set, the lucy and david triangle meshes, and the torso and rbl tetrahedral meshes. All data but M3d is represented in single precision. The [ILS2005] scheme operates on single precision only, hence the missing values. For the meshes we report only the compressed size of vertex coordinates; timings are dominated by connectivity coding, and are hence excluded. The range measures (the logarithm of) the number of floating-point values between min and max. Note that the first-order entropy is limited by the number of samples in a data set.</p><p>tation.) Arguably such data sets should use an integer rather than floating-point representation, although for simplicity or other reasons it is common practice to use floating-point. Contrary to <ref type="bibr" target="#b15">[16]</ref>, which entropy codes all bits of the residual, our new coder sacrifices such potential compression gains for speed by storing these repeated low-order bits in raw and uncompressed form. However, the massive data sets from scientific simulation that motivated our work on high-speed compression, as well as our tetrahedral meshes, rarely exhibit significant loworder redundancy, as also evidenced by our results. <ref type="figure">Fig. 3</ref> shows that our scheme gracefully adapts to decreasing levels of precision when discarding the least significant mantissa (and eventually exponent) bits. For n bits of precision, the schemes <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b21">22]</ref> require log 2 n bits to code the number of leading zeros, whereas our scheme exploits the combination of low entropy in the leading-zero count and the elimination of the low-order bits that are most difficult to predict and compress. <ref type="figure">Fig. 4</ref> shows the speed of compressing from memory to disk, including disk write time. (Because of the simplicity of our method, its decompression speed is similar to its compression speed.) We also include the raw I/O performance of dumping the data uncompressed using a single fwrite call. Timings correspond to the median of five runs. Whereas our compressor is slightly slower than the less effective compressors <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b21">22]</ref>, it is nearly twice as fast as <ref type="bibr" target="#b15">[16]</ref> while producing similar compression rates. However, in more I/O-intensive scenarios, such as in massively parallel simulations dumping data to the same file system (as is common), the improved compression of our method over <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b21">22]</ref> results in a net gain in effective throughput. We integrated our compression code with Miranda's dump routines and ran performance tests on 256 nodes of LLNL's MCR supercomputer. Achieving on average a lossless reduction of 3.7 on 75 GB of data dumped, the overall dump time was reduced by a factor of 2.7 over writing the data uncompressed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1.1">Lossy Compression</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Compression Speed</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Entropy Coding</head><p>We compared the raw throughput of our range coder and Schindler's <ref type="bibr" target="#b22">[23]</ref> by (1) passing raw bytes through it with no compression and (2) entropy coding byte sequences. In both cases, the source data was the uncompressed floating-point data used in our experiments. Timings show that our coder is 40% faster for raw transmission and 28% faster for entropy coding. Meanwhile, the inefficiency of our coder due to loss of precision and range reduction is only 26 bytes of overhead for 1.5 GB of coded data. Its raw throughput is only 20% less than an fwrite call, while its entropy coding throughput of 20 MB per second, which includes probability modeling and I/O time, compares favorably with state-of-the-art entropy coders <ref type="bibr" target="#b24">[25]</ref>.  <ref type="figure">Fig. 3</ref>. Lossy compression rates for our scheme (black) and <ref type="bibr" target="#b6">[7]</ref> (blue). The vertical scale is logarithmic.  <ref type="figure">Fig. 4</ref>. Compression speed for the Miranda singleprecision data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusion</head><p>We described a simple method for lossless compression of floating-point data based on predictive coding. The main characteristics of our method are (1) effective predictive coding of floating-point data, (2) efficient and robust arithmetic by mapping floating-point numbers to integers, (3) fast adaptive range coding of leading zeros in residuals, and (4) transmission of raw bits whenever we cannot expect compression to result in much gain. Our scheme provides high compression rates without sacrificing computational efficiency, thereby delivering high throughput in typical large scale simulation environments where I/O bandwidth is an especially precious resource. We achieve compression rates nearly as good as those of <ref type="bibr" target="#b15">[16]</ref>, but at twice the speed and using a much simpler implementation. Although our compression speeds are slightly slower than those of <ref type="bibr" target="#b6">[7]</ref> and <ref type="bibr" target="#b21">[22]</ref>, our compression rates are significantly higher, resulting in higher overall throughput and smaller files in bandwidth-limited environments.</p><p>Our fast range coder may also prove useful in other applications. It is notably faster than Schindler's range coder <ref type="bibr" target="#b22">[23]</ref>, both when entropy coding for compression and when merely passing along raw bits in the bit stream. The achieved throughput for entropy coding, including probability modeling and I/O time, compares favorably with the state of the art.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>/</head><label></label><figDesc>/ encode actual number ' real ' given prediction ' pred ' FLOAT encode ( FLOAT real , FLOAT pred ) { UINT r = forward ( real ); // monotonically map floats to their ... UINT p = forward ( pred ); // ... unsigned binary re pr es en tati on if ( p &lt; r ) { // case 1: u n d e r p re d i c t i o n UINT d = r -p ; // absolute difference unsigned k = msb ( d ); // find most significant bit k encode ( zero + ( k + 1), model ); // entropy code k encode ( d -(1 &lt;&lt; k ), k ); // code remaining k bits verbatim } else if ( p &gt; r ) { // case 2: ov er pre di ct io n UINT d = p -r ; // absolute difference unsigned k = msb ( d ); // find most significant bit k encode ( zero -( k + 1), model ); // entropy code k encode ( d -(1 &lt;&lt; k ), k ); // code remaining k bits verbatim } else // case 3: perfect prediction encode ( zero , model ); // entropy code zero symbol return inverse ( r ); // return possibly quantized value } Listing 2. Predictive floating-point coding scheme.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>/</head><label></label><figDesc>/ encode a symbol s using probability modeling void encode ( unsigned s , model * m ) { range /= m -&gt; tot ; // tot = sum of pmf low += range * m -&gt; cdf [ s ]; // cdf = cum . distribution function P ( x &lt; s ) range *= m -&gt; pmf [ s ]; // pmf = probability mass function P ( x = s ) update ( s , m ); // update probabilities normalize (); // normalize interval } // encode an n -bit number s : 0 &lt;= s &lt; 2^n &lt;= 2^16 void encode ( unsigned s , unsigned n ) { range &gt;&gt;= n ; // scale interval low += range * s ; // adjust lower bound normalize (); // normalize interval } // normalize the range and output data void normalize () { while ((( low^( low + range ) ) &gt; &gt; 2 4 ) == 0 ) { putbyte (); // top 8 bits of interval are fixed ;... range &lt;&lt;= 8; // ... output them and normalize interval } if (( range &gt; &gt; 1 6 ) = = 0 ) { putbyte (); // top 8 bits are not fixed but range ... putbyte (); // ... is small ; fudge range to avoid ... range = -low ; // ... carry and output top 16 bits } } // output most significant byte void putbyte () { putchar ( low &gt;&gt; 24); // output top 8 bits low &lt;&lt;= 8;</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head></head><label></label><figDesc>vorticity 3d density 3d pressure 3d diffusivity 3d viscocity total speed (million floats/second) uncompressed zlib [RKB2006] [EFF2000] [ILS2005] new scheme</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head>•</head><label></label><figDesc>Peter Lindstrom is with the Lawrence Livermore National Laboratory, E-mail: pl@llnl.gov. • Martin Isenburg is with the University of California, Berkeley, E-mail: isenburg@cs.berkeley.edu.</figDesc><table /><note>Manuscript received 31 March 2006; accepted 1 August 2006; posted online 6 November 2006. For information on obtaining reprints of this article, please send e-mail to: tvcg@computer.org.</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>Fig. 1. Visualizations of 2D data (as pseudocolored height fields) and 3D data (volume rendered) used in our experiments.</figDesc><table><row><cell></cell><cell></cell><cell>data set</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell cols="9">compressed size (MB) and compression time (seconds)</cell></row><row><cell>name</cell><cell cols="2">unique entropy range (%) (bits) (bits)</cell><cell>min</cell><cell>max</cell><cell cols="2">size time (MB) (sec)</cell><cell>zlib</cell><cell></cell><cell cols="4">[RKB2006] [EFF2000]</cell><cell cols="2">[ILS2005]</cell><cell>new scheme</cell></row><row><cell>m2d density</cell><cell>3.89</cell><cell cols="5">3.49 21.83 8.7E−01 1.2E+00 19.6 0.71</cell><cell cols="2">1.6 0.86</cell><cell cols="2">4.3 0.49</cell><cell cols="2">4.4 0.56</cell><cell cols="2">1.3 1.08</cell><cell>1.3 0.56</cell></row><row><cell>m2d vorticity</cell><cell>99.20</cell><cell cols="14">22.25 31.05 -1.4E+02 2.5E+01 19.6 0.71 18.4 2.14 11.8 1.21 15.5 1.29 12.9 2.22 13.8 1.49</cell></row><row><cell>m3d density</cell><cell>7.67</cell><cell cols="14">5.16 23.60 1.0E+00 3.0E+00 364.5 12.81 50.4 17.55 100.5 9.06 96.3 8.48 35.7 19.03 35.5 9.25</cell></row><row><cell>m3d pressure</cell><cell>27.29</cell><cell cols="14">23.91 31.06 -3.7E+00 2.3E+03 364.5 12.80 229.2 99.76 95.6 9.31 87.9 8.87 40.1 18.79 40.4 9.96</cell></row><row><cell>m3d diffusivity</cell><cell>36.87</cell><cell cols="14">23.19 30.02 0.0E+00 6.8E+00 364.5 12.68 297.6 42.90 250.8 19.09 239.3 15.02 198.8 31.92 203.0 18.47</cell></row><row><cell>m3d viscocity</cell><cell>50.07</cell><cell cols="14">24.86 28.59 8.6E−15 2.9E+00 364.5 12.62 314.0 46.09 249.4 18.95 246.1 14.68 209.2 32.66 207.5 19.45</cell></row><row><cell>h3d temp</cell><cell>65.70</cell><cell cols="14">23.54 31.56 -7.7E+01 1.0E+35 95.4 3.77 75.8 14.56 59.3 4.64 53.0 4.27 44.1 8.04 44.1 5.06</cell></row><row><cell>h3d pressure</cell><cell>81.82</cell><cell cols="14">24.13 31.58 -3.4E+03 1.0E+35 95.4 3.78 82.3 12.00 64.3 5.14 52.9 4.87 45.0 7.78 45.2 5.34</cell></row><row><cell>h3d x velocity</cell><cell>84.18</cell><cell cols="14">24.18 31.55 -5.3E+01 1.0E+35 95.4 3.89 86.1 11.27 67.4 6.22 63.3 4.59 54.5 8.86 55.4 5.44</cell></row><row><cell>h3d y velocity</cell><cell>84.32</cell><cell cols="14">24.18 31.55 -4.6E+01 1.0E+35 95.4 3.83 84.5 11.42 67.1 5.74 62.3 5.04 53.5 8.64 53.8 5.53</cell></row><row><cell>h3d z velocity</cell><cell>86.82</cell><cell cols="14">24.24 31.54 -3.2E+00 1.0E+35 95.4 3.87 88.4 10.76 85.6 8.50 76.9 5.29 68.9 9.83 69.1 6.65</cell></row><row><cell>M3d density</cell><cell>40.14</cell><cell cols="11">18.84 52.59 1.0E+00 3.0E+00 288.0 11.28 136.8 41.91 160.3 11.63 121.6 10.94</cell><cell>-</cell><cell></cell><cell>105.2 11.63</cell></row><row><cell>M3d pressure</cell><cell>100.00</cell><cell cols="11">25.17 63.00 -2.2E+00 2.2E+00 288.0 11.20 272.6 35.18 237.3 14.91 225.1 16.59</cell><cell>-</cell><cell></cell><cell>208.4 17.20</cell></row><row><cell cols="2">M3d x velocity 100.00</cell><cell cols="11">25.17 63.00 -2.2E+00 2.3E+00 288.0 10.83 275.6 32.30 230.4 14.73 215.1 15.91</cell><cell>-</cell><cell></cell><cell>197.7 16.84</cell></row><row><cell cols="2">M3d y velocity 100.00</cell><cell cols="11">25.17 63.00 -2.1E+00 2.3E+00 288.0 10.54 275.1 32.19 223.1 14.27 215.2 15.16</cell><cell>-</cell><cell></cell><cell>197.7 16.65</cell></row><row><cell cols="2">M3d z velocity 100.00</cell><cell cols="11">25.17 63.00 -5.2E+00 9.0E+00 288.0 10.32 275.5 32.62 226.6 14.74 213.7 16.05</cell><cell>-</cell><cell></cell><cell>196.8 16.14</cell></row><row><cell cols="2">atom x position 61.10</cell><cell cols="14">23.82 31.01 -4.8E−02 4.6E+02 107.7 7.07 84.3 21.18 76.0 7.88 78.8 7.61 67.3 12.88 68.6 9.07</cell></row><row><cell cols="2">atom y position 45.90</cell><cell cols="14">23.32 26.99 3.7E−02 2.1E+03 107.7 7.08 65.9 30.76 60.4 6.97 56.4 6.31 47.0 10.49 46.9 7.73</cell></row><row><cell cols="2">atom z position 61.68</cell><cell cols="14">23.84 27.48 9.1E−05 4.6E+02 107.7 7.46 94.6 19.86 82.6 9.00 86.1 8.25 75.7 13.80 78.2 9.93</cell></row><row><cell cols="2">atom y velocity 64.65</cell><cell cols="14">23.87 30.96 -1.5E−01 1.4E−01 107.7 7.30 95.7 19.88 93.8 10.07 99.1 9.65 84.3 14.93 87.6 9.92</cell></row><row><cell>atom temp</cell><cell>64.91</cell><cell cols="14">23.94 27.41 3.0E−03 7.1E+03 107.7 6.69 95.7 19.76 91.6 10.27 95.9 8.34 84.6 15.02 84.6 10.31</cell></row><row><cell>atom energy</cell><cell>3.45</cell><cell cols="14">18.57 21.79 -3.6E+00 -2.7E+00 107.7 7.15 77.9 38.59 74.1 7.98 71.8 7.01 60.8 12.66 60.5 8.30</cell></row><row><cell>lucy</cell><cell>61.39</cell><cell cols="4">24.38 31.09 -6.1E+02 1.2E+03 160.5</cell><cell>-</cell><cell>137.8</cell><cell>-</cell><cell>99.5</cell><cell>-</cell><cell>90.0</cell><cell>-</cell><cell>73.6</cell><cell>-</cell><cell>77.8</cell><cell>-</cell></row><row><cell>david 1mm</cell><cell>25.23</cell><cell cols="4">17.08 31.11 -4.4E+03 1.8E+03 322.5</cell><cell>-</cell><cell>144.9</cell><cell>-</cell><cell>155.7</cell><cell>-</cell><cell>163.4</cell><cell>-</cell><cell>108.6</cell><cell>-</cell><cell>131.9</cell><cell>-</cell></row><row><cell>torso</cell><cell>84.72</cell><cell cols="3">18.48 31.08 -2.7E+02 5.8E+02</cell><cell>1.9</cell><cell>-</cell><cell>1.7</cell><cell>-</cell><cell>1.5</cell><cell>-</cell><cell>1.5</cell><cell>-</cell><cell>1.3</cell><cell>-</cell><cell>1.3</cell><cell>-</cell></row><row><cell>rbl</cell><cell>71.90</cell><cell cols="3">20.14 25.99 1.5E+00 3.6E+02</cell><cell>8.4</cell><cell>-</cell><cell>7.1</cell><cell>-</cell><cell>5.8</cell><cell>-</cell><cell>5.6</cell><cell>-</cell><cell>4.7</cell><cell>-</cell><cell>4.8</cell><cell>-</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head></head><label></label><figDesc>Fig. 2. Compression rates for the Miranda singleprecision data.</figDesc><table><row><cell></cell><cell>100%</cell><cell cols="2">zlib [RKB2006] [EFF2000] [ILS2005] new scheme</cell><cell>[EFF2000] new scheme</cell><cell>2d density 2d density</cell><cell></cell><cell>2d vorticity 2d vorticity</cell><cell>3d density 3d density</cell><cell>3d viscocity 3d viscocity</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell>100.00%</cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell>90%</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell>80%</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>compressed size</cell><cell>30% 40% 50% 60% 70%</cell><cell></cell><cell>compressed size</cell><cell>0.10% 1.00% 10.00%</cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell>20%</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell>10%</cell><cell></cell><cell></cell><cell>0.01%</cell><cell></cell><cell></cell><cell></cell></row><row><cell></cell><cell>0%</cell><cell></cell><cell></cell><cell>8</cell><cell>12</cell><cell>16</cell><cell>20</cell><cell>24</cell><cell>28</cell><cell>32</cell></row><row><cell></cell><cell></cell><cell>2d density 2d vorticity 3d density 3d pressure 3d diffusivity 3d viscocity</cell><cell>total</cell><cell></cell><cell></cell><cell></cell><cell cols="2">precision (bits)</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgements</head><p>This work was performed in part under the auspices of the U.S. DOE by LLNL under contract no. W-7405-Eng-48, and was funded in part by NSF grant CCF-0430065.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+	</analytic>
+	<monogr>
+		<title level="m">Standard for binary floating-point arithmetic</title>
+		<imprint>
+			<date type="published" when="1985" />
+			<biblScope unit="volume">754</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">TetStreamer: Compressed backto-front transmission of Delaunay tetrahedra meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Bischoff</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Rossignac</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Data Compression Conference</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="93" to="102" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Lossless compression of point-based 3D models. Pacific Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y.-J</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Memon</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="124" to="126" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Optimal alphabet partitioning for semi-adaptive coding of sources of unknown sparse distributions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y.-J</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Memon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Data Compression Conference</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Tera-scalable algorithms for variable-density elliptic hydrodynamics with spectral accuracy</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">W</forename><surname>Cook</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">H</forename><surname>Cabot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">L</forename><surname>Williams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">J</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">R</forename><surname>De Supinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">K</forename><surname>Yates</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">L</forename><surname>Welcome</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<publisher>ACM/IEEE Supercomputing</publisher>
+			<biblScope unit="page">60</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Geometric compression for interactive transmission</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Devillers</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P.-M</forename><surname>Gandoin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+			<publisher>IEEE Visualization</publisher>
+			<biblScope unit="page" from="319" to="326" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Lossless compression of high-volume numerical data from simulations. Data Compression Conference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Engelson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Fritzson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Fritzson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="574" to="586" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Lossless compression of volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Fowler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Symposium on</title>
+		<imprint>
+			<biblScope unit="volume">Visualization</biblScope>
+			<biblScope unit="page" from="43" to="50" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">N</forename><surname>Gamito</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">S</forename><surname>Dias</surname></persName>
+		</author>
+		<title level="m">Lossless coding of floating point data with JPEG 2000 Part 10. Applications of Digital Image Processing XXVII</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="276" to="287" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">An efficient algorithm for lossless compression of IEEE float audio</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Ghido</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Data Compression Conference</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="429" to="467" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Tetrahedral mesh compression with the cut-border machine</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gumhold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="51" to="58" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Outof-core compression and decompression of large n-dimensional scalar fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Ibarria</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Rossignac</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Szymczak</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Eurographics</title>
+		<imprint>
+			<biblScope unit="page" from="343" to="348" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Compressing polygon mesh geometry with parallelogram prediction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Alliez</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="141" to="146" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Compressing hexahedral volume meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Alliez</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Graphical Models</title>
+		<imprint>
+			<biblScope unit="volume">65</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="239" to="257" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Streaming compression of tetrahedral volume meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gumhold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Shewchuk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface</title>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="115" to="121" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Lossless compression of predicted floating-point geometry</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Snoeyink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer-Aided Design</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="869" to="877" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Streaming compression of triangle meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Snoeyink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Geometry Processing</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="111" to="118" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Kälberer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Polthier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Reitebuch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wardetzky</surname></persName>
+		</author>
+		<title level="m">FreeLence -Coding with free valences. Eurographics</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="469" to="478" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Nearoptimal connectivity encoding of 2-manifold polygon meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Khodakovsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Alliez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Desbrun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Schroeder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Graphical Models</title>
+		<imprint>
+			<biblScope unit="volume">64</biblScope>
+			<biblScope unit="issue">3-4</biblScope>
+			<biblScope unit="page" from="147" to="168" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">The MPEG-4 audio lossless coding (ALS) standard -Technology and applications. 119th Audio Engineering Society Convention</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Liebchen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Moriya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Harada</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kamamoto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><forename type="middle">A</forename><surname>Reznik</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Range encoding: an algorithm for removing redundancy from a digitized message. Video and Data Recording Conference</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">N N</forename><surname>Martin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1979" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Fast lossless compression of scientific floating-point data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ratanaworabhan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Burtscher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Data Compression Conference</title>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="133" to="142" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Range Encoder version 1.3</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schindler</surname></persName>
+		</author>
+		<ptr target="http://www.compressconsult.com/rangecoder/" />
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Lustre: Building a file system for 1,000-node clusters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Schwan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Linux Symposium</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="401" to="408" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Length-limited variable-to-variable length codes for high-performance entropy coding</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Senecal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Duchaineau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Data Compression Conference</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="389" to="398" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Subbotin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Carryless Rangecoder</surname></persName>
+		</author>
+		<ptr target="http://search.cpan.org/src/SALVA/Compress-PPMd-0.10/Coder.hpp" />
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Touma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gotsman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Triangle mesh compression. Graphics Interface</title>
+		<imprint>
+			<biblScope unit="page" from="26" to="34" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Wavelets applied to lossless compression and progressive transmission of floating point data in 3-D curvilinear grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Trott</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Moorhead</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mcginley</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996" />
+			<publisher>IEEE Visualization</publisher>
+			<biblScope unit="page" from="385" to="388" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">JPEG2000 extensions for bit plane coding of floating point data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">E</forename><surname>Usevitch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Data Compression Conference</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page">451</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Visualization contest data set</title>
+		<ptr target="http://vis.computer.org/vis2004contest/data.html" />
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Arithmetic coding for data compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">H</forename><surname>Witten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">M</forename><surname>Neal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">G</forename><surname>Cleary</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="520" to="540" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

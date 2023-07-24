@@ -1,0 +1,876 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Interactive Rendering of Large Volume Data Sets</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Guthe</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">WSI/GRIS</orgName>
+								<orgName type="institution">University of Tübingen</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Wand</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">WSI/GRIS</orgName>
+								<orgName type="institution">University of Tübingen</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Julius</forename><surname>Gonser</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">WSI/GRIS</orgName>
+								<orgName type="institution">University of Tübingen</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Wolfgang</forename><surname>Straßer</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">WSI/GRIS</orgName>
+								<orgName type="institution">University of Tübingen</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Interactive Rendering of Large Volume Data Sets</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:48+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>E.4 [Coding and Information Theory]: Data Compaction and Compression I.3.1 [Computer Graphics]: Picture and Image Generation -Graphics processors; I.3.3 [Computer Graphics]: Picture and Image Generation -Viewing algorithms Compression Algorithms</term>
+					<term>Level of Detail Algorithms</term>
+					<term>Scientific Visualization</term>
+					<term>Volume Rendering</term>
+					<term>Wavelets</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>We present a new algorithm for rendering very large volume data sets at interactive framerates on standard PC hardware. The algorithm accepts scalar data sampled on a regular grid as input. The input data is converted into a compressed hierarchical wavelet representation in a preprocessing step. During rendering, the wavelet representation is decompressed on-the-fly and rendered using hardware texture mapping. The level of detail used for rendering is adapted to the local frequency spectrum of the data and its position relative to the viewer. Using a prototype implementation of the algorithm we were able to perform an interactive walkthrough of large data sets such as the visible human on a single of-the-shelf PC.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Many areas in medicine, computational physics and various other disciplines have to deal with large volumetric data sets that demand for an adequate visualization. An important visualization technique for the exploration of volumetric data sets is direct volume rendering: Each point in space is assigned a density for the emission and absorption of light and the volume renderer computes the light reaching the eye along viewing rays. The rendering can be implemented efficiently using texture mapping hardware: the volume is discretized into textured slices that are blended over each other using alpha blending <ref type="bibr" target="#b5">[6]</ref>.</p><p>Due to the enormous advances in graphics hardware, it is nowadays possible to perform this rendering technique in realtime on cheap of-the-shelf PCs <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b22">23,</ref><ref type="bibr" target="#b23">24]</ref>. However, the size of the data sets that can be processed is still very limited. A realtime rendering of large data sets (more that 256 3 voxel) is currently infeasible unless massive parallel hardware is used <ref type="bibr" target="#b2">[3]</ref>.</p><p>Most conventional hardware-texturing based approaches to volume rendering are brute-force methods, requiring a rendering time linear in the size of the data set. The rendering costs can be reduced dramatically by using a multi-resolution hierarchy. In this case, the rendering algorithm performs a projective classification to adapt the rendering resolution to the distance to the viewer, as proposed by LaMar et al. <ref type="bibr" target="#b20">[21]</ref>. We will show formally in this paper that the rendering time for this technique is indeed O(log n) for a data set consisting of n 3 voxels. However, two problems still remain that prevent us from handling very large data sets: The first problem is the enormous size. The well known visible human data set <ref type="bibr" target="#b32">[33]</ref> consist e.g. of 6.5 GB (2048 × 1216 × 1877 voxel, 12 bit), i.e. it is even larger than the address space of a conventional PC. Thus, the data must be stored out-of-core and swapped into main memory on demand. This leads to considerable bandwidth and latency problems. The second problem is the size of the voxel data that remains after projective classification: Although the size is O(log n), the constants in the "O-notation" are still much too high. The number of voxels exceeds by far the texture memory as well as the alpha-blending capacities of a commodity graphics board.</p><p>Our novel algorithm uses a hierarchical wavelet representation to tackle these problems: The volume is stored as a hierarchy of wavelet coefficients. Only the levels of detail necessary for display are decompressed and sent to the texturing hardware. The use of a wavelet representation allows us to compress the data by a ratio of typically 30:1 without noticeable artifacts in the image. This way, even very large data sets can be stored in main memory. The visible human data set can e.g. be stored in 222MB (instead of 6.5GB). During rendering, the wavelet representation allows us to analyze the local frequency spectrum in the data set and to adapt the rendering resolution to it. This way, we can reduce the size of the voxel set to be rendered considerably with minimal loss of image quality.</p><p>Using these techniques, we are able to render walkthroughs of large data sets in real time on a conventional PC. We will demonstrate an interactive walkthrough of the visible human data set at a resolution of 256 2 pixel, 10 frames per second and good image quality. To our knowledge, our algorithm is the first that achieves these framerates for data sets of this size on a single of-the-shelf PC.</p><p>As an alternative, one could think of using texture compression supported by the graphics hardware. However, as shown by Meissner et. al. <ref type="bibr" target="#b22">[23]</ref> this severely reduces the image quality and is therefore unusable. Also other compression approaches that allow direct rendering of the compressed data, like vector quantization <ref type="bibr" target="#b24">[25,</ref><ref type="bibr" target="#b25">26]</ref>, discreet cosine transformation <ref type="bibr" target="#b37">[38]</ref> and fractal compression <ref type="bibr" target="#b8">[9]</ref>, do not perform as well as a wavelet based compression scheme.</p><p>The remainder of the paper is structured as follows: In the next section, we will briefly review related work. Then, we will describe the hierarchical wavelet representation in Section 3. In Section 4, we will describe the rendering algorithm and caching strategies. Results are discussed in Section 5 and the paper concludes in Section 6 with some ideas for future work. The appendix contains a formal analysis of the running time of the rendering algorithm.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Visualization of large volume data sets is a classical problem in computer graphics. In this section, we will give a brief overview of related work in the area of volume visualization algorithms, multi-resolution methods and wavelet-based techniques.</p><p>Volume Visualization: The most efficient software-based technique for direct volume rendering is the shear-warp factorization by Lacroute et al. <ref type="bibr" target="#b19">[20]</ref>. The technique can be adapted to exploit 2D-texturing hardware <ref type="bibr" target="#b28">[29]</ref>, achieving interactive frame rates. The usage of 3D texture mapping <ref type="bibr" target="#b0">[1]</ref> allows for more flexibility and can provide a higher image quality. Recent visualization algorithms provide advanced shading techniques such as lighting <ref type="bibr" target="#b23">[24]</ref>, shadows <ref type="bibr" target="#b3">[4]</ref>, high quality post-classification using a preintegration technique <ref type="bibr" target="#b10">[11]</ref>, gradient magnitude modulation <ref type="bibr" target="#b33">[34]</ref> or IEEE Visualization 2002 Oct. 27 -Nov. 1, 2002, Boston, MA, USA 0-7803-7498-3/02/$17.00 © 2002 IEEE higher dimensional transfer functions <ref type="bibr" target="#b18">[19]</ref>. Our algorithm uses a pre-integration approach combining lighting and gradient magnitude modulation, as described in <ref type="bibr" target="#b22">[23]</ref>.</p><p>Multi-resolution rendering: Multi-resolution volume rendering algorithms use a spatial hierarchy to adapt the resolution to the projection onto the screen: An octree or a similar spatial data structure is built for the data set. Each node of the octree contains a representation of the volume within its bounding box at a specific resolution. During rendering, nodes from the hierarchy are selected such that their resolution matches the display resolution. The technique was first proposed by Chamberlain et al. <ref type="bibr" target="#b7">[8]</ref> in the context of rendering of surface models. They prove a logarithmic running time if surface fragments are distributed uniformly in space. We will derive a similar result for the volumetric case.</p><p>A similar technique was applied to volume rendering by LaMar et al. <ref type="bibr" target="#b20">[21]</ref>: The octree nodes store volume blocks resampled to a fixed resolution that are rendered using 3d-texturing hardware. Weiler et al. <ref type="bibr" target="#b34">[35]</ref> propose an extension to the algorithm to avoid discontinuity artifacts between different levels of detail. These techniques can handle volume data sets that do not fit completely into the texture memory of the graphics hardware. However, the data must still fit into main memory. Therefore, large data sets like the visible human cannot be processed. Our algorithm improves on this by using a more efficient wavelet representation that allows storing data sets that are larger by one or two orders of magnitude. Additionally, we use a refined error criterion for the selection of octree nodes. It automatically adapts to the local smoothness of the data set, as proposed by Boada et al. <ref type="bibr" target="#b4">[5]</ref> for the case of orthographic projection.</p><p>Wavelet Based Techniques: Wavelet-based encoding has become a standard technique for 2d-image compression <ref type="bibr" target="#b30">[31]</ref>. The technique has been applied to the compression of volume data by several authors. Nguyen et al. <ref type="bibr" target="#b26">[27]</ref> propose a blockwise compression scheme: The volume is divided into a regular grid of blocks which are compressed independently. Guthe et al. <ref type="bibr" target="#b15">[16]</ref> propose a higher order wavelet compression scheme with extensions for encoding animated data sets. The method does not allow for access to parts of the volume without decompression of the whole data set. In our paper, we use the same basic techniques for encoding the volume data set as in the two aforementioned papers. However, our data structure provides a multi-resolution hierarchy with fast access to each node in the hierarchy.</p><p>To render large data sets using wavelet-based representations, two directions have been followed up to now: Firstly, several raycasting techniques were proposed that operate on a wavelet representation <ref type="bibr" target="#b16">[17,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b29">30,</ref><ref type="bibr" target="#b35">36]</ref>. However, raycasting of large data sets is not possible at interactive frame rates unless massive parallel hardware is used <ref type="bibr" target="#b2">[3]</ref>.</p><p>A second technique renders "x-ray" images directly from the wavelet representation by adding splats corresponding to the basis functions <ref type="bibr" target="#b14">[15]</ref>. Unfortunately, it is not possible to extend this elegant technique to conventional volume rendering with emission and absorption effects.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">WAVELET HIERARCHY</head><p>The first step of our algorithm is to convert the volume data, which is given as a three-dimensional array of integers with fixed precision (usually 8-16 bits), into a compressed wavelet representation during preprocessing. This representation is much more compact and allows for an efficient extraction of different levels of detail of the data set, since the wavelet transformation is equivalent to applying a series of lowpass and highpass filters to the original data. To be able to decompress parts of the data set efficiently, we apply a blockwise wavelet compression strategy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Blockwise Hierarchical Compression of Volume Data</head><p>Firstly, we divide the data sets into cubic blocks of (2k) <ref type="bibr" target="#b2">3</ref> voxels (in practice, k = 16 is a good choice). Then, we apply the wavelet filters to each block. This results in a lowpass filtered block of k 3 voxels and (2k) <ref type="bibr" target="#b2">3</ref> -k 3 wavelet coefficients representing different high frequency components that are no longer present in the lowpass filtered block (see <ref type="figure">Figure 1</ref> and <ref type="figure">Figure 2</ref>). We carry on this scheme hierarchically: We group a cube of 8 adjacent lowpass filtered blocks to again obtain a block of (2k) <ref type="bibr" target="#b2">3</ref> voxels. Then we can apply the filtering algorithm to this block recursively until only a single block is left. The result of this procedure is an octree (see <ref type="figure">Figure 2</ref>): Each node of the octree describes a volume of k 3 voxels and contains a set of high frequency coefficients that allow for the reconstruction of the child nodes from the current node. The resolution of a child node is twice as high (in each dimension) as that of a parent node. The lowpass filter of the specific wavelets we use assures that the downsampled data in the inner nodes does not show relevant aliasing artifacts.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.1">Wavelet Basis</head><p>As basis functions, symmetric biorthogonal spline wavelets <ref type="bibr" target="#b9">[10]</ref> are a good choice, as they lead to good compression results (they are also used in the JPEG 2000 standard). We use the tensor product construction (non standard decomposition, <ref type="bibr" target="#b30">[31]</ref>) to obtain a three-dimensional basis of these functions. This means that the three-dimensional filtering is performed by applying the one dimensional filter in all three dimensions successively. We implemented the filtering using the integer wavelet transformation algorithm by Calderbank et al. <ref type="bibr" target="#b6">[7]</ref> based on lifting steps. It provides some performance benefits: Firstly, all calculations can be performed using 16 bit integer arithmetic <ref type="bibr" target="#b31">[32]</ref>, saving memory and bandwidth in comparison to the floating point algorithm. The operations can be implemented efficiently using SIMD instructions like MMX. We use the Intel C++ compiler that applies some of these optimizations automatically. Secondly, the algorithm needs only about half the number of operations of the normal wavelet transformation algorithm.</p><p>For the examples in our paper, we use a linearly interpolating spline wavelet. This wavelet basis already allows for a very good compression ratio but it has still a small filter support (5/3 for the lowpass/highpass filter). A small support is desirable as the running time of the (de-)compression algorithm is linear in the number of non-zero entries in the (reconstruction) filter matrix. However, the strongest argument for choosing this wavelet is the property that an increase of the resolution with zero wavelet coefficients leads to a linear interpolation of the low resolution function, which is consistent with the interpolation performed by the texturing hardware used for rendering. This results in fewer popping artifacts when the resolution changes.</p><p>Our compression algorithm is block based. As the support of the filter is several voxels, we need a special treatment at the borders of the blocks. We use symmetric extension <ref type="bibr" target="#b9">[10]</ref>: The original data is just mirrored at the border. This allows for a reconstruction without storing additional wavelet coefficients for values outside the block because our basis functions are symmetric.</p><p>As known from image compression literature, a blockwise compression can lead to discontinuity artifacts at the borders between different blocks. However, such artifacts only become visible at high compression ratio. In our work, we are interested in near-lossless compression because we do not want to introduce relevant compression artifacts into the renderings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.2">Compression</head><p>The compression consists of two steps: Firstly, wavelet coefficients of low importance are discarded and secondly, the wavelet coefficients must be encoded in a compact bit stream.</p><p>We reduce the number of wavelet coefficients to be stored by defining a threshold below which all coefficients are mapped to zero. Setting the threshold to zero leads to lossless compression: Due to the integer wavelet transform, there is no quantization error <ref type="bibr" target="#b6">[7]</ref>. The fully lossless setting already permits compression ratios of up to 4:1 for typical data sets.</p><p>After choosing the relevant wavelet coefficients, they must be encoded efficiently. Codebook based approaches such as LZW (Lemple Ziv Welsh) or LZH (Lemple Ziv Huffman) can not be applied for this task since the codebook itself is larger than the data contained in a single node of our hierarchy most of the time. Progressive and embedded encoding schemes <ref type="bibr" target="#b12">[13,</ref><ref type="bibr" target="#b13">14,</ref><ref type="bibr" target="#b21">22]</ref> on the other hand need some of the data of their parent nodes during decompression. To circumvent this, we use entropy coding with a suitable encoding model:</p><p>The coefficients are first mapped to positive values: Odd values represent positive coefficients (c → c×2-1) while even values representing negative coefficients (c → c×(-2)). For compression of these values, two different algorithms have been implemented. Arithmetic coding, using the same model as Guthe and Straßer <ref type="bibr" target="#b15">[16]</ref>, is the best choice for maximum compression at a lossless or nearly lossless setting.</p><p>Run-length encoding combined with a fixed Huffman encoder on the other hand results in a very fast decompression, about ten times faster than arithmetic coding. The fixed model for the Huffman coder is defined as follows. A run of zeros is marked by a leading 0 bit. The following 7 bits store the number of consecutive zeros. This results in 1 to 128 zeros encoded in a single byte. Any other coefficient is converted into a positive value and stored by using n 1 bits, with n being the minimum number of bits needed to represent the coefficient. After a 0 bit the coefficient is stored using n-1 bits without the first bit.</p><p>The compression ratio for run-length Huffman coding at a lossless setting is lower (in practice about 10-15%) than for arithmetic coding. For a very lossy setting, the run-length Huffman coder is sometimes even able to outperform the arithmetic coder in terms of compression ratio since the adaptive model of the arithmetic coder is optimized for a large number of non-zero coefficients. To obtain higher compression ratios, sub-trees of the hierarchy containing only zero coefficients are completely stripped away. This stripping has more influence on the compression ratio than the coding of the blocks itself. For the compression setting used in the example walkthroughs, the increase of compression ratio is about 15% for the run-length Huffman coder and about 3% for arithmetic coding. This gain increases dramatically if the compression becomes more lossy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">RENDERING</head><p>From the perspective of the rendering algorithm, we have now a representation of the volume data in form of a multi-resolution octree: The root node in the tree contains a very rough approximation of the data set and the resolution can be increased by a factor of 2 (in each dimension simultaneously) by going downwards the hierarchy to a child node. Our task is to extract the information relevant for a certain point of view. This is done in two steps: Firstly, we perform a projective classification step to adjust the resolution of the data set to the screen resolution (Section 4.1). Secondly, we incorporate a consideration of the approximation error into the classification algorithm to further reduce the amount of data to be processed in each frame (Section 4.2). After extracting a suitable level of detail from the wavelet tree, we render the volume data using hardware texture mapping (Section 4.3). Rendering of walkthrough animations can be accelerated substantially by applying a suitable caching scheme (Section 4.4).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Projective Classification</head><p>Firstly, we need to extract nodes from the octree so that the resolution of these nodes matches the display resolution. Nodes outside the view frustum should be excluded from rendering. The task can be done using a straightforward algorithm originally proposed by Chamberlain et al. <ref type="bibr" target="#b7">[8]</ref>: We traverse the hierarchy recursively, starting from the root node. For each node, we test whether it is located completely outside the view frustum. In this case, we stop the traversal, ignoring the current node. Otherwise, we determine the spacing between the voxel grid and project it to the screen. If it is equal to or below the screen resolution, we pass the node to the renderer. Otherwise, if the voxel resolution is still too coarse, we subdivide the node and apply the algorithm recursively to all 8 children.</p><p>This technique was already applied to volume data by LaMar et al. <ref type="bibr" target="#b20">[21]</ref>. We will proof in the appendix that the technique reduces the rendering time for an n 3 voxel grid from Θ(n 3 ) to Θ(log n). However, the analysis also shows that the constants hidden in the "O-notation" are very high. For a close-up of a volume with a depth of 2048 voxels, we still obtain more than 230 million voxels after projective classification (see appendix for details). This is about 4 times more than the texture memory of a typical contemporary graphics board (230MB versus 64MB). Therefore, we need a refined classification criterion for a further reduction.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">View-dependent Priority Schedule</head><p>In most data sets, only a few regions contain high frequency details (e.g. due to sharp borders). Most regions can be sampled at a low sampling rate without sacrificing detail resolution. We utilize this observation to reduce the amount of voxels that has to  be processed by the renderer: For each node in the wavelet tree, the L 2 error compared to the original data is measured during compression. During rendering we use this error as weight for the selection of nodes: Let E(i) be the L 2 error of the normalized basis functions for the wavelets in the subtree below the node i. For leaf nodes, E(i) := 0.We can assign each node i a priority P(i) := E(i) / z(i), with z(i) being the minimum depth of a voxel in the node. Dividing by z(i) accounts for the projection on the screen: The priority of nodes near the viewer should be higher than that of nodes far away. If z(i) = 0, we set the priority to infinity.</p><p>Using this priority function, we perform a generalized projective classification: We choose a maximum amount of voxel that we are able to process in the rendering stage. This is usually determined by the texture memory of the graphics board. We create a priority queue and insert the root node r of the hierarchy into the queue with priority P(r). Then we successively fetch the node with the highest priority from the queue, decompress its high frequency wavelet coefficients and insert the child with the highest priority into the queue. A flag is set for the node to indicate that the child node has been added to the queue (all other children would still be drawn using the low resolution representation from the parent node). If all children are in the priority queue, the parent node is removed from the queue. Nodes with a projected voxel distance that is already equal to or below the screen resolution are not subdivided. The algorithm stops if the maximum amount of voxels for the nodes in the queue is reached.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Rendering of Blocks</head><p>Up to now, we have chosen a set of tree nodes, each containing k 3 voxels (on a regular grid) that provide a suitable approximation to the original volume for the current view point. To render these voxels, we use hardware texture mapping: We draw all blocks in back-to-front order. The order can be established easily by enforcing a back-to-front traversal order of the octree. For each block, a 3d-texture is created and loaded onto the graphics hardware. We place viewplane aligned slices into the block (see <ref type="figure" target="#fig_1">Figure 3</ref>) and render these slices in back-to-front order. Alpha blending delivers the volume integrals along viewing rays for all pixel on the screen.</p><p>For each block, we have to apply a classification function that assigns RGBα values to the scalars in a user defined way. To obtain a high rendering quality, especially in areas close to the viewpoint where the original data set is undersampled, we apply pre-integrated rendering <ref type="bibr" target="#b10">[11]</ref>: We consider two adjacent slices in a block (called a slab) and determine the scalars at the position where the viewing ray enters and leaves the slab. For all 256 2 possible combinations of entry and exit values, the volume integral is precomputed numerically. The scalar values between entry and exit point are interpolated linearly. The precomputed lookup table is stored as a 256 2 RGBα texture on the graphics hardware. As hierarchy blocks of different resolution also have a different slice spacing, we compute such a preintegration lookup table for each possible slice spacing. During rendering, two adjacent slices are accessed by the texturing hardware. The scalar values at the entry and exit position are read from the texture using bilinear interpolation. The two values are interpreted as two dimensional texture coordinates that are used to fetch the preintegrated RGBαvalue from the precomputed preintegration texture using dependent texture lookups <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b27">28]</ref>.</p><p>The trilinear interpolation performed by the texturing hardware needs special attention: The hardware is not able to interpolate across the borders of the octree blocks. This can lead to objectionable artifacts that reveal the underlying block structure. Our solution to this problem is straightforward: For each block to be rendered, we also fetch its 7 neighbors with the next higher x-, y-and z-coordinates from the octree <ref type="figure" target="#fig_2">(Figure 4</ref>). If these nodes are not present in the rendering set, the corresponding node is also decompressed and cached, but the neighbor's neighbors are of course not reconstructed. This lookup is not very expensive as a neighbor search in an octree can be done in expected time of O(1). We enlarge the block to be rendered by one voxel in x-, yand z-direction and store the neighboring values there 1 . Using the additional voxels, we can perform a continuous linear interpolation ( <ref type="figure" target="#fig_3">Figure 5</ref>). The texture memory necessary for rendering is increased by this technique because adjacent blocks overlap each other by one voxel. The overhead is k 3 -(k-1) 3 for k 3 voxels. For 16 <ref type="bibr" target="#b2">3</ref> voxel blocks we obtain an overhead of 21% and for 32 <ref type="bibr" target="#b2">3</ref> voxel blocks, the overhead is 10%.</p><p>For the examples in our paper, we also implemented some additional shading techniques like gradient magnitude modulation and classification of material properties. Details on the implementation of theses techniques using texturing hardware can be found in Meissner et al. <ref type="bibr" target="#b22">[23]</ref>. The gradient information necessary is computed on-the-fly after the decompression of the volume data using a three dimensional Sobel operator.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Caching</head><p>Although our wavelet decompression algorithm already achieves a very high performance, we would not be able to perform an interactive walkthrough if we decompressed the wavelet representation for each frame from the scratch. It is not possible to perform a decompression and texture upload at a similar speed as the 3dtexturing is done by the graphics card on current hardware architectures. Fortunately, this is not necessary either, as we may anticipate reusing most of the decompressed data for subsequent frames. Therefore, we use three cache areas to store blocks for reuse:</p><p>Firstly, we cache decompressed volume blocks from the octree. To obtain a node in the octree, we must access its parent node, decompress the high frequency coefficients stored in the node and apply the reconstruction filter to obtain all 8 child nodes. The nodes consist of blocks of k <ref type="bibr" target="#b2">3</ref> 16 bit integers. The decompressed wavelet coefficients are not cached as these are only needed once to obtain the child nodes which are already cached. Caching is done according to an LRU-scheme. To maximize the performance of our algorithm, the user defines a fixed amount of cache memory. If we run short of memory, we always delete that decompressed leaf node in tree that was not accessed by the renderer for the longest time.</p><p>Secondly, we have to create 3d-textures from the cache. The texture contains the scalar values and optionally the corresponding gradient field for advanced shading effects 2 . Using again an LRU scheme, we fetch the most recently used subset of decom- <ref type="bibr" target="#b0">1</ref> As textures must have extents of a power of two, we must use blocks of size 2 n -1 in the wavelet tree (e.g.15 <ref type="bibr" target="#b2">3</ref> voxel). <ref type="bibr" target="#b1">2</ref> The gradients are stored as 8 bit RGB values and the scalars are stored in the alpha channel of the RGBα texture. The shading is done using pixel shaders similar to the approach of Meissner et al. <ref type="bibr" target="#b22">[23]</ref>.  pressed blocks and convert them into OpenGL texture objects. Gradient maps are computed at this point, if necessary. Thirdly, the texture objects must be uploaded to the texture memory of the graphics adapter before rendering. This is done automatically by the OpenGL driver, again using an LRU caching scheme. By setting corresponding memory restrictions (see Section 4.2), the renderer assures that we do not use more texture objects per frame as fit into a given amount of video memory, thus avoiding cache thrashing.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RESULTS</head><p>In this section, we discuss the results obtained with a prototype implementation of our algorithm. The algorithm was implemented in C++ using OpenGL with nVidia extensions for rendering. All benchmarks were performed on a 2Ghz Pentium 4 PC with 1GB of ram and an nVidia GeForce 4 Ti4600 graphics board with 128MB of local video memory. In the following, we start with a description of three example data sets that we use to evaluate our algorithm. Then, we discuss the influence of the compression efficiency on the running time and image quality. After that, we discuss the results for interactive examination of the three example data sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Example Data Sets</head><p>We use three different data sets for the evaluation of our algorithm. All three are too large to be visualized at interactive framerates using conventional brute-force rendering approaches.</p><p>The first data set is a computer tomography scan of a Christmas tree <ref type="bibr" target="#b36">[37]</ref> at a resolution of 512 × 512 × 999 voxel with 12 bits per voxel. The data set was acquired at the technical university of Vienna to provide a large benchmark scene for volume rendering algorithms. The other two data sets are the visible human male and female data sets <ref type="bibr" target="#b32">[33]</ref>. Both are computer tomography scans of a male and a female human body. We use the variants of the data sets that are registered against the cryosection RGB images. The visible human male data set has a resolution of 2048 × 1216 × 1877 voxel and the visible human male data set has a resolution of 2048 × 1216 × 1734 voxel. The example renderings were made using gradient based lighting and a classification function with several semi-transparent iso-surfaces. The iso-surfaces correspond to high derivatives in the classification function. These settings are very sensitive to noise and other reconstruction errors in the volume data and thus allow a good evaluation of the errors introduce by our rendering technique.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Compression Efficiency</head><p>In the compression algorithm, we have the option to use different encoding algorithms for the wavelet coefficients. We have implemented two alternatives: arithmetic coding and run-length Huffman coding. The decompression speed heavily depends on the compression algorithm. Using arithmetic coding, we achieve a decompression speed of 4.5 MB/s, including the wavelet reconstruction. The run-length Huffman codec is able to decompress 50 MB/s (including the wavelet reconstruction). The compression ratio of the arithmetic coding is typically only about 10% to 15% higher than that of the run-length Huffman coding. Therefore, we use the run-length Huffman coding for all examples in our paper.</p><p>A second parameter of the compression algorithm is the threshold for removing small wavelet coefficients prior to encoding. If we keep all coefficients, we obtain a lossless compression scheme. Using lossless compression, we achieve a compression ratio of 3.9:1 (arithmethic coding) and 3.4:1 (RLE-Huffman coding) for the Christmas tree data set. The visible human data sets could not be compressed using the lossless settings because the compressed data and the caches would exceed the 2GB address space. For higher compression ratios, we must apply lossy compression: <ref type="figure" target="#fig_6">Figure 6</ref> shows the dependency between compression ratio and reconstructed signal quality for the three different test data sets: We obtain a peak signal-to-noise ratio (PSNR) of 60 dB for a compression ratio 3 of about 12:1 (1 bit per voxel), while a PSNR of 50 allows a compression ratio of roughly 50:1 (0.25 bits per voxel). <ref type="figure">Figure 8</ref> shows a visual comparison of the rendering results for the Christmas tree data set. The compression ratios obtained by our algorithm at a given PSNR are close to the results of Nguyen and Saupe <ref type="bibr" target="#b26">[27]</ref>. These results show that it is possible to achieve good compression results although we use only linear interpolating wavelets and blockwise compression.</p><p>Another important parameter is the block size used for the construction of the wavelet hierarchy. If we use small blocks, we are able to classify the data according to local frequency spectra and projected size very accurately. However, we have high hierarchy traversal costs. If we use larger blocks, the traversal costs decrease but we must process more voxels for the same image quality because our classification is less accurate. Additionally, the block size must be a power of two (minus one, for neighboring voxels, see Section 4.3) due to OpenGL restrictions. In practice, 31 <ref type="bibr" target="#b2">3</ref> blocks are not adaptive enough and 7 <ref type="bibr" target="#b2">3</ref> blocks introduce too much overhead. 15 <ref type="bibr" target="#b2">3</ref> blocks are a good compromise. We use this block size in all examples in this paper.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Interactive Walkthroughs</head><p>We applied our algorithm to render an interactive walkthrough of the three test data sets. The results are shown in <ref type="figure">Figure 9</ref> (see also the accompanying video for a real-time capture of the walkthroughs). The resolution of the output image is 256 2 pixel for all tests. The Christmas tree data set was compressed using lossless compression (3.4:1), the visible human data sets were compressed using lossy compression. (40:1 for the femal and 30:1 for the male data set). The preprocessing time was 1 hour for the Christmas tree and about 5 hours for each of the two visible human data sets. The preprocessing times are dominated by hard disk access (seek times). The CPU-utilization was only 6-7% during compression.</p><p>During the walkthrough, we can adjust the quality parameter to trade off image quality for rendering speed. The quality parameter is given as the maximum projected error value for the rendered hierarchy nodes. We use three different settings with high, medium and lower image quality. The high quality settings uses up to 2048 blocks and a maximum projective error of 1 / 128 (an average error of 1 / 128 of the peak signal per pixel for each block) and therefore shows only very little artifacts due to a reduced resolution. Nevertheless, we still obtain an average framerate of 3-4 frames per second during the walkthrough. The low quality settings uses only 512 blocks and a maximum projective error of 1 / 32 thus permitting framerates of about 10 frames per second at an acceptable image quality. The medium quality setting is a good compromise with 1024 blocks and a maximum projective error of 1 / 64 : The image quality is still high at a rendering speed of about 7 frames per second. The rendering speed for the visible human male data set is lower than that of our other test data sets, because the data set contains more noise. Thus, a higher voxel resolution is necessary to obtain the same projected error as in the other example scenes.</p><p>The cache efficiency for our walkthrough settings is very high. During the high quality rendering of our test dataset, only 40-60 blocks have to be decompressed per frame and 20-30 textures have to be constructed on the average. If we deactivate the caching, i.e. perform wavelet decompression, gradient calculation, and transfer to graphics memory from the scratch for each frame, we obtain an average framerate of 0.3 fps for all of our test scenes. This is also the limit framerate if we had no temporal coherence, i.e. a turn of 180 degrees or moving to a random position within the dataset. For this test, the renderer was configured for highest quality, i.e. to use exactly 2048 volume blocks. Thus, the framerate corresponds to a processing speed of 614 blocks per second or 10 MB of texture data per second.</p><p>To measure the exact timing of each part of the visualization is not an easy task in itself. This is due to the concurrent execution, i.e. decompression and gradient calculation are already executed while waiting for the last frame to complete rendering. For the example walkthrough animations about 6% of the time are spend for decompressing blocks and an additional 5% are spend for the gradient calculations. Transferring the textures onto the graphics board consumes another 1% of the time (part of this already runs in parallel), while the vast majority of the time with 88% is spend for the actual rendering, i.e. the processor is waiting for the graphics hardware.</p><p>The animation still shows some popping and discontinuity artifacts due to different resolutions in the rendered blocks. This is only a minor problem for high quality settings, but clearly visible for the low resolution settings. It should be quite straightforward to reduce these artifacts by employing mipmapping and techniques similar to <ref type="bibr" target="#b34">[35]</ref>. This will be subject of future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSIONS</head><p>We presented a rendering algorithm for the visualization of very large data sets. The algorithm uses a hierarchical wavelet representation to store very large data sets in main memory. The algorithm extracts the levels of detail necessary for the current view point on-the-fly. An error metric that minimized the loss of high frequency information in the projected image is used to determine a suitable level of detail. This technique allows interactive walkthroughs of large volume data sets like the visible human data set on a single commodity PC. To our knowledge, our algorithm is the first that achieves an interactive visualization of data set of this size on a single PC.</p><p>Our rendering algorithm scales provably good. Thus, we believe that data sets of even much larger size than the visible human data set can be processed. To overcome the storage problems if even the compressed data set does not fit into main memory any longer, we should generalize our caching technique to swapping to hard disk. We believe that the compressed representation will be useful in an out-of-core scenario, too, as it can significantly reduce the necessary bandwidth. A special problem of out-of-core rendering is latency due to hard disk seek times. To circumvent this problem, the data must be transferred in large blocks and stored in caches in main memory. A (at least lossless) compression scheme would be useful to reduce the corresponding memory overhead. Other future directions should include improved rendering techniques to minimize discontinuity artifacts between different resolutions <ref type="bibr" target="#b34">[35]</ref> and a generalization to full RGBα volume data without classification, for example for rendering the cryosection visible human data, too. It would also be interesting to examine whether the wavelet coefficients in each block can be used more effectively to obtain a better adaptation of the rendering resolution to the local frequency spectrum.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>APPENDIX: Analysis</head><p>How efficient is octree-based projective classification? To answer this question we first assume that we could discretize the volume in voxels of arbitrary size (see <ref type="figure" target="#fig_7">Figure 7)</ref>. Parameters to the algorithm are a camera position and a constant vertical viewing angle of α. We also assume w.l.o.g. <ref type="bibr" target="#b3">4</ref> that the original resolution of the voxel grid exactly matches the display resolution of w × h pixel at the near clipping plane znear. To cover the whole volume, we add m layers of resampled cube-shaped voxels with side length voxelsize(i), i = 1..m, so that the projected size of the larger voxel still matches the display resolution. Let zi be the depth of voxel layer Thus, the number of resampled voxels is m•w•h. Note that the ratio znear/zfar is always bounded by the maximum diameter of the data set (measured in voxels). For a volume of n 3 voxels the diameter is at most 3n ∈ O(n). Therefore, we obtain a total amount of O(log n) resampled voxels.</p><p>Up to now, our analysis still neglects the fact that we cannot access resampled voxels of arbitrary size but only octree nodes. This leads to two different kinds of overhead: Firstly, we are forced to use blocks of k 3 voxels (typically k = 16) of the same, fixed resolution. Secondly, we can choose the resolution in powers of 2 only (in each dimension). We consider the overhead due to the blocking first: Using some elementary trigonometry, we see that the number of voxels per unit length does not increase by more than a factor of between the foremost and the most distant voxel in each block. The bound can be derived by considering blocks diagonal to the viewing direction and comparing the number of voxels per unit length. The voxel density <ref type="bibr" target="#b3">4</ref> There is no problem if the near clipping plane is closer to the viewer: As the discretization in voxel is never finer than the original resolution of the data set, there are always less than w•h•cot α ∈ O(1) voxel in front of znear.  per unit area is given by the density per unit length squared. Thus, the average factor of increase of voxels due to the blocking in blocks of k 3 voxels is given by: However, the overhead is increased due to the fact that the resolution can be changed only in powers of two. This is easy to quantify: If we assume that we need all scales of resolution between 1 3 and 2 3 voxels with equal probability, we obtain an average oversampling factor of 75 . 3</p><formula xml:id="formula_0">2 1 3 = ∫ dx</formula><p>x . This factor usually dominates the factor due to the blocking.</p><p>Example: For a resolution of 256 2 pixel, 45° vertical viewing angle, and a depth of 2048 voxels we obtain 858 layers containing 56 million resampled voxels. The approximation with an octree with blocks of 16 <ref type="bibr" target="#b2">3</ref> voxels increases the amount of voxels to at most 230 million voxels. A 2048 3 data set contains 8.6 billion voxels.</p><p>In conclusion, we see that projective classification using an octree leads to a running time logarithmic in the size of the input data. However, the constants hidden in the O-notation are fairly high. Thus, the algorithm scales very good but additional techniques are necessary to obtain interactive performance, as described in our paper.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :Figure 2 :</head><label>12</label><figDesc>Construction of the wavelet tree. The compressed wavelet tree.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 3 :</head><label>3</label><figDesc>Multi-resolution rendering with view-plane aligned slices.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 4 :</head><label>4</label><figDesc>Copying data from neighbors for the 3d-texture blocks.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 5 :</head><label>5</label><figDesc>Texture interpolation, the blocks overlap each other by half a voxel.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head></head><label></label><figDesc>i. Then obviously zi + 1 = zi + voxelsize(i) and voxelsize(i) = to zi = znear(1+q) i . Let zfar be largest depth of a voxel in the volume. Then we can bound the number of layers of resampled voxels to:</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 6 :</head><label>6</label><figDesc>PSNR for Christmas tree dataset, and the visible human dataset. The compression of the male dataset is not as good as for the female dataset because of a higher noise in the ice surrounding the body.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 7 :</head><label>7</label><figDesc>Analysis of the projective classification strategy (appendix).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>For typical block sizes k, this leads only to a small overhead (h = 256, α =</figDesc><table><row><cell>overhead</cell><cell>block</cell><cell>1 = ∫ max x</cell><cell>2</cell><cell>dx</cell><cell>/</cell><cell>(</cell><cell>ρ</cell><cell>max</cell><cell>−</cell><cell>) 1</cell><cell>=</cell><cell>(</cell><cell>ρ</cell><cell>3 max</cell><cell>3</cell><cell>−</cell><cell>3 1</cell><cell>)</cell><cell>/(</cell><cell>ρ</cell><cell>max</cell><cell>−</cell><cell>) 1</cell></row><row><cell>45°):</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>k</cell><cell></cell><cell>8</cell><cell></cell><cell></cell><cell></cell><cell cols="3">16</cell><cell></cell><cell></cell><cell cols="3">32</cell><cell></cell><cell></cell><cell></cell><cell cols="2">64</cell><cell></cell><cell></cell><cell cols="3">128</cell></row><row><cell cols="2">overhead</cell><cell>4,6%</cell><cell></cell><cell cols="5">9,2%</cell><cell cols="5">19,0%</cell><cell cols="5">40,2%</cell><cell></cell><cell></cell><cell cols="3">88,9%</cell></row></table><note>ρ</note></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="3">All compression ratio measurements are based on 12 bit datasets.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>Part of this work has been funded by the SFB grant 382 of the German Research Council (DFG).</p></div>
+			</div>
+
+			<div type="annex">
+<div xmlns="http://www.tei-c.org/ns/1.0" />			</div>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K: Realityengine</forename><surname>Akeley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Graphics</surname></persName>
+		</author>
+		<title level="m">Siggraph 93 Conference Procedings</title>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="109" to="116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ati</forename><forename type="middle">Developer</forename><surname>Relations</surname></persName>
+		</author>
+		<ptr target="http://www.ati.com/" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Parallel Ray Casting of Visible Human on Distributed Memory Architectures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Bajaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Ihm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Koo</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Park</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Data Visualization &apos;99</title>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Adding shadows to a texture-based volume renderer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Behrens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ratering</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE, ACM SIGGRAPH</title>
+		<imprint>
+			<biblScope unit="volume">Visualization</biblScope>
+			<biblScope unit="page" from="39" to="46" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+	<note>IEEE Symposium on</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Multiresolution volume visualization with a texture-based octree</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Boada</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Navazo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopigno</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The Visual Computer</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2001" />
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="page" from="185" to="197" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Accelerated Volume Rendering and Tomographic Reconstruction Using Texture Mapping Hardware. Symposium on Volume Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Cabral</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Cam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Foran</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Wavelet transforms that map integers to integers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Calderbank</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Daubechies</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Sweldens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Yeo</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+		<respStmt>
+			<orgName>Department of Mathematics, Princeton University</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical Reprort</note>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Fast rendering of complex environments using a spatial hierarchy</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Chamberlain</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Derose</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lischinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Salesing</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Snyder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface &apos;96</title>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="132" to="141" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Fractal Volume Compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">O</forename><surname>Cochran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">C</forename><surname>Hart</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Flynn</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="page" from="313" to="322" />
+			<date type="published" when="1996-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Daubechies</surname></persName>
+		</author>
+		<title level="m">Ten Lectures on Wavelets. CBMS-NSF Lecture Notes Nr. 61, SIAM</title>
+		<imprint>
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">High-quality pre-integrated volume rendering using hardware-accelerated pixel shading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of Eurographics/SIGGRAPH Workshop on Graphics Hardware</title>
+		<meeting>of Eurographics/SIGGRAPH Workshop on Graphics Hardware</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Multiresolution and hierarchical methods for the visualization of volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Grosso</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Future Generation Computer Systems</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="31" to="42" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Embedded Wavelet-Based Coding of Three-Dimensional Oceanographic Images with Land Masses</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Fowler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">N</forename><surname>Fox</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Geoscience and Remote Sensing</title>
+		<imprint>
+			<biblScope unit="page" from="284" to="290" />
+			<date type="published" when="2001-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Joint Embedded Coding of Data and Grid Using First-Generation Wavelet Transforms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">E</forename><surname>Fowler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">N</forename><surname>Fox</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Data Compression Conference</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="432" to="442" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Two methods for wavelet-based volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">H</forename><surname>Gross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Lippert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Dittrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Häring</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers and Graphics</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">21</biblScope>
+			<biblScope unit="page" from="237" to="252" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Real-time decompression and visualization of animated volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Straßer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Wavelet-based 3D compression scheme for very large volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Ihm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Park</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface &apos;98</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="107" to="116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">An efficient wavelet-based compression method for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Shin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Pacific Graphics &apos;99</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="147" to="157" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Interactive volume rendering using multi-dimensional transfer functions and direct manipulation widgets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kniss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Kindelmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="255" to="262" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Fast volume rendering using a shear-warp factorization of the viewing transformation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lacroute</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics, 28 (Annual Conference Series</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="451" to="458" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Multiresolution techniques for interactive texture-based volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">C</forename><surname>Lamar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;99</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="355" to="362" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Structure Significant Representation of Computational Field Simulation Datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Machiraju</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Fry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Moorhead</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<date type="published" when="1998-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Interactive Lighting Models and Pre-Integration for Volume Rendering on PC Graphics Accelerators</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Meißner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Straßer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="209" to="218" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Enabling Classification and Shading for 3D Texture Mapping Based Volume Rendering using OpenGL and Extensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Meißner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Hoffmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Straßer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;99</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="207" to="214" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Vector Quantization for Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Hesselink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Workshop on VolVis &apos;92</title>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="69" to="74" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Fast Volume Rendering of Compressed Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ning</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Hesselink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization &apos;93</title>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="11" to="18" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Rapid High Quality Compression of Volume Data for Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">G</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Saupe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nvidia</forename><forename type="middle">Developer</forename><surname>Relations</surname></persName>
+		</author>
+		<ptr target="http://www.nvidia.com" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Interactive Volume Rendering on Standard PC Graphics Hardware using Multi-Textures and Multi-Stage Rasterization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Rezk-Salama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Greiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics/SIGGRAPH Workshop on Graphics Hardware</title>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Wavelet based 3D compression with fast random access for very large volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Rodler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Pacific Graphics &apos;99</title>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="108" to="117" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">J</forename><surname>Stollnitz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">D</forename><surname>Derose</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">H</forename><surname>Salesin</surname></persName>
+		</author>
+		<title level="m">Wavelets for Computer Graphics: Theory and Applications</title>
+		<imprint>
+			<publisher>Morgan Kaufmann</publisher>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Building your own wavelets at home</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Sweldens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Schröder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH Course Notes</title>
+		<imprint>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">The National Library of Medicine. The Visible Human Project</title>
+		<ptr target="http://www.nlm.nih.gov/research/visible/visible_human.html" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Direct Volume Rendering with Shading via Three-Dimensional Textures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Kim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Symposium on</title>
+		<imprint>
+			<biblScope unit="volume">Visualization</biblScope>
+			<biblScope unit="page" from="23" to="30" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Level-of-detail volume rendering via 3d textures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Zimmerman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Volume Visualization and Graphics Symposium</title>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">A multiresolution framework for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In: Symposium on</title>
+		<imprint>
+			<biblScope unit="volume">Visualization</biblScope>
+			<biblScope unit="page" from="51" to="58" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title/>
+		<ptr target="http://ringlotte.cg.tuwie.ac.at/datasets/XMasTree/XMaxTree.html" />
+	</analytic>
+	<monogr>
+		<title level="j">Christmas Tree Data Set</title>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Volume Rendering of DCT-Based Compressed 3D Scalar Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B-L</forename><surname>Yeo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<date type="published" when="1995-03" />
+			<biblScope unit="page" from="29" to="43" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

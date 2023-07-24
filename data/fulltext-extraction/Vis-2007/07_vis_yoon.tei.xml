@@ -1,0 +1,999 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Random-Accessible Compressed Triangle Meshes</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Sung-Eui</forename><surname>Yoon</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Peter</forename><surname>Lindstrom</surname></persName>
+						</author>
+						<title level="a" type="main">Random-Accessible Compressed Triangle Meshes</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:47+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Mesh compression</term>
+					<term>random access</term>
+					<term>cache-coherent layouts</term>
+					<term>mesh data structures</term>
+					<term>external memory algorithms</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>With the exponential growth in size of geometric data, it is becoming increasingly important to make effective use of multilevel caches, limited disk storage, and bandwidth. As a result, recent work in the visualization community has focused either on designing sequential access compression schemes or on producing cache-coherent layouts of (uncompressed) meshes for random access. Unfortunately combining these two strategies is challenging as they fundamentally assume conflicting modes of data access. In this paper, we propose a novel order-preserving compression method that supports transparent random access to compressed triangle meshes. Our decompression method selectively fetches from disk, decodes, and caches in memory requested parts of a mesh. We also provide a general mesh access API for seamless mesh traversal and incidence queries. While the method imposes no particular mesh layout, it is especially suitable for cache-oblivious layouts, which minimize the number of decompression I/O requests and provide high cache utilization during access to decompressed, in-memory portions of the mesh. Moreover, the transparency of our scheme enables improved performance without the need for application code changes. We achieve compression rates on the order of 20:1 and significantly improved I/O performance due to reduced data transfer. To demonstrate the benefits of our method, we implement two common applications as benchmarks. By using cache-oblivious layouts for the input models, we observe 2-6 times overall speedup compared to using uncompressed meshes.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Among the key challenges in visualization is how to effectively manage, process, and display large geometric data sets from scientific simulation, computer-aided design, and remote sensing. Today's unstructured meshes measure hundreds of millions of elements and require gigabytes of storage, often greatly exceeding available memory and rendering resources. A compounding factor to this problem is the increasing mismatch between processing performance and the rate at which data can be fed to the CPU and GPU, which is limited by latency and bandwidth <ref type="bibr" target="#b39">[40]</ref>. As a result, multilevel caching schemes are commonly employed, with successively smaller but faster caches that provide reduced latency. Such caching schemes are effective as long as there is a reasonably close match between data organization and access patterns. Since access patterns on meshes are usually localized, recent work in the visualization community has focused on coherent organization of meshes and other data <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b4">5,</ref><ref type="bibr" target="#b6">7,</ref><ref type="bibr" target="#b10">11,</ref><ref type="bibr" target="#b15">16,</ref><ref type="bibr" target="#b26">27,</ref><ref type="bibr" target="#b33">34,</ref><ref type="bibr" target="#b40">41,</ref><ref type="bibr" target="#b41">42]</ref>.</p><p>Data compression is a complementary approach to reducing bandwidth requirements. Whereas mesh compression has traditionally been used to reduce on-disk storage or transmission time over slow networks, recent work has explored the possibility of trading underutilized computing power for higher effective disk bandwidth through on-line compression <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b28">29]</ref>.</p><p>For large data sets, the access pattern of the application also significantly influences its performance. The concept of windowed stream processing was recently proposed for I/O-efficient access to large compressed meshes <ref type="bibr" target="#b18">[19]</ref>. However this approach requires restructuring the computation to match the data layout, which is not always possible or even desirable, e.g. when direct access to small subsets of the data is needed. The main competing approach is to keep a raw on-disk mesh data structure that supports random access <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b9">10,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b27">28,</ref><ref type="bibr" target="#b35">36,</ref><ref type="bibr" target="#b41">42]</ref>. However such data structures usually require a significant amount of disk space: up to 40 times more space than compressed meshes <ref type="bibr" target="#b18">[19]</ref>. The added bandwidth requirements of such verbose representations often negate the benefits of organizing the meshes to support random access.</p><p>Unfortunately, combining compression with coherent data layout is nontrivial. Conventional mesh compression schemes <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b30">31,</ref><ref type="bibr" target="#b37">38]</ref> maximize compression by reordering the data as a canonical permutation, which destroys any layout designed for cache coherence. Streaming mesh compression <ref type="bibr" target="#b19">[20]</ref> avoids such reordering by also encoding the layout, but restricts decompression to sequential access: to access an element late in the stream, the entire stream up to that element must be decoded, which can be prohibitive for large files. To address this, new schemes have emerged that support selective access to small patches of the compressed mesh <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b22">23]</ref>. However, these methods are mainly designed for rendering applications; they do not preserve the mesh layout nor support seamless mesh access across patch boundaries.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Main results:</head><p>In this paper we present a new order-preserving triangle mesh compression algorithm that supports random access to the underlying compressed mesh. Our method selectively fetches, decompresses, and caches the requested parts of the mesh in main memory, possibly after paging out data not recently accessed. The compressor preserves the original, possibly cache-coherent triangle layout, and hence allows optimizing the layout for different modes of accesseven for sequential streaming computations. Our decompressor provides direct access to individual vertices and triangles via their global indices in their respective layouts, and exposes to the visualization application a conventional mesh data structure API for transparent access to mesh elements and their neighborhoods. Although we do not maintain the entire mesh and full neighboring information in main memory, we ensure that correct connectivity is constructed for all mesh elements requested by the application. Using layouts with good locality, we achieve compression ratios around 20:1 and speedups as high as 6:1 in out-of-core visualization applications, compared to accessing the same uncompressed external memory data structure. In particular, we find that cache-oblivious mesh layouts <ref type="bibr" target="#b40">[41,</ref><ref type="bibr" target="#b41">42]</ref> result in good compression, high disk cache utilization and thus a small memory footprint, high decompression throughput, and good locality for lower-level in-memory caching compared with other tested layouts.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>In this section we review published work related to mesh compression and compression methods that support random access.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Mesh Compression</head><p>Mesh compression has been well researched over the last decade and excellent surveys are available <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b12">13]</ref>. At a high level, connectivity compressors may be classified as vertex-based (or valencebased) <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b37">38]</ref>, edge-based <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b25">26]</ref>, or face-based <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b30">31]</ref>, depending on the mesh element type that drives the compression. Our orderpreserving method belongs to the class of face-based compressors.</p><p>Most previous mesh compression schemes were designed to achieve maximum compression as they were targeted for archival use or transmission. They achieved this goal by encoding vertices, edges, and faces in a particular order agreed upon by encoder and decoder such that the mesh layout itself would not have to be transmitted. Because many applications are not affected by the ordering of mesh elements, such reordering is often acceptable.</p><p>Recently, Isenburg et al. <ref type="bibr" target="#b19">[20]</ref> introduced a streaming compression scheme for triangle meshes built on top of their streaming mesh representation <ref type="bibr" target="#b18">[19]</ref>. This compression method efficiently handles massive models by directly encoding mesh elements in the order in which they arrive, which obviates having to first create a complete uncompressed mesh data structure to support traversal of the mesh in the designated order. Our work is built on top of this streaming compression method in order to both preserve the input order of triangles and to achieve relatively high compression and decompression throughput.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Compression and Random Access</head><p>Most prior approaches to mesh compression do not directly provide random access to the compressed data. To access a particular element, the mesh must first be sequentially decompressed to an uncompressed format (e.g. an indexed mesh format like PLY, or a mesh data structure such as half-edge) that supports random access.</p><p>Multimedia and regular grids: Random access is one of the key components of the MPEG video compression format that allows users to browse video in a non-sequential fashion <ref type="bibr" target="#b24">[25]</ref>. This is achieved by periodically inserting "intra pictures" as access points in the compressed stream, which allows bootstrapping the decompressor. Intra pictures are compressed in isolation from other frames, and subsequent frames are compressed by predicting the motion in between these intra pictures. For regular volumetric grids, wavelet-based compression methods <ref type="bibr" target="#b16">[17,</ref><ref type="bibr" target="#b29">30]</ref> that support random access have been proposed.</p><p>Mesh and multi-resolution compression: Ho et al. <ref type="bibr" target="#b14">[15]</ref> describe an out-of-core technique that partitions large meshes into triangle clusters small enough to fit in main memory, which are compressed independently. Cluster boundaries are given special treatment to ensure that decompressed clusters can be "stitched" together. Choe et al. <ref type="bibr" target="#b7">[8]</ref> proposed a random-accessible mesh compression technique primarily targeted for selective rendering. As in <ref type="bibr" target="#b14">[15]</ref>, random access to the compressed mesh is achieved by independently decompressing a requested cluster, i.e. without having to decompress the whole mesh. There have been a few multi-resolution compression methods that support random access. Gobbetti et al. <ref type="bibr" target="#b11">[12]</ref> proposed a compressed adaptive mesh representation of regular grids for terrain rendering. They decompose the regular grid into a set of chunks and apply wavelet-based lossy compression to each chunk. Kim et al. <ref type="bibr" target="#b22">[23]</ref> introduced a random access compression technique for general multi-resolution triangle meshes based on their earlier multi-resolution data structure <ref type="bibr" target="#b23">[24]</ref>.</p><p>Although these techniques provide coarse-grained random access to compressed meshes, they are mainly targeted for selective access in rendering applications, and do not provide a general mesh traversal mechanism. On the other hand, our method transparently supports random access to individual mesh elements and provides the connectivity information needed by many mesh processing applications.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Cache Coherence</head><p>Cache-oblivious layouts of polygonal meshes and bounding volume hierarchies have recently been introduced <ref type="bibr" target="#b40">[41]</ref><ref type="bibr" target="#b41">[42]</ref><ref type="bibr" target="#b42">[43]</ref>. Contrary to cacheaware layouts, e.g. <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b15">16,</ref><ref type="bibr" target="#b26">27,</ref><ref type="bibr" target="#b33">34]</ref>, a cache-oblivious layout is not optimized for a particular size cache, but exhibits good average-case performance across multiple cache levels and access patterns. By maintaining cache-oblivious layouts of triangles and vertices in our compressed meshes, we achieve high cache utilization both to compressed data fetched from disk and to uncompressed in-memory data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">OVERVIEW</head><p>In this section we briefly discuss some of the challenges of dealing with massive models and present an overview of our approach.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Dealing with Massive Models</head><p>Applications such as iso-contouring and geodesic distance computation require random access to mesh geometry and connectivity. Such applications access vertices and triangles in an order that generally differs from the order in which the mesh is stored. For large meshes, the amount of information accessed may approach giga-or even terabytes of data. As a consequence, large meshes are usually stored on disk, or may even be fetched over a network. Since accessing remote data in an arbitrary order can be very expensive, data access time often becomes the major performance bottleneck in geometric applications.</p><p>Out-of-core data structures and algorithms: There have been extensive research efforts to design out-of-core data structures and algorithms to handle models larger than main memory <ref type="bibr" target="#b36">[37]</ref>. These techniques aim at loading only the data necessary to perform local computations, and at minimizing the number of I/O accesses. However, as the gap between processing time and data access time increases, the time spent loading even the necessary data on demand becomes expensive.</p><p>Cache coherence: Since cache misses in the various memory levels (e.g., L1/L2 and main memory) are quite expensive compared to the computational processing time, research has focused on reorganizing the data access pattern of applications (e.g. <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b18">19,</ref><ref type="bibr" target="#b38">39]</ref>) and on computing data layouts (e.g. <ref type="bibr" target="#b40">[41]</ref><ref type="bibr" target="#b41">[42]</ref><ref type="bibr" target="#b42">[43]</ref>) to minimize the number of cache misses for coherent but unspecified access patterns. In particular, data layout optimization can result in high cache utilization without having to modify the algorithm or access pattern of the target application, whereas computational reordering usually requires complete algorithm and data structure re-design.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Our Approach</head><p>We propose a novel compression and decompression method that supports transparent and random access to compressed meshes suitable for many geometric applications. Whereas we support truly "random" access to any element of the mesh, we exploit the fact that most geometric applications access the mesh in a spatially coherent manner, e.g., by walking the mesh from an element to one of its neighbors. However, we neither assume nor impose any particular access pattern. At a high level, our method has two major components: (1) clusterbased order-preserving mesh compression, and (2) a runtime decompression framework that transparently supports random access.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Cluster-based order-preserving compression:</head><p>We compress a mesh by sequentially accessing and grouping triangles in the order they appear in the input mesh. Although our method does not require a specific layout of a mesh, we propose to use cache-oblivious layouts since they have exhibited superior cache utilization in a number of applications <ref type="bibr" target="#b40">[41]</ref>. We also find that these cache-oblivious layouts result in the best compression and runtime performance.</p><p>In order to provide random access to the compressed mesh, we group vertices and triangles into a set of clusters. Each cluster consists of a fixed number of consecutive triangles (e.g. a few thousand) as well as the vertices first referenced by those triangles. The beginnings of the clusters serve as access points in our method, and each atomic I/O request operates at cluster granularity.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Runtime decompression framework:</head><p>Our decompression framework provides efficient, but transparent and random access to applications through a general mesh access API. Therefore, applications can access the entire mesh as if it were memory resident. Moreover, applications benefit directly from the improved I/O performance provided by our decompressor without having to make any application code changes since we provide a complete system for loading, decompressing, caching, and paging-out of data. We assume that applications access mesh vertices and triangles via a global index through our mesh access API. When an element is requested, we efficiently locate the cluster containing it, decompress the cluster, and store the uncompressed data in main memory. As the compressed stream does not explicitly encode full connectivity information, we dynamically derive such data on the fly during decompression and link together adjacent in-memory elements in the mesh.  <ref type="bibr" target="#b18">[19]</ref>. v i denotes the geometry of the i th vertex; t i denotes the three vertex indices of the i th triangle. The boxes indicate the decomposition of the mesh into clusters, here consisting of two consecutive triangles.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">TRIANGLE MESH COMPRESSION</head><p>In this section we describe our cluster-based order-preserving compression method. We first review the streaming, sequential access compression scheme that our order-preserving method is built upon. Then, we describe the extensions necessary to support random access.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Streaming Mesh Compression</head><p>Isenburg et al. <ref type="bibr" target="#b19">[20]</ref> proposed a streaming compression method for triangle meshes represented in a streaming format <ref type="bibr" target="#b18">[19]</ref>. This method sequentially compresses a mesh of nearly arbitrary size in an I/O efficient manner. There are two major components of this method that our compressor also utilizes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Input data format:</head><p>The streaming mesh compressor operates on vertex-compact streams in pre-order format <ref type="figure" target="#fig_1">(Fig. 1)</ref>. In a pre-order format, each vertex appears in the stream before all triangles that reference it. If the stream is also vertex-compact, the first triangle that follows a vertex is guaranteed to reference that vertex. Vertexcompactness ensures that vertex and triangle layouts are interleaved, and that vertices are not buffered earlier than necessary. The requirement that the input be vertex-compact and pre-order is not particularly restrictive as all triangle layouts have a "compatible" (though not unique) vertex-compact pre-order vertex layout. Note that all facebased compressors naturally produce vertex-compact pre-order output.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Finalization:</head><p>The other key feature of the streaming mesh compressor is the use of finalization information. Finalization of a vertex indicates that it will not be referenced by any subsequent triangles in the stream. Hence, during compression we may safely limit references to the set of active vertices that have been introduced but not yet finalized. Typically the active vertices are only a small fraction of all vertices, which aids in efficient coding of vertex references. Finalization is usually known to mesh writing applications, and can easily be incorporated with most mesh formats. See <ref type="bibr" target="#b18">[19]</ref> for how to compute such information in case it is not readily available.</p><p>Our random access compression method uses the pre-order format as input and preserves the order during compression. It also exploits and encodes finalization. Because of this, our compressed meshes can be used also in streaming computations with little overhead, although our method is mainly designed for random (non-sequential) access.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Cluster-Based Order-Preserving Compression</head><p>Our compression method reads intermixed sequences of vertices and triangles in a pre-order streaming file format with finalization information. During compression, we implicitly decompose vertices and triangles into a set of clusters <ref type="figure" target="#fig_1">(Fig. 1)</ref>. A cluster C consists of a fixed number of consecutive triangles (e.g., 4K triangles) and those vertices introduced (first referenced) by the triangles in C. As a consequence, although each cluster has a fixed number of triangles, the number of vertices per cluster may not be the same (though the variation in vertex count is usually low).</p><p>We compress the triangles and vertices assigned to a cluster only based on information collected from the cluster. Therefore, at runtime each cluster may be independently decompressed, which accommodates random access to the mesh at the granularity of clusters. Note that not all vertices referenced by the triangles in a cluster have their geometry encoded in the same cluster, nor are all triangles incident on a vertex stored in the same cluster. We will resolve this "stitching" problem in our runtime decompression framework.</p><p>Terminology: For a mesh element e such as a vertex or a triangle, we represent its index as Idx(e). Let C(e) denote the cluster containing e, and let C i indicate the cluster whose index is i, with C 0 being the first cluster. If a triangle of C j references a vertex stored in C i , we say that C j references C i . Let R≺(C) denote the set of clusters referenced by cluster C and R (C) denote the set of clusters that reference C.</p><formula xml:id="formula_0">Whenever C j references C i , we have C i ∈ R≺(C j ) and C j ∈ R (C i ).</formula><p>Cluster properties: Given vertex-compact pre-order input, the following lemmas are easily derived from our definition of clusters. The lemmas will be used later to show the correctness of our method. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Encoding Compression Operators</head><p>For each cluster, our compressor sequentially reads vertices and triangles from the streaming mesh. For each triangle t, we first determine the compression operator associated with t, which tells how t is connected to the set of already compressed triangles within the cluster.</p><p>As in <ref type="bibr" target="#b19">[20]</ref>, we use five different compression operators (or configurations): START, ADD, JOIN, FILL, and END. START indicates that t shares no edge with the already compressed triangles in the cluster; in ADD and JOIN there is one shared edge; in FILL and END there are two and three shared edges, respectively. For example, the sequence of compression operators for the mesh in <ref type="figure" target="#fig_1">Fig. 1</ref> is "START, ADD, ADD, ADD." For START, ADD, and JOIN cases, we also determine how many new vertices the triangle introduces and encode their geometry. The number of introduced vertices ranges from 0 to 3 for START, equals 1 for ADD, and is 0 for JOIN. These compression operators can be easily determined by maintaining a half-edge data structure. For each coded triangle, three half-edges are created. Once a vertex is finalized, the half-edges incident on the vertex may be deallocated.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Compression side:</head><p>We compute these sequences of compression operators based on the half-edge data maintained from the first triangle of the input to the current triangle being compressed. This means that we do not deallocate the existing half-edge data when we transit from one cluster to the next during compression. The main reason for this is to avoid any duplicate storing of vertex geometry in the compressed mesh, since otherwise we would not know whether a vertex first referenced in a cluster was introduced here or by a triangle in some earlier encoded cluster. We therefore encode the compression operator in the context of global information of all the encoded triangles and vertices.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Decompression side:</head><p>In contrast to the compressor, the decompressor does not need to maintain global information for all encoded triangles and vertices. Given a decoded compression operator, we can deduce the vertex indices associated with the triangle. Some of these indices may refer to vertices stored in another cluster. If an application requests geometry (as opposed to only connectivity) information for such vertices, our runtime framework determines which cluster has that information, decodes it, and returns it to the application.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Encoding Mesh Elements</head><p>Once the compression operator for a triangle is encoded, we encode the vertices referenced by the triangle. For each such vertex v, there are two cases: v is referenced for the first time, or v has already been introduced. When v is introduced by a triangle, we encode its geometry and attributes (e.g., color). Note that in this case we do not need to encode v's index since it must equal the current global vertex count. This vertex count is made available to the decompressor by The cluster colors smoothly vary with the sequential layout from red to yellow to green, and the brightness alternates between each consecutive pair of clusters. The cache-oblivious mesh layout has high spatial coherence, leading to well-shaped clusters with short boundaries and few inter-cluster references. As a result, it yields the highest compression ratio and best runtime performance on our benchmarks.</p><p>storing with each cluster, C, the global index of C's first vertex, which is maintained incrementally during compression.</p><p>In the other case, when vertex v was introduced earlier, we are interested only in encoding its index Idx(v) since v's geometry has already been encoded. In order to effectively encode this index, we make use of three layers of compression contexts: (1) a cache holding the three vertices of the previous triangle in the current cluster, C(v), (2) the active (unfinalized) vertices of C(v), and (3) the vertices among the clusters R≺(C(v)) referenced by C(v). The first and second layers are for in-cluster vertices stored in the current cluster, and the third layer is for out-of-cluster vertices stored in other clusters.</p><p>If vertex v was also referenced by the previous triangle we encode which of the three vertices in the cache v corresponds to. Otherwise, we check whether v is an active vertex of the current cluster, and if so encode its position in a dynamic vector (containing active vertices) maintained by both encoder and decoder. Note that the set of active incluster vertices is usually much larger than the three vertices stored in the cache, but is also much smaller than the entire set of vertices stored in the current cluster. Finally, if v is not among the active vertices, we conclude that it is in another cluster C i among the set R≺(C(v)). In this case, we decompose its index into a pair index (i, k) where i is the global cluster index for C i and k is an offset within C i . Instead of directly encoding the pair (i, k), we map the global index i to a local index j within the set R≺(C(v)). This is beneficial as the number of clusters in R≺(C(v)) is usually much smaller, e.g. 4 on average for cache-oblivious layouts, than the total number of clusters.</p><p>After finishing compressing the mesh, we have accumulated information specific to each cluster C, such as C's position in the compressed file, its first vertex index, and the variable-size sets R≺(C) and R (C) that must be written as header information. We store this header information as a separate, uncompressed file. In our benchmarks, the header files are roughly 2 MB, or about 1% of the total compressed file size. The decompressor is initialized with this header information to allow any cluster to be decompressed at runtime.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Memory usage and time complexity:</head><p>The data structures needed to perform the operations described above are small because the data is limited to the set of active vertices and the elements of the current cluster. The time complexity of encoding and decoding a triangle is constant. This is made possible by using a hash table of active vertices to map a global index Idx(v) to the cluster-offset pair (i, k).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Half-edge based coding:</head><p>We further improve the compression ratio by encoding some of the vertex indices based on existing half-edge information around vertices, as proposed in <ref type="bibr" target="#b19">[20]</ref>. We encode the index of an in-cluster vertex by specifying which of the set of half-edges it is associated with. For example, when the compression operator is ADD, we may encode two active vertices by the single half-edge that joins them, and to which the triangle being encoded is attached. Recall that we deallocate all the existing half-edge information when we encounter a new cluster in the decompressor. Therefore, the compressor, too, needs to consider only those half-edges created in the current cluster. This half-edge based coding requires a small amount of computational overhead, such as traversing half-edges for the vertices of a triangle. However, we can achieve a higher compression ratio since the number of half-edges around a vertex is typically small (e.g., 6).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Geometry prediction:</head><p>We use the parallelogram rule <ref type="bibr" target="#b37">[38]</ref> to predict the position of a vertex v 3 introduced by a triangle t. To perform the parallelogram prediction in an ADD operation, we require geometry information for the three vertices of an adjacent, already compressed triangle that shares v 1 and v 2 with t. However, these vertices may be stored in other clusters and, thus, their geometry information may not be available when we compress or decompress the current cluster. In this case, we simply use v 1 or v 2 as prediction, if available, or otherwise the third "opposite" vertex. When no nearby vertex is available, we use the last encoded vertex as prediction.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Arithmetic coding:</head><p>We use context-based arithmetic coding for compression operators, vertex indices, and geometry. In particular, we use the previous compression operator as context for the next one. We also re-initialize all probability tables with a uniform distribution when compressing a new cluster in order to allow independent decoding of clusters. To minimize the impact of this periodic initialization on compression, we employ a fast adaptive probability modeler <ref type="bibr" target="#b34">[35]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RUNTIME MESH ACCESS FRAMEWORK</head><p>In this section we present our runtime decompression and caching method that provides transparent random access.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">In-Core Mesh Representation</head><p>When the application requests geometry or connectivity for a mesh element, our underlying decompression framework fetches and decompresses the cluster containing the element into an in-core partial mesh representation. To support a general mesh access mechanism, we represent our decompressed in-core mesh in a corner data structure similar to the ones proposed by Rossignac <ref type="bibr" target="#b31">[32]</ref> and Joy et al. <ref type="bibr" target="#b21">[22]</ref>. Conceptually, this data structure consists of two contiguous global arrays of vertices and triangles large enough to hold the entire mesh.</p><p>A corner associates a triangle t with one of its vertices v (see <ref type="figure">Fig. 3</ref>). For each vertex v we store its coordinates and an index v.c to one of its incident corners. A triangle is represented as three corners that each store an index c.v to the corresponding vertex v and an index c.nvc within a circular linked list to the next corner incident to v. Similarly, pointers t.c and c.t between corners and triangles and pointers c.ntc within triangles allow instant navigation between adjacent elements. By traversing the c.nvc pointers around v, we can find all the triangles incident to v (whether v is manifold or not). As in <ref type="bibr" target="#b31">[32]</ref>, the corners of triangle i have consecutive indices 3i, 3i + 1, and 3i + 2. Hence t.c, c.t, and c.ntc can be efficiently computed and need not be stored.</p><p>The corner table can be incrementally constructed via constant-time insertions. As we sequentially decompress the global vertex indices of each triangle, we compute corresponding corner indices from the triangle index. We then insert each corner into its vertex's circular corner list. Because each vertex is introduced by a triangle via a compression operator, at least one incident corner (triangle) is always available.  <ref type="figure">Fig. 3</ref>. Corner Representation: A corner c (yellow) associates a triangle t (light blue) with one of its vertices v (dark gray). For each corner c, we provide access to the next corner c.ntc in t, as well as the next corner (in no particular order) c.nvc around v. These corner pointers form circular linked lists around vertices and triangles. We also store a pointer c.v to v from each incident corner c, and a pointer v.c from v to one of its corners. Similar pointers between corners and triangles, as well as c.ntc, can be derived on the fly, and need not be stored (shaded/dotted). The actual vertex and triangle data structures are shown on the right.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Mesh Access API</head><p>We provide the following atomic API to support random access to the compressed mesh based on the data structures in <ref type="figure">Fig. 3</ref>: Based on this low-level API, it is possible to implement higher-level functionality. For example, to compute all the triangles incident to a vertex, we make a call to GetVertexCorner followed by a sequence of interleaved GetCornerTriangle and GetNextVertexCorner calls. We implement our benchmark applications, discussed later, using our API.</p><formula xml:id="formula_1">Coords GetVertex(Index v</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Page-Based Data Access</head><p>Whenever a request to access a mesh element is made, we have to first identify the cluster containing it. Though clusters have a fixed number of triangles (and thus corners), their vertex counts generally vary. Therefore mapping vertices to clusters is not straightforward, and techniques like binary search can be slow for large meshes. Since every vertex access requires a cluster lookup, e.g. to determine whether the cluster is cached, it is important that this lookup be done efficiently.</p><p>To provide a fast mechanism for mapping vertex indices to clusters, we decompose the global vertex array into fixed-size contiguous pages, each of which holds a power-of-two (e.g., 1K) vertices <ref type="figure" target="#fig_6">(Fig. 4)</ref>. With each page we store the memory address of the corresponding vertex sub-array, the indices of the clusters that overlap the page, as well as a state variable that indicates whether the page is cached and, if so, the level of connectivity information available: "none," "partial," or "full" connectivity (to be explained in Sec. 5.4). We keep similar cluster-specific state with the in-core cluster meta data, and each page's state indicates the least common information available for its clusters. The page table is initialized by reading the header file containing cluster file offsets and dependencies R≺ and R and by marking all pages as "not loaded." This initialization task takes only tens of milliseconds in our benchmarks. The main benefit of this page structure is that it allows accessing the required data using few operations. For example, when GetVertex is called, we first compute the page index corresponding to the vertex using only a bit shift. If the page is not completely loaded, we load all uncached clusters associated with the page, decompress them into our in-core mesh data structure, and set the page's state to "loaded with no connectivity." If the page is loaded the next time it is accessed, we directly return the requested data from our in-core mesh representation, which allows constant-time access to uncompressed data.</p><p>One downside of this approach is that more than one cluster may have to be loaded when accessing a single element. On the other hand, if data and access locality are high, it is likely that adjacent clusters will be needed for subsequent vertex accesses. Nevertheless, to reduce the average number of clusters per page to close to one, we make the page size smaller than the cluster size.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">On-Demand Connectivity Construction</head><p>To reduce the number of I/O requests, we dynamically construct only the connectivity needed to correctly execute our API calls. As explained earlier, pages and clusters can have "no," "partial," or "full" connectivity, corresponding to the amount of information needed by the calls GetVertex, GetVertexCorner, and GetNextVertexCorner, respectively. These states are described below.</p><p>No connectivity: If the page P(v) containing v is loaded as a result of a GetVertex(v) call, no effort is made to compute connectivity information for the page since only v's geometry is needed. In this case, we initialize v.c for all vertices in P(v) to null.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Partial connectivity:</head><p>To process a GetVertexCorner(v) call, we gather sufficient connectivity information for the page P(v) containing v. We first determine the clusters C(P(v)) that overlap P(v) and then visit each triangle t contained in these clusters. For each vertex u ∈ t, we determine whether u is currently cached, and if so connect t to u via a c.nvc corner pointer. Since some vertices referenced by t may reside in other clusters not yet cached, we put any corners corresponding to such uncached vertices on a SkippedCorners list stored with t's cluster. This list holds corners not yet connected to their vertices and adjacent corners, and will be consulted later when such uncached vertices are loaded. After we process all the clusters of the page, we set their states and the page's state to "partially connected." At this point, we are guaranteed by Lemma 1 (see Sec. 4.2) to have at least one cached corner for vertex v, which can then be returned by GetVertexCorner.</p><p>Full connectivity: When GetNextVertexCorner(c) is called to access the next corner around the corresponding vertex v, all the corners incident to v have to be loaded into v's circular corner list in order to guarantee correctness. We achieve this by performing the following steps. We first load the cluster that contains c and identify the vertex v. Then, for each cluster C that overlaps P(v), we load and build partial connectivity for C and the clusters R (C) that reference C. For each cluster D ∈ R (C), we extract from D's SkippedCorners list each corner that corresponds to a vertex u ∈ C and connect it to u. By Lemma 2 (see Sec. 4.2), after this step all corners around v (and all other vertices in P(v)) have been connected, and as a final step we set the state of each C ∈ P(v) and P(v) itself to "fully connected." The next time GetNextVertexCorner is called, we simply return the corner from our in-core mesh representation if P(v) is "fully connected."</p><p>The main difference between the states "partially" and "fully" connected is whether we have to load the clusters R (C) that reference the cluster C containing the requested vertex. By maintaining three separate states, we ensure that the correct results are returned with each API call while maintaining a minimal set of loaded clusters.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">Memory Management</head><p>The page table also serves as a memory management mechanism for massive models whose uncompressed data cannot fit in main memory. For this purpose, we also maintain a page table for triangles/corners, with a one-to-one mapping between triangle pages and clusters. Applications may specify a maximum allowance on memory use, which limits the number of pages cached. When a new page is needed and the page table is full, we have to unload a page P and each overlapping cluster C to make room for the new page. Note that vertices in R≺(C) may have incident corners in C, and thus their full connectivity depend on C being present. To ensure that future connectivity queries to vertices in R≺(C) are correctly answered, we mark the clusters R≺(C) as "partially" connected when C is evicted from memory.</p><p>We use a FIFO page replacement policy modified as follows for the special case of GetNextVertexCorner calls around vertex v. Before making space in the vertex page table for the uncached cluster C(v) and page P(v), we move all cached pages that overlap R (C(v)) to the back of the FIFO, as the triangles in R (C(v)) are needed to complete the call. This ensures that the necessary clusters R (C(v)) are not evicted as a result of loading P(v) into a full page table.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.6">Coherent Mesh Layout</head><p>Both cluster decompression requests and in-core cache misses can be drastically reduced by organizing mesh vertices and triangles in a coherent order. To achieve this goal, we use cache-oblivious techniques <ref type="bibr" target="#b40">[41,</ref><ref type="bibr" target="#b41">42]</ref> to order the triangles of the mesh using the OpenCCL library <ref type="bibr" target="#b43">[44]</ref>. We then produce a pre-order vertex-compact layout by reordering the vertices to be "compatible" with the triangles <ref type="bibr" target="#b18">[19]</ref>, i.e. the vertices are sorted on the order in which they are first referenced by a triangle. While such "induced" vertex layouts are not necessarily optimal, our compressor requires them, and we have empirically observed that they also exhibit good locality <ref type="bibr" target="#b40">[41]</ref>. An example of triangle clusters derived from a cache-oblivious layout is shown in <ref type="figure" target="#fig_3">Fig. 2</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">RESULTS</head><p>To demonstrate the benefits of our method, we have implemented two applications using our compressed mesh API: iso-contour extraction and mesh reordering. We chose these two applications since they both traverse the mesh in an order that is reasonably coherent though different from the original layout. Moreover, iso-contour extraction typically accesses only a small subset of the mesh, whereas reordering requires traversing the entire mesh.</p><p>We have implemented our compressor, decompressor, and applications on an Intel Pentium 4 mobile laptop running Windows with a 2.1 GHz CPU, 2 GB of main memory, and a 15 MB/s IDE disk drive. We limit our applications to use no more than 1.5 GB of main memory to cache uncompressed data. Our compression method requires as input a streaming mesh format, which is straightforward to write or to generate from non-streaming formats <ref type="bibr" target="#b18">[19]</ref>.  <ref type="table">Table 1</ref>. Compression and Speedup: Triangle and vertex counts, file size of uncompressed and compressed meshes, compression ratio, and iso-contouring and mesh reordering speedups are listed. The coding cost is separated into geometry, connectivity, and cluster header data. The uncompressed (raw) meshes are stored on disk in our corner table representation <ref type="figure">(Fig. 3</ref>), modified to use 16-bit quantized integer coordinates to match the precision used by the compressor. The meshes were compressed using 4K triangle clusters and a cache-oblivious layout.</p><p>Model Triangles Vertices TG <ref type="bibr" target="#b37">[38]</ref>   <ref type="bibr" target="#b7">[8]</ref>. Since our method preserves the layout and supports random access, its compression ratio is lower compared to the other techniques.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Compression Results</head><p>We evaluate our compression method on several benchmark models, including a large, simplified terrain model of the Puget Sound area <ref type="figure" target="#fig_7">(Fig. 5</ref>), the RMI iso-surface model from LLNL, and Stanford's St. Matthew model, each totaling over 100 million triangles (see <ref type="table">Table 1</ref>). We uniformly quantize each vertex coordinate to 16 bits, which is more than enough precision to faithfully represent these meshes. Our compressor encodes these meshes at an average rate of 380K triangles per second on our laptop. For example, it takes around 6 minutes to compress the Puget Sound model. We compare the file sizes of our compressed meshes with those of the original uncompressed meshes stored on disk in the corner table representation shown in <ref type="figure">Fig. 3</ref>, modified to use 16-bit integer rather than floating-point coordinates. Though a conventional indexed mesh representation requires less space, it does not support the same functionality required by our API and by our benchmark applications. Also, while constructing a full corner table from an indexed mesh can be done in linear time, performing this task at startup incurs unacceptable overhead and wastes disk space. Compared to the uncompressed corner table representation stored in cache-oblivious order, our compressor reduces the three benchmark models by factors 17-21, and by 9-12 compared to indexed meshes. This results in 21.4, 28.0, and 23.3 bits per vertex (bpv) for the Puget Sound, RMI isosurface, and St. Matthew model, respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Comparison with other methods: Compared with Isenburg and</head><p>Gumhold's out-of-core compressor <ref type="bibr" target="#b17">[18]</ref>, which neither preserves the layout nor supports random access, our compressed representation of the St. Matthew model is 50% larger than theirs (15.3 vs. 22.9 bpv). We compare our method against the order-preserving compressor of Isenburg et al. <ref type="bibr" target="#b19">[20]</ref>. The overhead in storage incurred by our method relative to theirs is on average a modest 16% for our large models. This overhead is mainly due to additional information (e.g., cross-cluster vertex references) needed to support random access.</p><p>We also compare the compression ratio of our method to those of Touma and Gotsman (TG) <ref type="bibr" target="#b37">[38]</ref> and Choe et al. (CKLLS) <ref type="bibr" target="#b7">[8]</ref>. The overhead of our method is about 40% and 50% over CKLLS and TG (see <ref type="table">Table 2</ref>). Like <ref type="bibr" target="#b17">[18]</ref>, the TG method does not support random access. Although the CKLLS method does, it does not accommodate seamless mesh traversals or order preservation for transparent mesh access and higher cache utilization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Iso-contouring</head><p>The problem of extracting an iso-contour from a scalar function defined on an unstructured mesh frequently arises in geographic information systems and scientific visualization. Many efficient iso-contour extraction methods employ seed sets to grow a contour by traversing only those mesh elements that intersect the contour. The running time of such an algorithm is typically dominated by the traversal of the intersected mesh elements. We efficiently extract an iso-line from a seed triangle by traversing the contour in a depth-first order, thereby accessing the surrounding mesh in a reasonably coherent manner, but in an order different from the layout of the mesh.</p><p>We compare the running time of extracting iso-contours for 20 randomly chosen iso-values on the three benchmark models using (1) our compressed representation with 4K triangle clusters and (2) a fully uncompressed on-disk corner table. Both representations are stored in the same cache-oblivious layout and accessed using the same API. (For our non-terrain surfaces, we use one of the coordinates as function value, which reduces iso-contouring to "slicing" the mesh.) We do not perform explicit memory management of the uncompressed meshes, but rely on the virtual memory management of the operating system (which includes disk block buffering) by memory mapping the uncompressed corner table file.</p><p>We achieve on average 2.5 times and as much as 6.4 times speedup extracting one iso-contour from the Puget Sound mesh when using the compressed representation. Similar gains are observed on other models ( <ref type="table">Table 1</ref>). The main reason for this speedup is the drastic reduction in expensive disk reads while traversing and loading uncached portions of the mesh. Though compression reduces disk space and data transfer, it increases memory use. We measure the total working set size, i.e. the amount of data loaded and cached, in our application in multiples of the 4 KB memory page size on our system. With a cluster size of 4K triangles and a cache-oblivious layout, our method uses four times as much memory as when no compression is used. The two main reasons for this are: (1) we cache data at a coarser granularity (128 KB clusters versus 4 KB memory pages), and (2) when a cluster C is accessed, our method often requires loading additional clusters R (C) that reference C in order to ensure correct connectivity.</p><p>Below we will further discuss the performance of our method in detail using the Puget Sound model as a test case.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dependence on cluster size:</head><p>We measure iso-contouring performance and compressed file size as a function of cluster size using cache-oblivious layouts and a fixed vertex page size that on average equals half the cluster size. In general, compression improves with larger cluster size as a result of fewer out-of-cluster references, which impacts both connectivity and geometry rates. Larger clusters also improve I/O throughput because of the size-independent overhead due to disk latency. On the other hand, very large clusters increase the working set size and reduce the ability to selectively access mesh elements, which negatively impact performance.</p><p>These competing factors are illustrated in <ref type="figure">Fig. 6</ref>, which shows that the optimal cluster size in terms of overall performance is 4K triangles. This cluster size also results in good compression compared to using much larger clusters. Assuming a 2:1 ratio between triangles and vertices, a 4K triangle cluster decompresses to 128 KB of in-core storage (i.e. irrespective of the compression rate). The corresponding compressed size on disk is 5.3 KB per cluster for Puget Sound.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Dependence on layout:</head><p>We compare the performance of isocontouring using compressed and uncompressed meshes in different layouts, including cache-oblivious (COML) <ref type="bibr" target="#b40">[41,</ref><ref type="bibr" target="#b41">42]</ref>, Z-curve <ref type="bibr" target="#b32">[33]</ref>, depth-first (DFL), breadth-first (BFL), and spectral (SL) <ref type="bibr" target="#b18">[19]</ref> layouts of the Puget Sound model (see <ref type="table">Table 3</ref>). Note that the Z-curve is also a cache-oblivious layout that works particularly well for regular grids.  <ref type="figure">6</ref>. Dependence on Cluster Size: The Puget Sound iso-contouring time and compressed file size depend on the cluster size. The highest performance is attained using 4K triangles per cluster, for which the compression ratio is 21:1 and the speedup is 2.4 relative to using no compression.  <ref type="table">Table 3</ref>. Dependence on Layout: The table lists the compressed file size and iso-contouring time for various layouts of the Puget Sound model stored in compressed and uncompressed format. The use of compression results in speedups as high as 2.4 for the cache-oblivious layout, which also performs better in relation to all other layouts. Outof-core access to the spectral layout, whose poor locality leads to low compression and excessive paging, is not accelerated by compression.</p><p>Using compression we achieve 2.4, 1.6, 1.4, and 1.4 times isocontouring speedup for COML, Z-curve, DFL, and BFL, respectively. Although we observe meaningful speedups with depth-and breadthfirst layouts, our results show a clear advantage of using cacheoblivious or similar layouts that exhibit spatially coherent clusters, both relative to other layouts (e.g., 4, 16, and 21 times speedup over DFL, BFL, and SL, respectively) and to using no compression. Higher coherence results in a smaller working set size, fewer I/O calls, better in-memory cache utilization, and hence better performance. This ability to optimize and preserve the layout during compression is one of the features that sets our scheme apart from prior methods like <ref type="bibr" target="#b7">[8]</ref>. <ref type="table">Table 3</ref> shows that compression hurts performance when used with the spectral layout. Though globally coherent, triangles in this layout appear in a nearly random order along the advancing front, which is often wider than the 4K cluster size. This leads to poor compression and locality, and excessive loading of clusters.</p><p>The layout of a mesh also significantly affects compression, as is evident from <ref type="table">Table 3</ref>. Because of its well-shaped clusters, the cacheoblivious layout yields the best compression ratio among our layouts.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Comparison with stream processing:</head><p>As demonstrated in <ref type="bibr" target="#b18">[19]</ref>, streaming computations can be very efficient for out-of-core processing of large meshes. We compare our compressed random-accessible meshes with the sequential-access compression scheme of Isenburg et al. <ref type="bibr" target="#b19">[20]</ref> by measuring the time to extract an iso-contour from Puget Sound stored in a cache-oblivious layout. Whereas our scheme allows random access to the elements intersected by the contour, the streaming technique supports only sequential access and hence must traverse and decompress (nearly) the entire mesh. As a consequence, we obtain a 45:1 speedup over the streaming scheme on this task.</p><p>There are other geometry processing tasks more suitable for streaming access (e.g. smoothing, vertex normal computation) that require only local information around mesh elements, and for which the processing order does not matter (e.g. sequential access is possible). Because our scheme uses streaming (de)compression within each cluster and provides "finalization" information, it also efficiently supports streaming access. Sequential decompression of the entire data set via our API takes only 33% longer than using Isenburg et al.'s scheme. Since we efficiently support both random and sequential access, we believe that our method has a significant advantage over theirs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Mesh Reordering</head><p>As evidenced here and in <ref type="bibr" target="#b18">[19,</ref><ref type="bibr" target="#b36">37,</ref><ref type="bibr" target="#b41">42]</ref>, the problem of computing a good layout of a large mesh is itself an important but challenging problem that traditionally is done using external sorts. As another benchmark, we compute a breadth-first triangle layout from a (different) cacheoblivious one, which cannot be done efficiently using external sorts alone. This task differs from iso-contouring in that the entire mesh is traversed, but is similar in that it requires random access and is therefore not easily streamable. Using compression, we achieve 3.4-6.7 times speedup on our benchmark models <ref type="table">(Table 1)</ref>. Moreover, we observe similar speedups using clusters in the range 2K-16K triangles.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION AND FUTURE WORK</head><p>We have proposed a novel out-of-core framework that supports transparent random access to compressed triangle meshes through selective decompression of small clusters of mesh elements. In order to provide a seamless mesh traversal mechanism, our method dynamically constructs the connectivity information necessary for querying incidence and adjacency information through a common mesh access API. One distinguishing feature of our method is that it preserves the ordering of triangles in the mesh, which allows tailoring the data layout to the anticipated access pattern. In conjunction with cache-oblivious layouts, we demonstrate that the reduced I/O bandwidth implied by compression leads to significant improvements in performance without the need for end-application code changes. We show that other layouts also benefit from mesh compression, and that our compressed representation can be used efficiently for sequential stream processing. Source code for our compressor and mesh access API is freely available at http://www.cs.unc.edu/˜sungeui/RAC.</p><p>We envision many avenues for future work. Foremost, our current scheme is primarily suited for read-only access, and we would like to extend the method to efficiently handle modifications to the mesh, e.g. for geometry processing and interactive editing. The intrinsic partitioning of the mesh into independent clusters suggests the potential for parallel computations. One benefit of our scheme is that it obviates overlapping layers of "ghost" information across clusters. Furthermore, domain decomposition can be efficiently done by assigning clusters to compute nodes. Finally, we plan to investigate extensions of our method to hierarchical data in order to improve the performance of ray tracing and collision detection between massive models.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Published 14</head><label>14</label><figDesc>September 2007.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 1 .</head><label>1</label><figDesc>Clustering of Vertices and Triangles:The interleaved sequence of vertices and triangles is pre-order vertex-compact</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Lemma 1 (</head><label>1</label><figDesc>Triangle existence): For a vertex v introduced in a cluster C(v), at least one triangle in C(v) references v. Lemma 2 (Triangle containment): The triangles incident on a vertex v are either in the same cluster, C(v), or in R (C(v)).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 2 .</head><label>2</label><figDesc>(a) Cache-oblivious layout (b) Z-order space-filling layout (c) Spectral layout (d) Depth-first layout (e) Breadth-first layout Clusters for Different Layouts: This figure highlights clusters of 8K consecutive triangles for different layouts of the Puget Sound terrain simplified to 512K triangles.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head></head><label></label><figDesc>n c i d e n t c o r n e r } ; s t r u c t T r i a n g l e { s t r u c t V e r t e x I n d i c e s { I n d e x v [ 3 ] ; / / v e r t i c e s } ; s t r u c t C o r n e r I n d i c e s { Index nvc [ 3 ] ; / / n e x t v e r t e x c o r n e r s } ; } ;</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head></head><label></label><figDesc>Idx ): Return the coordinates of vertex v. VertexIndices GetTriangle(Index t Idx ): Return the three vertex indices of triangle t. Index GetCorner(Index v Idx , Index t Idx ): Return the corner joining vertex v with triangle t. Index GetVertexCorner(Index v Idx ): Return one of the corners, v.c, incident to v. Index GetTriangleCorner(Index t Idx ): Return one of the corners, t.c, of triangle t. Index GetCornerVertex(Index c Idx ): Return the vertex, c.v, associated with corner c. Index GetCornerTriangle(Index c Idx ): Return the triangle, c.t, associated with the corner c. Index GetNextVertexCorner(Index c Idx ): Return the next corner, c.nvc, incident on the vertex associated with corner c. Index GetNextTriangleCorner(Index c Idx ): Return the next corner, c.ntc, within the triangle associated with corner c.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 4 .</head><label>4</label><figDesc>Page-Based Data Access:The figure illustrates our data access mechanism for a page size of four vertices. Given a vertex index, in this case 4, page and local indices are computed via simple bit operations. When page P 1 is requested, we load the overlapping clusters C 1 and C 2 and return the requested vertex v 4 to the application.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 5 .</head><label>5</label><figDesc>Puget Sound Iso-contour: The contour line (in black) at 720 m elevation was extracted from an unstructured terrain model consisting of 134M triangles. The contour passes through 286K triangles.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig.</head><label></label><figDesc>Fig. 6. Dependence on Cluster Size: The Puget Sound iso-contouring time and compressed file size depend on the cluster size. The highest performance is attained using 4K triangles per cluster, for which the compression ratio is 21:1 and the speedup is 2.4 relative to using no compression.</figDesc></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>We would like to thank Martin Isenburg for sharing his streaming mesh compression code with us. This work was performed under the auspices of the U.S. DOE by LLNL under contract no. W-7405-Eng-48, and was supported in part by a KAIST seed grant.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Valence-driven connectivity encoding for 3D meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Alliez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Desbrun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="480" to="489" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Recent advances in compression of 3D meshes. Advances in Multiresolution for Geometric Modelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Alliez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gotsman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="3" to="26" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<title level="m" type="main">Cache oblivious data structures. Handbook on Data Structures and Applications, chapter 34</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Arge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Brodal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Fagerberg</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Time/space tradeoffs for polygon mesh rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bar-Yehuda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gotsman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="141" to="152" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Universal rendering sequences for transparent vertex caching of progressive meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bogomjakov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gotsman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="137" to="149" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">High throughput compression of double-precision floating-point data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Burtscher</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ratanawoabhan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Data Compression Conference</title>
+		<imprint>
+			<biblScope unit="page" from="293" to="302" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Geometry engine optimization: Cache friendly compressed representation of geometry</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chhugani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kumar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Symposium on Interactive 3D Graphics and Games</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Choe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Seidel</surname></persName>
+		</author>
+		<title level="m">Mesh compression with random accessibility. Israel-Korea Bi-National Conf</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="81" to="86" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">External memory management and simplification of huge meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cignoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Montani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Rocchini</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopigno</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="525" to="537" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">XFastMesh: Fast view-dependent meshing from external memory</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Decoro</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pajarola</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002" />
+			<publisher>IEEE Visualization</publisher>
+			<biblScope unit="page" from="363" to="370" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Single-strips for fast interactive rendering. The Visual Computer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Diaz-Gutierrez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bhushan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gopi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pajarola</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="page" from="372" to="386" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">C-BDAM-Compressed batched dynamic adaptive meshes for terrain rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Gobbetti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Marton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cignoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">Di</forename><surname>Benedetto</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Ganovelli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="333" to="342" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Simplification and compression of 3D meshes. Tutorials on Multiresolution in Geometric Modelling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gotsman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gumhold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kobbelt</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002" />
+			<publisher>Springer</publisher>
+			<biblScope unit="page" from="319" to="361" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Real time compression of triangle mesh connectivity</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gumhold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+			<publisher>ACM SIGGRAPH</publisher>
+			<biblScope unit="page" from="133" to="140" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Compressing large polygonal models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ho</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kriegman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+			<publisher>IEEE Visualization</publisher>
+			<biblScope unit="page" from="357" to="362" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Optimization of mesh locality for transparent vertex caching</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+			<publisher>ACM SIGGRAPH</publisher>
+			<biblScope unit="page" from="269" to="276" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Wavelet-based 3D compression scheme for interactive visualization of very large volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Ihm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Park</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="3" to="15" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Out-of-core compression for gigantic polygon meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gumhold</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+			<publisher>ACM SIGGRAPH</publisher>
+			<biblScope unit="page" from="935" to="942" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<title level="m">Streaming meshes. IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="231" to="238" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Streaming compression of triangle meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Snoeyink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Geometry Processing</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="111" to="118" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Face Fixer: Compressing polygon meshes with properties</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Snoeyink</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+			<publisher>ACM SIGGRAPH</publisher>
+			<biblScope unit="page" from="263" to="270" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m" type="main">Data structures for multiresolution representation of unstructured meshes. Hierarchical and Geometrical Methods in Scientific Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Legakis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Maccracken</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+			<publisher>Springer</publisher>
+			<biblScope unit="page" from="143" to="170" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Multiresolution random accessible mesh compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Choe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lee</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="323" to="332" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Truly selective refinement of progressive meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kim</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lee</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="101" to="110" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">MPEG: A video compression standard for multimedia applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Le</forename><surname>Gall</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communications of the ACM</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="46" to="58" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">A dual graph approach to 3D triangular mesh compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">C</forename><surname>Kuo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE ICIP</title>
+		<imprint>
+			<biblScope unit="page" from="891" to="894" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">An improved vertex caching scheme for 3D mesh rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P.-Y.</forename><surname>Yu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="640" to="648" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Out-of-core construction and visualization of multiresolution surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Symp. on Interactive 3D Graphics</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="93" to="102" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Fast and efficient compression of floatingpoint data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Isenburg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1245" to="1250" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Wavelet based 3D compression with fast random access for very large volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Rodler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Pacific Graphics</title>
+		<imprint>
+			<biblScope unit="page" from="108" to="117" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Edgebreaker: Connectivity compression for triangle meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Rossignac</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="47" to="61" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">3D compression made simple</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Rossignac</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Edgebreaker with zip &amp; wrap on a corner-table. Shape Modelling &amp; Applications</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="278" to="283" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">Space-Filling Curves</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Sagan</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+			<publisher>Springer-Verlag</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Fast triangle reordering for vertex locality and reduced overdraw</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">V</forename><surname>Sander</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Nehab</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Barczak</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2007" />
+			<publisher>ACM SIGGRAPH</publisher>
+		</imprint>
+	</monogr>
+	<note>To appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<monogr>
+		<title level="m" type="main">Range encoder version 1.3</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schindler</surname></persName>
+		</author>
+		<ptr target="http://www.compressconsult.com/rangecoder/" />
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">A multiresolution representation for massive meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Shaffer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Garland</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transaction on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="139" to="148" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Out-ofcore algorithms for scientific visualization and computer graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y.-J</forename><surname>Chiang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Correa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>El-Sana</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization Course Notes</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<monogr>
+		<title level="m" type="main">Triangle mesh compression. Graphics Interface</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Touma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gotsman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="26" to="34" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">External memory algorithms and data structures: Dealing with massive data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Vitter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Computing Surveys</title>
+		<imprint>
+			<biblScope unit="volume">33</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="209" to="271" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Hitting the memory wall: implications of the obvious</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Wulf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Mckee</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM SIGARCH Computer Architecture News</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="20" to="24" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Mesh layouts for block-based caches</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S.-E</forename><surname>Yoon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1213" to="1220" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Cache-oblivious mesh layouts</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S.-E</forename><surname>Yoon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Manocha</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="886" to="893" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Cache-efficient layouts of bounding volume hierarchies</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S.-E</forename><surname>Yoon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Manocha</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="507" to="516" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S.-E</forename><surname>Yoon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Manocha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lindstrom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Pascucci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Openccl</surname></persName>
+		</author>
+		<ptr target="http://gamma.cs.unc.edu/COL/OpenCCL/" />
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

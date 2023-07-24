@@ -1,0 +1,1010 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Towards Utilizing GPUs in Information Visualization: A Model and Implementation of Image-Space Operations</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+				<date type="published" when="2009-10-11">11 October 2009</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bryan</forename><surname>Mcdonnel</surname></persName>
+							<email>bmcdonne@purdue.edu</email>
+							<affiliation key="aff0">
+								<orgName type="institution">Purdue University in West Lafayette</orgName>
+								<address>
+									<region>IN</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+							<affiliation key="aff0">
+								<orgName type="institution">Purdue University in West Lafayette</orgName>
+								<address>
+									<region>IN</region>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Towards Utilizing GPUs in Information Visualization: A Model and Implementation of Image-Space Operations</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date type="published" when="2009-10-11">11 October 2009</date>
+						</imprint>
+					</monogr>
+					<note type="submission">received 31 March 2009; accepted 27 July 2009; posted online</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T18:57+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>GPU-acceleration</term>
+					<term>shader programming</term>
+					<term>interaction</term>
+					<term>high-performance visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1. The classic information visualization pipeline with transformations and states [6]. The &quot;Data image&quot; refinement is shown as a dashed state block. The final transformation is where the new image-space visualization operations are applied to the data buffer.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Modern commodity graphics cards come equipped with their own processing units (GPUs) and are highly programmable, a recent change driven mainly by the computer games industry's increasing needs for visual complexity and flexibility <ref type="bibr" target="#b35">[36]</ref>. This new computing power is now also being used for general purpose computing <ref type="bibr" target="#b27">[28]</ref>. Because the programmable graphics pipeline is based on 3D spatial concepts such as vertices and geometric primitives, the field of scientific visualization has been able to easily adopt GPUs for their own data <ref type="bibr" target="#b38">[39]</ref>. However, the mismatch between these basic data types and more high-level and abstract datasets such as graphs, trees, and free text has meant that the sibling field of information visualization has been slow to catch on.</p><p>We present a refinement of the traditional information visualization pipeline <ref type="bibr" target="#b6">[7]</ref> that extends the final stage of the pipeline with an imagespace step and a set of image-space visualization operations <ref type="figure">(Figure 1</ref>). This provides a natural entry point for utilizing programmable GPUs even in information visualization. The benefit, beyond obvious performance improvements, is to support more flexibility in the display. For example, the method could be used for dynamic queries, adaptive color scale mapping, or data glyph rendering on the graphics card. In particular, the method also allows for offloading computations onto the card, including operations such as correlation, filtering, and querying. The new image-space step also has the advantage of being conceptually consistent with existing visualization systems-it is present in all visualizations, although not all choose to expose it.</p><p>Exposing shader functionality in a visualization does not come without drawbacks, however: (1) the knowledge required to program GPU shaders poses an increasing gap between expert developers and visualization professionals <ref type="bibr" target="#b30">[31]</ref>, and (2) the shader languages themselves are poorly mapped to the visualization domain <ref type="bibr" target="#b2">[3]</ref>. To remedy this, we also present a visual programming environment where the user builds image-space visualization operations using a drag-and-drop interface. The system then generates and compiles matching GLSL <ref type="bibr" target="#b31">[32]</ref> shader code that implements the specified operation. We show how this approach can be used to build both existing common information visualization operations, as well as to define new ones.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">BACKGROUND</head><p>In order to set the scene for our general approach to introducing programmable shaders in information visualization, this section will first describe the theoretical foundations of the field. We then discuss the rise of the GPU, its applications to general computing, and its use in scientific and information visualization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Foundations of Information Visualization</head><p>Shneiderman <ref type="bibr" target="#b34">[35]</ref> presented one of the original taxonomies of information visualization. Card and Mackinlay <ref type="bibr" target="#b5">[6]</ref> followed up with a study of the morphology of the field's design space based on Bertin's semiotics of graphics <ref type="bibr" target="#b1">[2]</ref>. These approaches were later unified <ref type="bibr" target="#b6">[7]</ref> in the concept of the information visualization pipeline. Chi <ref type="bibr" target="#b7">[8]</ref> presented a refinement of the pipeline consisting of a state model supporting user interaction and data operators. These models will serve as starting points for our own refinement that will support offloading to the GPU.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">The Rise of the GPU</head><p>Early computer graphics systems were dominated by fixed-function non-programmable graphics architectures <ref type="bibr" target="#b35">[36]</ref>. These implemented a fixed and highly-optimized rendering path, from input 2D and 3D vertices representing graphics primitives, to actual colored pixels on the screen. However, requirements for more flexible shading specified on a per-surface level led to the introduction of shade trees <ref type="bibr" target="#b8">[9]</ref> and to early shader definition languages (such as RenderMan) <ref type="bibr" target="#b21">[22]</ref>.</p><p>Fueled mainly by the game development and entertainment industry, graphics hardware then improved rapidly in both performance and programmability to the point where a modern card, such as an NVidia GeForce, has more transistors than an Intel Pentium CPU <ref type="bibr" target="#b35">[36]</ref>. In fact, commodity computer graphics chips, more generally known as Graphics Processing Units (GPUs), may be today's most cost-effective computational hardware-their performance growth rate has lately been 2.5-3.0 times a year, which is faster than Moore's Law for CPUs <ref type="bibr" target="#b27">[28]</ref>.</p><p>Controlling the new programmable pipeline is done through machine instructions running on the graphics card, but a number of highlevel languages, based on the work by Hanrahan and Lawson <ref type="bibr" target="#b21">[22]</ref> as well as Proudfoot et al. <ref type="bibr" target="#b28">[29]</ref>, have been developed; examples include NVidia's Cg, Microsoft's High-Level Shading Language (HLSL), and the OpenGL shading language (GLSL) <ref type="bibr" target="#b31">[32]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">General-Purpose GPU Computing</head><p>Programmable GPUs were obviously designed for graphics processing, but a recent trend has been to press the GPU into service for general computation and algorithms, a method known as general-purpose GPU computing (GPGPU) <ref type="bibr" target="#b35">[36]</ref>. In this approach, the GPU is regarded as a stream processor, an idea dating as far back as to Fournier and Fussell <ref type="bibr" target="#b18">[19]</ref>. Because of the high performance and design of the GPU, this allows for highly parallel and efficient computation. However, the underlying shader language still deals in graphics primitives, which requires shader language expertise and also constitutes a mismatch between the problem and implementation domain <ref type="bibr" target="#b2">[3]</ref>.</p><p>To remedy these problems, a number of GPGPU libraries, such as NVidia's CUDA, ATI'S Stream Computing SDK, and the Brook library <ref type="bibr" target="#b2">[3]</ref>, have been developed to lower the expertise requirements and to provide a better match to the computing domain. Beyond these, there exists a wealth of algorithms and data structures that have been ported to run on the GPU; see Owens et al. <ref type="bibr" target="#b27">[28]</ref> for a survey.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">GPUs for Scientific Visualization</head><p>The increased programmability of graphics hardware did not go unnoticed in the scientific visualization community-Weiskopf <ref type="bibr" target="#b38">[39]</ref> gives a summary of current approaches to using shaders to increase performance and the visual quality of scientific visualizations, and Engel et al. <ref type="bibr" target="#b12">[13]</ref> surveys real-time volume rendering techniques using GPUs.</p><p>One reason for this quick adoption may be that the data visualized by scientific visualization generally have a spatial 2D or 3D mapping and can thus be easily expressed in terms of the graphics primitives of current shader languages. In general, the current GPU programming model is well-suited to managing large amounts of such spatial data.</p><p>However, just as for GPGPU computing, visualization researchers acknowledge and address the two-pronged problem of expertise requirements and conceptual mismatch of writing visualization shaders. AVS <ref type="bibr" target="#b36">[37]</ref>, dating back to well before programmable graphics hardware were becoming widely available, allows for building scientific visualizations using small interconnected modules. More recent approaches include block shaders <ref type="bibr" target="#b0">[1]</ref>, realtime shader generation from code snippets <ref type="bibr" target="#b17">[18]</ref>, G 2 -buffers for image-space rendering <ref type="bibr" target="#b9">[10]</ref>, abstract shade trees <ref type="bibr" target="#b26">[27]</ref>, and dynamic shader generation for multi-volume rendering <ref type="bibr" target="#b30">[31]</ref>. Particularly relevant to the framework presented in this paper is Scout <ref type="bibr" target="#b25">[26]</ref>, a pioneering domain-specific language for dynamically creating visualization shaders. Our ambition in this project is to provide an information visualization equivalent to Scout, albeit with a visual and not a textual programming interface.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.5">GPUs for Information Visualization</head><p>Given the widespread adoption of GPU programmability in the field of scientific visualization, it is surprising that the sister field of information visualization has made so little inroads towards similar adoption. Upon surveying the literature, there are only a few papers that utilize the programmable pipeline of modern graphics hardware, and a general approach for information visualization has yet to be presented.</p><p>Existing information visualization systems that do utilize programmable shaders tend to do so as a detail of the implementation, and not a contribution in itself. For example, Johansson et al. <ref type="bibr" target="#b22">[23]</ref> uses floating-point OpenGL textures to store data and renders their parallel coordinate display using a GPU pixel shader. Florek and Novotný <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b16">17]</ref> utilize graphics hardware to improve the rendering performance of scatterplots and parallel coordinates, but do not perform any computations. The ZAME <ref type="bibr" target="#b10">[11]</ref> graph visualization system draws multi-value data glyphs using a fixed GPU-shader architecture.</p><p>In summary, we are aware of no general method for adopting GPU shaders for information visualization research. Our ambition with this paper is to fill this void by suggesting such a framework, as well as to present a visual programming approach for constructing visualization shaders without requiring special expertise in shader programming.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">IMAGE-SPACE VISUALIZATION OPERATIONS (IVOS)</head><p>The traditional information visualization pipeline consists of three states and three basic transitions between them ( <ref type="figure">Figure 1</ref>): starting from a dataset, load the data into structured tables, then mapping the data into visual structures, and finally transforming structures into views that can be displayed on the screen for interpretation by the user. Each of these transformations into the individual states can be user-controlled, closing the feedback loop in the interactive system.</p><p>Although traditionally not exposed in an application, virtually all implementations of the pipeline also sport an ultimate image-space transformation where views of visual structures are transformed into color pixels visible on the screen. We propose to refine the pipeline model by exposing an intermediate state where data has been rasterized into the image space of the screen but has not yet been mapped to colored pixels (see the added "Data Image" step in <ref type="figure">Figure 1</ref>). We argue that this last transformation, from data sampled in screen space to actual graphical pixels, form a class of image-space visualization operations (IVOs) that represent a previously unrecognized part of the design space of visualization and that are particularly amenable to implementation using programmable graphics hardware.</p><p>In this section, we describe a formal model for image-space visualization operations and discuss a basic set of different operation types that this model supports. In the next section, we shall see how these operations can be implemented using current GPU shader languages.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Model</head><p>We define an image-space visualization operation ivo as a function that transforms a data tuple</p><formula xml:id="formula_0">d = (d 1 , d 2 , ..., d n ) sampled in screen space at position (s x , s y ) into an RGBA color pixel p = (p r , p g , p b , p a )</formula><p>for the corresponding position. Operations are applied to a data stream D of ordered data tuples d ∈ D, where each tuple is independent of others.</p><p>The data sampling discussed above is conducted by the actual visualization technique that determines how data-carrying entities should be laid out on the screen. These data entities will then be transformed into actual pixels through a standard rasterization algorithm that samples the geometric appearance of the visualization into the pixel grid, akin to how any visualization renders geometric shapes as colored pixels.</p><p>Image-space visualization operations (IVOs) are limited to local computations, but they may have access to a global state G that is common to all operations for the specific data buffer, as well as local meta-data M stored as part of the data tuple. The global state G includes colors, filters, and data mappings set by the user or the visualization. Metadata M includes the screen position (s x , s y ), local homogeneous coordinates for the pixel (l x , l y ) (where l * ∈ [0, 1] specifies a local position inside the current graphical object, such as a glyph), and a scale factor s relating the local homogeneous coordinate system to the screen.</p><p>Given these definitions, we summarize the function ivo as follows:</p><formula xml:id="formula_1">ivo :: I = d, M, G → p = p r , p g , p b , p a</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Composing Image-Space Operations</head><p>The strength of the IVO framework is that an image-space visualization operation ivo can be composed from several image-space visualization components (IVCs) as long as the resulting function composition obeys the above interface, i.e. accepts a data tuple and produces a color pixel. In particular, this entails that the final step in all IVOs is a color mapping from data value to color. However, it does not impose any additional constraints on the components involved.</p><p>This composition feature allows for building complex IVOs using a set of pre-defined IVCs. In the following section, we give a basic toolbox of components for building visualization operations in this way.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Image-Space Visualization Components</head><p>While image-space operations are limited in their functionality and scope, they nevertheless represent an important and ubiquituous subset of general visualization. Below is a list of categories for IVCs:</p><p>• Color mapping: Maps the data tuple d to a color p using some mapping, such as a color scale. Color mappings are typically one-dimensional, i.e. one value of the tuple would be used as input to generate a corresponding color (such as a grayscale or heatmap), but two-(for example, utilizing hue and saturation for an HSB color map) or even three-dimensional color scales are possible, if perhaps not particularly useful.</p><p>• Glyph rendering: Draws a glyph, such as a miniature barchart, histogram, or line graph, of the contents of the tuple d. The local coordinates l x and l y for the pixel in the glyph are used to deduce which color should be assigned to the pixel (e.g., white if the pixel is outside of a particular bar in a barchart, or the bar color otherwise). By switching between different glyph IVOs, the visual representation could be changed instantly. Examples of suitable glyphs are presented in the ZAME <ref type="bibr" target="#b10">[11]</ref> paper.</p><p>• Representation switching: Selects among different visual representations (such as different glyphs of varying complexity) depending on a control metric, such as the amount of visual space devoted to the graphical object. This kind of component could be used to implement semantic zooming in a visualization, switching between different visual representations depending on the current zoom level for the visualization.</p><p>• Filtering: Filters data by discarding all tuples d that fall outside some range in the data (i.e., producing an empty element / 0 or, alternatively, a fully transparent pixel p trans = (-,-,-,0)). Composing several filter IVCs allow for combining filters to produce conjunctions or disjunctions, such as for dynamic queries <ref type="bibr" target="#b39">[40]</ref>.</p><p>• Computation: Computes some metrics on the data tuple d, like statistical (averages, medians, or standard deviation), arithmetic, trigonometric, or logarithmic operations on the data.</p><p>An example IVO consisting of components in the list above is shown in <ref type="figure" target="#fig_0">Figure 2</ref>. Using the input data tuple d as a data series, it scales the input (computation), filters out entities outside a specific range (filter), and then transforms the data to a barchart glyph by using the local coordinates (l x , l y ) (glyph). The output of the barchart component will either be a value if the tuple is part of a bar in the chart, or / 0 otherwise. This value is mapped to a grayscale pixel (color mapping). </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Data Image Feedback</head><p>IVOs are designed to only use local scope, so that the mapping of one tuple d is independent of other tuples in the stream D. However, under certain constraints, we may read back the image-space contents of the data image ( <ref type="figure">Figure 1</ref>) for analysis and for feedback into the pipeline.</p><p>In this way, we can dynamically adapt the IVO depending on the outcome of this analysis. One example of this would be to support queryby-example <ref type="bibr" target="#b14">[15]</ref>, where the user moves a lens on the visual substrate to select the data ranges to show (i.e., the meaning of this would be "show me all data items that falls within the range of objects I have indicated"). After reading back the values, we can use a filter IVO to discard entities outside the range represented by the selected entities.</p><p>Another application of dynamic adaption of the IVO would be to use the data distribution of a selection lens as input for a color mapping IVO, essentially optimizing the color scale for a particular region of interest on the visualization. <ref type="figure" target="#fig_4">Figure 7</ref> will give an example of this.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">GPU IMPLEMENTATION</head><p>Given the above theoretical framework, we now show how imagespace visualization operators (IVOs) have a natural mapping to implementation as GPU shaders. In order to best understand the underlying concepts, we first discuss a general execution model for GPUs. We then present our approach to implementing IVOs as shaders. We also discuss strategies for reading back and analyzing data images.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">The GPU Shader Programming Model</head><p>In order to present our framework for leveraging modern programmable graphics hardware in information visualization applications, it is necessary to provide some background on the current programming model for shader languages such as Cg, GLSL, and HLSL.</p><p>In essence, GPU programmable shaders are based on the stream programming model <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b18">19]</ref>, where a small program known as a kernel is applied to an input stream and produce an output stream. The key to the high performance provided by graphics cards is that they contain multiple stream processors-modern cards have 128 individual processors or more-capable of executing kernel programs in parallel.</p><p>Kernels: Kernels (or shaders, as they are known in graphics programming) are implemented either as machine code or in a high-level shader language that is later compiled into machine code. The kernel program is invoked by a stream processor for every element in the input stream and used to produce a new element in the output stream. Because the same kernel is executed in parallel across all stream processors of the graphics card, potentially on a whole stream at once, one instance of a computation can never depend on the result of another. This enforced "embarrassing parallelism" is the key feature that enables the high performance of the graphics card.</p><p>Graphics hardware typically supports two different types of shaders (kernels): fragment (or pixel) and vertex shaders 1 . The two types differ in what kind of stream elements they accept and produce. Vertex shaders are invoked once for every 3D vertex passed to the graphics API, whereas fragment 2 shaders are invoked for every pixel (fragment) to be drawn. Thus, vertex shaders produce vertices (3D points), whereas fragment shaders produce fragments (RGBA values).</p><p>Streams and Data Storage: Given that kernels are executed by stream processors on the graphics card, the actual streams are implemented by two-dimensional data arrays called textures. Harking back to its graphical origins, where textures were essentially images pasted on top of 3D graphics primitives to add detail (such as a photograph of a brick wall to simulate a brick-like surface), textures were originally limited to RGBA images (i.e. 8-, 16-, 24-, or 32-bit), but modern graphics cards now support floating-point textures. This, in particular, is what has enabled the rise of general-purpose GPU computing <ref type="bibr" target="#b35">[36]</ref>.</p><p>In other words, modern graphics cards also support floating-point arithmetic and storage, although older or less advanced hardware may be limited to half-precision (16-bit) floating point values. In addition to these, shading languages often give support for data types such as integers, vectors, colors, and even arrays of values.</p><p>Program Execution: Actually invoking a kernel program on an input stream uploaded to the GPU involves three main steps: (1) selecting the rendering target (the output stream)-either an off-screen texture, for pure computation, or the actual visible framebuffer, for rendering; (2) load the kernel program into the stream processors on the graphics card; and finally (3) render a graphics primitivetypically a quadrilateral of the same size as the input stream-with the input stream as a texture pasted on the surface of the primitive.</p><p>For example, to compute the sine of a large number of values, the programmer would fill the input values in a 2D buffer, set the rendering target to another buffer of the same size, install a kernel program that simply computes the sine (using a builtin function in the GPU), and then draw a quadrilateral of the same size while using the input as a texture. Instead of drawing anything on the screen, the shader program will have filled the destination buffer with the result, and the programmer would simply read back the buffer contents into system memory.</p><p>Naturally, GPGPU libraries such as Brook <ref type="bibr" target="#b2">[3]</ref> abstract away from many of the details of writing shader programs, and instead present a coherent stream programming model based on the concepts of kernels and streams. Our ambition with this work is to provide a similar abstraction, but for the information visualization domain.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Shaders as IVOs</head><p>The image-space visualization operations introduced in Section 3 can be easily implemented as fragment shaders in a current GPU shader language. <ref type="figure">Figure 3</ref> shows how we can model an input stream D by simply drawing data to the color framebuffer. The transformation from data to pixel will be performed using a fragment shader that implements the corresponding image-space visualization operation. <ref type="figure">Fig. 3</ref>. Image-space mapping using an IVO (image-space visualization operator) shader. Each data tuple d x,y ∈ D is mapped to its corresponding RGBA pixel p x, ∈ P for screen position (x, y). D is a data buffer rasterized at the same resolution (n × m) as the RGBA framebuffer P. Note that for overlapping visualizations, like 2D scatterplots, there may actually be several data tuples defined for each screen position.)</p><p>Fragment shaders are installed globally in the graphics API for a set of primitives. Because visual structures typically have different classes of graphical entities-for example, a node-link diagram consists of edge entities and node entities-we introduce the concept of layers, which are a set of graphical entities and a corresponding IVO for transforming them to color pixels. Some layers in a visual structure may serve a purely aesthetic purpose or may not carry image-space data, in which case the IVO will be the identity function. <ref type="figure" target="#fig_1">Figure 4</ref> shows our implementation model for mapping IVOs to the GLSL <ref type="bibr" target="#b31">[32]</ref> shader language. Like all fragment shaders, and in keeping with the IVO model, the output is always a colored RGBA pixel. In our prototype implementation, the input data tuple d is passed simply as the color of the primitive. In other words, when drawing the graphical entities for a layer, the program will simply pass image-space data by setting the data as the color for each primitive (such as the marks in a scatterplot). A more scalable solution that would support a large number of data points d i in d would be to transfer the data as floatingpoint textures using the multitexture functionality of modern graphics cards. Essentially, instead of reading from a single input color, the shader would sample each texture buffer to retrieve the n data values. Beyond the data inputs in the color argument, the shader IVO will receive the local coordinates of a fragment in a primitive using its texture coordinates. To draw a glyph, the application would simply draw a 2D rectangle (or another graphics primitive) and initialize the texture coordinates from (0, 0) to (1, 1) for the respective corner points. These values will define the local coordinate system for the primitive.</p><p>To illustrate our GLSL shader model, we return to the example IVO in <ref type="figure" target="#fig_0">Figure 2</ref>. <ref type="figure" target="#fig_2">Figure 5</ref> shows GLSL code that implements this particular IVO. Each participating component (IVC) in the IVO has been denoted in the source with a comment and a number (e.g., (1)). <ref type="figure" target="#fig_3">Figure 6</ref> shows a screenshot of a 2D scatterplot drawn using this IVO.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Implementing Data Image Feedback</head><p>To implement the data image feedback of Section 3.4, we introduce a G-buffer <ref type="bibr" target="#b32">[33]</ref> as an intermediate rendering target implemented using an off-screen framebuffer object (FBO). The OpenGL FBO extension enables us to use the graphics hardware to render the data primitives   to a floating-point off-screen render target (one per layer). We can then read back this buffer, analyze it, and use the results to produce the final color framebuffer image. Note that there is no need to redraw the data image until the view changes-instead, we transform the data image into a framebuffer by drawing a single 2D rectangle covering the whole screen and with the data image as a texture. <ref type="figure" target="#fig_4">Figure 7</ref> gives an example of a dynamic colorscale adaption technique implemented using data image feedback and a shader IVO. A similar approach could be used for a query-by-example <ref type="bibr" target="#b14">[15]</ref> implementation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">DOMAIN-SPECIFIC VISUAL PROGRAMMING ENVIRONMENT</head><p>So far in this paper, we have proposed a theoretical extension to the information visualization pipeline and introduced a new class of imagespace visualization operations. We have also shown how these operations can be easily mapped to current shader languages, and given examples for the GLSL shader language. However, there are two main obstacles remaining for making this approach generally usable: Expertise. Writing shaders requires a great level of programming expertise, increasing the gap between expert developers and visualization professionals <ref type="bibr" target="#b30">[31]</ref>; and</p><p>Conceptual mismatch. There is a conceptual mismatch between the graphics-centric shader language, and the data-centric visualization operations <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b25">26]</ref>.</p><p>In other words, there is a need for a domain-specific language, built on top of the actual shader language, that maps directly to the visualization domain and that does not require shader expertise to use.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">System Architecture</head><p>We have developed GPUVIS, a visualization environment supporting image-space visualization operations. To fulfill the above need, we provide a visual programming interface for building IVOs. <ref type="figure">Fig. 8</ref>. GPUVis system architecture. Visualizations are loaded as plugins depending on the type of dataset and consists of one or several layers, each with its own IVO. Depending on the parameters exposed by the IVO, the application control panel will be populated with the corresponding GUI controls to specify the parameters. <ref type="figure">Figure 8</ref> shows the modular GPUVis system architecture. The system is based around a central dataset structure. Depending on the type of the data the user loads into the dataset, the environment will instantiate a corresponding visualization plugin (i.e., a scatterplot for multidimensional data, a treemap <ref type="bibr" target="#b33">[34]</ref> for hierarchical data, a node-link diagram for graphs, etc). Each visualization manages one or more layers (as defined above), and each layer contains the graphical primitives making up the visualization and an IVO-editable by the user in a visual IVO editor (described in detail in Section 5.3).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">User Interaction</head><p>Interaction is managed by the GPUVis control panel, a tabbed layout with one tab page per each layer. The user can control the data map-ping between the dataset and the graphical primitives for each layer using controls in the panel. General interaction techniques, such as zoom, pan, and drill-down, are implemented by each visualization.</p><p>IVOs in our visualization environment are built using the visual IVO editor. Beyond the actual operation (implemented as a GLSL shader), an IVO also contains a symbol table of parameters and their types (such as color, value, interval, etc). Every time a particular layer's IVO is edited, the system will iterate over the symbol table and create a matching user interface component for controlling the parameter (for example, a color generates a color chooser dialog, a bounded value generates a slider, and an interval generates a range slider <ref type="bibr" target="#b39">[40]</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Visual IVO Editor</head><p>In order to circumvent the need for expert programming skills when constructing custom shader IVOs, the GPUVis system contains a visual IVO editor. This visual programming environment abstracts IVO development into a dataflow-style pipeline composed of component blocks, each representing an image-space visualization component (ISVC, see Section 3.3), implemented using a small segment of GLSL shader code. The blocks are arranged and connected to represent the desired image-space visual operation, and a GLSL shader is generated from the graphically described pipeline. This generated shader can then be directly used in the visualization environment.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3.1">Background</head><p>Visual programming <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b29">30]</ref> is the use of graphics to specify a program.</p><p>One of the many uses of visual programming languages (VPLs) is for graphics and visualization. ConMan <ref type="bibr" target="#b20">[21]</ref> is a VPL for building graphical applications by connecting components in an approach similar to UNIX pipes. Building on the same design principles is AVS <ref type="bibr" target="#b36">[37]</ref>, a visual programming system for scientific visualization where each individual module may have an associated user interface component. In related work, Burnett et al. <ref type="bibr" target="#b3">[4]</ref> discuss the use of VPLs for interactively steering and modifying scientific computations through visualization.</p><p>More recent visualization systems have also been designed around a visual programming paradigm and serve as inspiration for our work. GeoVISTA Studio <ref type="bibr" target="#b24">[25]</ref> is a flow-based visual programming environment built using JavaBeans components for geographic visualization. The DataMeadow <ref type="bibr" target="#b11">[12]</ref> visual exploration system combines a dataflow VPL with multidimensional visualization techniques and annotation functionality. Finally, Improvise <ref type="bibr" target="#b37">[38]</ref> is a highly configurable and adaptive visualization system for multiple coordinated views.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3.2">Visual Pipeline Construction</head><p>Custom IVO creation begins with the visual depiction of the desired operation. As stated above, this is accomplished through the use of objects called component (ISVC) blocks. These blocks represent a few lines of GLSL shader code that perform a distinct function. Each block has inputs and outputs, allowing it to accept data from preceding blocks, manipulate that data according to its particular function, and make the result available for succeeding blocks. <ref type="figure" target="#fig_5">Figure 9</ref> shows the anatomy of two different types of blocks. The specific properties of a given ISVC block (such as number of inputs/outputs and the corresponding GLSL shader code) are organized in individual XML files. These files are loaded when the editor starts, and are made available to the designer in the pipeline toolbox. The desired blocks can then be dragged from the toolbox and dropped in the pipeline workbench. Once there, the blocks can be arranged and connected to form the envisioned pipeline. <ref type="figure" target="#fig_6">Figure 10</ref> shows the visual programming environment as well as a sample pipeline. This pipeline corresponds to a shader very similar to the one described in <ref type="figure" target="#fig_0">Figure 2</ref>, excluding the filtering step. Data flows through the pipeline from left to right. i0, i1, i2, i3 are the four input data values for the bar graph and R, G, B, A are the four color components of the output pixel.</p><p>Since the assembled visual pipeline corresponds to actual GLSL shader code, a certain level of awareness of the underlying IVO model is needed. For example, since an IVO always produces a pixel color value, every pipeline must end with the four elements of that color value (as in <ref type="figure" target="#fig_6">Figure 10</ref>). Also, the values that each block accepts as inputs, and the values that it makes available as outputs, have data types (float, vec3, vec4, etc). Connected outputs and inputs must have matching data types for the IVO to be valid.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3.3">Code Generation</head><p>Once the designer is satisfied with the visual representation of the IVO pipeline, actual GLSL code must be generated from the diagram. This is done in two separate stages using a breadth-first traversal:</p><p>1. Dependency Resolution. If a given block depends on another block's output, the output variable of the first block must be assigned correctly to the input variable of the second block. Dependencies must be propagated through the whole pipeline.</p><p>2. Code Fragment Assembly. Once all dependencies have been resolved, the individual code fragments must be assembled together in the order specified by the pipeline design.</p><p>For a given visualization to have meaningful user interaction, additional information is needed. When the shader code is generated, a symbol table is also built for all uniform variables that the shader depends on. These uniform variables are constant on a per-layer basis, and can be set by the user through the use of variable appropriate components (sliders, range-sliders, color choosers, and spinners).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Examples</head><p>The GPUVis environment currently supports multidimensional scatterplot visualizations as well as basic node-link and treemap <ref type="bibr" target="#b33">[34]</ref> vi-sualizations. We also provide a separate colorscale optimization tool (depicted in <ref type="figure" target="#fig_4">Figure 7</ref>) built using the principles discussed in this paper.</p><p>Scatterplot: As mentioned earlier, <ref type="figure" target="#fig_3">Figure 6</ref> shows the scatterplot visualization in the GPUVis system, here depicted with a glyph-based shader for a car dataset. Each glyph is drawn by the CPU and represents a car in the scatterplot. The GPU fills in the contents of the glyph to shows additional dimensions beyond the two captured by the orthogonal axes of the plot. By changing the data flow mappings, the data displayed in the barcharts can be changed. Range sliders generated for the IVO allows for filtering out data based on each car's data.</p><p>Node-Link Diagram: <ref type="figure" target="#fig_7">Figure 11</ref> shows the GPUVis node-link diagram being used for visualizing a file system hierarchy. The visualization is split into two layers, one for nodes and one for edges. Nodes and their layout are handled by the CPU, but their individual glyphs are drawn by the GPU. In the example, the user has added a glyph IVO to the node layer for drawing a polar barchart on the surface of each node. This glyph can be utilized to display attributes associated with a file, such as file size, time since last modified, and time since creation. Treemap: In <ref type="figure" target="#fig_0">Figure 12</ref>, the same file system hierarchy is visualized using a standard slice-and-dice treemap, except the application is using a combined barchart and cushion IVO. This enables the file attributes to be displayed on the surface of the barchart, while indicating borders using the cushion fading at the edges of each node area. Performance: <ref type="table">Table 1</ref> gives some performance measurements for all three of the above examples where we compare rendering rate (measured as number of frames per second) between a pure OpenGL implementation and a GPU implementation of the same visualization.</p><p>As can be seen from these results, the GPU implementation is generally faster, but not significantly so. Only for the relatively complex visual representation in the node-link diagram, where the glyphs are circular, are the benefits of utilizing the GPU obvious.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Visualization</head><p>OpenGL GPUVis scatterplot (barcharts) 69.5 77.5 node-link diagram <ref type="table">(polar barcharts)</ref> 19.9 68.0 treemap (barcharts) 89.8 99.8 <ref type="table">Table 1</ref>. Performance results (frames per second) for the three example visualizations implemented with both pure OpenGL as well as GPUVis (Intel Duo 2.6GHz, 3.5GB RAM, NVIDIA Quadro NVS 140M).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">Implementation Notes</head><p>The GPUVIS environment was implemented in Java using the JOGL <ref type="bibr" target="#b2">3</ref> OpenGL bindings. It uses the OpenGL shading language (GLSL) <ref type="bibr" target="#b31">[32]</ref> for the IVO shader implementations and the OpenGL framebuffer object (FBO) extension for the G-buffer <ref type="bibr" target="#b32">[33]</ref> implementation. The visual IVO editor is implemented using Swing and Java2D components.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">DISCUSSION</head><p>In this paper, beyond presenting an approach for how to actually apply programmable shaders to the information visualization domain, we are emphasizing overcoming the expertise and conceptual hurdles of writing shaders, much like Brook <ref type="bibr" target="#b2">[3]</ref> for general-purpose computing and Scout <ref type="bibr" target="#b25">[26]</ref> for scientific visualization. However, unlike these tools, our prototype implementation uses a visual and not a textual programming interface. The reason for this design choice was to reinforce the information visualization pipeline metaphor that our paper builds on and extends, and this choice also permeates the interaction and visual design of the visual IVO programming editor. However, a textual interface would be a simple extension to the GPUVis system.</p><p>There has been some effort in the GPGPU community towards mapping abstract, high-level data structures on the GPU <ref type="bibr" target="#b23">[24]</ref>. In particular, recent work on graph layout algorithms <ref type="bibr" target="#b19">[20]</ref> utilizes the GPU to achieve high performance. However, this mapping is currently specific to a particular data structure, and no general methodology seems to exist. The approach taken in this paper is different-we do not attempt to map the data structures to the GPU, but rather utilize the highly optimized hardware-accelerated rasterization pipeline for "drawing" the data and perform image-space visualization on the fly. We believe that this is a better approach, at least until GPUs begin supporting more general data structures beyond the current floating-point model.</p><p>Many of the techniques and examples presented in this paper may appear somewhat technical and implementation-specific. Nevertheless, it is often implementation details that decide whether an application will scale to massive datasets <ref type="bibr" target="#b13">[14]</ref>. Furthermore, this new class of image-space visualization operations identified here fills an important and ubiquituous role in the rendering of any information visualization application, and formalizing this class can only serve to further solidify the foundations of information visualization.</p><p>In some fashion, this work can be seen as closing the circle for graphics hardware. Originally developed to draw pixels on the screen, recent developments in computer graphics has turned the GPU into an all-purpose, highly parallel computing device that can be utilized for virtually any purpose. With this work, we propose to turn the emphasis back to rendering, but to retain the computational aspects as well. This could be particularly important for visual analytics, where there is a strong need for computation in the visualization process.</p><p>In this paper, we have explored ways to harness programmable GPUs for information visualization. The major hurdle against adopting these methods for information visualization has been the mismatch between abstract data structures such as trees, graphs, and free text and the floating-point model of the graphics hardware. We consider this work to present two major contributions towards such adoption: (1) the theoretical concept of image-space visualization operations (IVOs) that suggest how to utilize shaders for information visualization in the first place, and (2) the practical implementation of a visual programming environment for building shaders that implement the IVO concept.</p><p>However, this is only an initial step towards utilizing the full potential of graphics hardware. The approach we take here is limited to imagespace operations in the ultimate transformation from data to colored pixels in the visualization pipeline, and does not support offloading whole visualizations or complex datasets to the GPU. In the future, we would like to integrate even more computational components in the visualization pipeline, especially for supporting visual analytics applications. Also, we would like to explore the use of CUDA or OpenCL instead of GLSL as an output language.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>Simple IVO that scales the value in the input tuple d, filters the data (discarding it if it falls outside a time range (t 1 ,t 2 )), transforms the data point to a barchart glyph of the data series in d, and finally maps the value to grayscale (producing an RGBA pixel p).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 4 .</head><label>4</label><figDesc>The GPUVis IVO shader model. Generated GLSL fragment shaders accept data values on a per-fragment level encoded in the OpenGL color and texture coordinate variables, as well as meta-values (e.g. filters, colors, scaling) as uniform arguments on a per-layer level.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 5 .</head><label>5</label><figDesc>GLSL fragment shader for an example IVO.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 6 .</head><label>6</label><figDesc>Scatterplot visualization for a car dataset (9 dimensions, 406 cases) with a barchart glyph IVO.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 7 .</head><label>7</label><figDesc>Dynamic colorscale optimization IVO. We draw the data to a Gbuffer FBO, read it back, analyze the contents of the sampling lens, and then change the colorscale optimized for the lens contents.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 9 .</head><label>9</label><figDesc>Sample component blocks. The block on the left computes the average of the 2 input values, while the block on the right allows the pipeline designer to provide the IVO with a constant value.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 10 .</head><label>10</label><figDesc>Visual programming environment and sample shader pipeline.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 11 .</head><label>11</label><figDesc>Node-link visualization with a polar barchart glyph IVO.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 12 .</head><label>12</label><figDesc>Treemap visualization using a cushion and barchart IVO.</figDesc></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="1">New graphics cards also support a new type called a geometry shader.<ref type="bibr" target="#b1">2</ref> Fragments are pixels with additional associated data such as color, depth, texture coordinates, etc, and will be drawn if not discarded during rasterization.</note>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="3">http://jogl.dev.java.net/</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>Thanks to members of the AVIZ and INSITU research groups for their feedback on the early stages of this research. This work was conducted under the Purdue SURF 2009 program for undergraduate research.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Building block shaders</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">D</forename><surname>Abram</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Whitted</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics (SIGGRAPH &apos;90 Proceedings)</title>
+		<imprint>
+			<date type="published" when="1990-08" />
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="283" to="288" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">Semiology of graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Bertin</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1983" />
+			<publisher>University of Wisconsin Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Brook for GPUs: Stream computing on graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Buck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Foley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Horn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sugerman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Fatahalian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Houston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="777" to="786" />
+			<date type="published" when="2004-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Toward visual programming for steering scientific computations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Burnett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Hossli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Pulliam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">V</forename><surname>Voorst</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Yang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computational Science &amp; Engineering</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="44" to="62" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Special issue on visual programming</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Burnett</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mcintyre</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">The structure of the information visualization design space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Card</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Mackinlay</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE Symposium on Information Visualization</title>
+		<meeting>the IEEE Symposium on Information Visualization</meeting>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="92" to="99" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Readings in information visualization: Using vision to think</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Card</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Mackinlay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+			<publisher>Morgan Kaufmann Publishers</publisher>
+			<pubPlace>San Francisco</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">An operator interaction framework for visualization systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">H</forename><surname>Chi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">T</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE Symposium on Information Visualization</title>
+		<meeting>the IEEE Symposium on Information Visualization</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="63" to="78" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Shade trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">L</forename><surname>Cook</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics (Proceedings of SIG-GRAPH 1984)</title>
+		<imprint>
+			<date type="published" when="1984" />
+			<biblScope unit="page" from="223" to="231" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">The G 2 -buffer framework</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Eissele</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Simulation und Visualisierung</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="287" to="298" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">ZAME: Interactive large-scale graph visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Elmqvist</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T.-N</forename><surname>Do</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Goodell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Henry</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-D</forename><surname>Fekete</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE Pacific Visualization Symposium</title>
+		<meeting>the IEEE Pacific Visualization Symposium</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="215" to="222" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">DataMeadow: A visual canvas for analysis of large-scale multivariate data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Elmqvist</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Stasko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Tsigas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Visualization</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="page" from="18" to="33" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Real-time Volume Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hadwiger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Rezk-Salama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006" />
+			<pubPlace>AK Peters</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Interactive information visualization of a million items</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J.-D</forename><surname>Fekete</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE Symposium on Information Visualization</title>
+		<meeting>the IEEE Symposium on Information Visualization</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="117" to="124" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Enhanced dynamic queries via movable filters</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Fishkin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">C</forename><surname>Stone</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM CHI&apos;95 Conference on Human Factors in Computing Systems</title>
+		<meeting>the ACM CHI&apos;95 Conference on Human Factors in Computing Systems</meeting>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="415" to="420" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Using modern hardware for interactive information visualization of large data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Florek</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Physics and Informatics</title>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+		<respStmt>
+			<orgName>Comenius University</orgName>
+		</respStmt>
+	</monogr>
+	<note>Master&apos;s thesis, Faculty of Mathematics</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Interactive information visualization using graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Florek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Novotný</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Poster Proceedings of Spring Conference on Computer Graphics</title>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Dynamic code generation for realtime shaders</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Folkegard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Wesslén</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SIGGRAD</title>
+		<meeting>SIGGRAD</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="11" to="15" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">On the power of the frame buffer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Fournier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Fussell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="103" to="128" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Multi-level graph layout on the GPU</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Frishman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1310" to="1319" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">ConMan: A visual programming language for interactive graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">E</forename><surname>Haeberli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics (SIGGRAPH &apos;88 Proceedings)</title>
+		<imprint>
+			<date type="published" when="1988-08" />
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="page" from="103" to="111" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">A language for shading and lighting calculations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Lawson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics (SIGGRAPH &apos;90 Proceedings)</title>
+		<imprint>
+			<date type="published" when="1990-08" />
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="289" to="298" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Revealing structure in visualizations of dense 2D and 3D parallel coordinates</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Johansson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Ljung</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Jern</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Cooper</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Visualization</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="125" to="136" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Glift: Generic, efficient, random-access GPU data structures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">E</forename><surname>Lefohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Sengupta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kniss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Strzodka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Owens</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="60" to="99" />
+			<date type="published" when="2006-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">GeoVISTA Studio: A codeless visual programming environment for geoscientific data analysis and visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">G M</forename><surname>Takatsuka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computers &amp; Geosciences</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Scout: A hardware-accelerated system for quantitatively driven visualization and analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">S</forename><surname>Mccormick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">T</forename><surname>Inman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">P</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Roth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE Conference on Visualization</title>
+		<meeting>the IEEE Conference on Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="171" to="178" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Abstract shade trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mcguire</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Stathis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Krishnamurthi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM Symposium on Interactive 3D Graphics and Games</title>
+		<meeting>the ACM Symposium on Interactive 3D Graphics and Games</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="79" to="86" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">A survey of general-purpose computation on graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Owens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Luebke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Govindaraju</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Harris</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">E</forename><surname>Lefohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">J</forename><surname>Purcell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="80" to="113" />
+			<date type="published" when="2007-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">A real time procedural shading system for programmable graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Proudfoot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Mark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Tzvetkov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of SIGGRAPH</title>
+		<meeting>SIGGRAPH</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="159" to="170" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Special issue on visual programming</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">I</forename><surname>Robert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Grafton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<date type="published" when="1985" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Dynamic shader generation for GPU-based multi-volume ray casting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Rößler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">P</forename><surname>Botchen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="66" to="77" />
+			<date type="published" when="2008-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">The OpenGL Shading Language</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">J</forename><surname>Rost</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">M</forename><surname>Kessenich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Lichtenbelt</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2004" />
+			<publisher>Addison-Wesley</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Comprehensible rendering of 3-D shapes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Saito</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Takahashi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics (SIGGRAPH&apos;90)</title>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="197" to="206" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Tree visualization with tree-maps: A 2-D space-filling approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="92" to="99" />
+			<date type="published" when="1992-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">The eyes have it: A task by data type taxonomy for information visualizations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE Symposium on Visual Languages</title>
+		<meeting>the IEEE Symposium on Visual Languages</meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="336" to="343" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Using modern graphics architectures for general-purpose computing: A framework and analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">J</forename><surname>Thompson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Oskin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE/ACM International Symposium on Microarchitecture</title>
+		<meeting>IEEE/ACM International Symposium on Microarchitecture</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="306" to="317" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">The application visualization system: A computational environment for scientific visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Upson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Faulhaber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kamins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Laidlaw</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Schlegel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Vroom</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Gurwitz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Dam</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="30" to="42" />
+			<date type="published" when="1989-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Building highly-coordinated visualizations in Improvise</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Weaver</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE Symposium on Information Visualization</title>
+		<meeting>the IEEE Symposium on Information Visualization</meeting>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="159" to="166" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<monogr>
+		<title level="m" type="main">GPU-Based Interactive Visualization Techniques</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2006" />
+			<publisher>Springer Verlag</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">The dynamic HomeFinder: Evaluating dynamic queries in a real-estate information exploration system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Williamson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Shneiderman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM SIGIR Conference on Research and Development in Information Retrieval</title>
+		<meeting>the ACM SIGIR Conference on Research and Development in Information Retrieval</meeting>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="338" to="346" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

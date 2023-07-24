@@ -1,0 +1,604 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Fast, Memory-Efficient Cell Location in Unstructured Grids for Visualization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christoph</forename><surname>Garth</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Kenneth</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+						</author>
+						<title level="a" type="main">Fast, Memory-Efficient Cell Location in Unstructured Grids for Visualization</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:56+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Unstructured grids</term>
+					<term>cell location</term>
+					<term>interpolation</term>
+					<term>vector field visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1. A visualization of the complexity of unstructured cell location on a plane in a 3D delta wing dataset using the hierarchical scheme developed in this paper. In the left image, the color of each pixel encodes the number of tree leaves overlapping the location point on the plane. The right image maps the number of grid cells that must be tested for point inclusion to locate the correct cell.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Among the many different forms of describing the data resulting from scientific simulation, unstructured grids represent one of the most complex and difficult forms. The storage overhead that results from explicitly representing the connectivity of the grid elements or cells is however balanced by the ability to aggressively adapt the spatial resolution of such grids to the complexity of the simulation, resulting in an overall reduction in storage overhead and computational complexity of performing the simulation.</p><p>Many visualization algorithms require access to not only the variable values stored at the vertices of such a grid, but apply interpolation to reconstruct continuous fields. This is especially true for vector field visualization, where numerical integration is one of the key techniques to approximate integral curves that model the trajectories of virtual massless particles. This integration procedure is based on the interpolation of a vector field at arbitrary locations inside a dataset's domain of definition. For unstructured grids, this problem is especially hard: for every interpolation point, the cell containing that point must be identified. This cell location problem requires the application of spatial data structures that quickly narrow down the range of candidate cells that are then tested for the inclusion of the interpolation point.</p><p>• C. <ref type="bibr">Garth</ref>  In this context, the challenge for such data structures is twofold: first, they must be able to take into account the greatly varying cell sizes often found in modern adaptive unstructured grids. Second, and more importantly, the memory size of this supporting data structure must not grow beyond a reasonable bound. This latter aspect is especially important when considering the ever-growing sizes of modern simulation datasets. Due to the complexity in both design and implementation of cell location data structures, many interesting methods of vector field visualization are often not designed for or tested against unstructured grids. This especially holds true for GPU-based flow visualization, where the massive computational power available through such devices is applied to provide advanced real-time and interactive visualization tools. Unstructured grids are virtually absent from this innovative field.</p><p>In this paper, we present a novel data structure and associated construction scheme for cell location that can accommodate very large and complex unstructured grids and delivers both good performance and memory efficiency. It allows the treatment of unstructured grids with tens to hundreds of millions of unstructured elements of mixed type on workstation-class machines. Furthermore, it is designed for both CPUs and GPUs, and the same basic data structure directly applies to both classes of devices.</p><p>The celltree data structure we propose (Section 3) is based on the bounding interval hierarchy <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b21">22]</ref> space partitioning scheme, which we supplement with a fast construction algorithm (Section 3.2) using a heuristic to determine good spatial partitions. We examine the performance of our system using a number of benchmarks derived from typical visualization scenarios, and determine the influence of certain parameters of our construction scheme on memory footprint and the cell location speed (Section 5), and provide default parameters that work well over a wide range of grid sizes and complexities. Moreover, taking advantage of the fact that our data structure can be easily coupled with existing visualization systems, we perform a comparative performance and robustness analysis (Section 6). Finally, we demonstrate how our cell location scheme can be used on GPUs to achieve interactive vector field visualization through massive particle advection (Section 7).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">BACKGROUND AND SCOPE</head><p>In the following, we assume a basic setting in which an unstructured grid is described in the form of ordered lists of vertices, where cells of different types are defined as a tuple of indices. From the cell type and indices, the topology of the cell is implicitly defined. The cell type also implies an interpolation scheme, or alternatively a set of basis functions, which can be used to translate between (cell-)local and global coordinates. For our purposes, the exact nature of the per-cell interpolant is not pertinent. Global interpolation of variables over the grid domain is then performed by first locating the unique cell that includes the interpolation point, i.e. performing cell location, and then interpolating the variable locally within the cell. This setting includes the overwhelming majority of vector-field visualization use cases for datasets produced by unstructured simulation codes. While we concern ourselves with the three-dimensional case here, all considerations in this paper apply equally to two-dimensional datasets.</p><p>Among the properties of unstructured grids produced by adaptive simulation codes, the typically highly non-uniform spatial distribution of vertices is one of the complicating factors in cell location. Other problematic aspects derive from the geometric properties of the cells found in such grids: often generated by automated meshing schemes and aggressively adapted to the complexity of the underlying problem, individual cells possess very large aspect ratios or are non-convex (e.g. twisted hexahedra), making the grid complicated to work with from a numerical point of view. Occasionally, numerical oddities such as inverted or overlapping cells resulting from errors in grid generation are encountered in practice.</p><p>Performance of cell location data structures is of paramount importance, since variable interpolation is often among the most frequent operations in visualization algorithms. A typical example is integrationbased visualization, in which integral curves are constructed by evaluating a vector field repeatedly. While a single integral curve already requires hundreds to tens of thousands evaluations, modern visualization techniques such as integral surfaces <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b7">8,</ref><ref type="bibr" target="#b16">17]</ref> or Lagrangian techniques <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b7">8]</ref> in turn require the computation of thousands to millions of integral curves. Furthermore, data structure construction time and memory overhead should be small, otherwise, a scheme can quickly become infeasible for larger datasets.</p><p>We proceed to survey and discuss previous work under these constraints.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Cell Location</head><p>Cell location typically has two stages: first, a spatial data structure is used to quickly narrow down the number of cell candidates; then, each of these candidate cells is checked for inclusion of the interpolation point. This latter operation typically requires the computation of local coordinates and must be considered expensive. Thus, keeping the number of candidate cells small is a crucial property for any cell location scheme. Early approaches to this problem <ref type="bibr" target="#b15">[16,</ref><ref type="bibr" target="#b20">21]</ref> employed uniform spatial subdivision in the form of octrees. Each leaf of the octree stores the indices of cells whose bounding box overlaps with the leaf extents. Leaves are subdivided until either a maximum depth is reached, or, alternatively, if the number of cell indices falls below an upper bound. Cell location then proceeds by traversing the octree from the root and descending through appropriate children until a leaf is reached, which then contains all the candidate cells. This approach does not work well with non-uniform vertex distributions, requiring either too many levels of subdivision and thus a considerable memory overhead, or does not shrink the candidate cell range down to acceptable levels. An implementation of this technique is the default cell location algorithm in the VTK library, and we compare it experimentally with our approach (cf. 6).</p><p>Using kd-trees instead of octrees facilitates non-uniform subdivision, at the cost of generally deeper trees and a storage overhead. Recently, Andrysco and Tricoche <ref type="bibr" target="#b0">[1]</ref> presented an efficient storage scheme for kd-trees and octrees, termed Matrix *Trees, that addresses the overhead of such data structures by employing an efficient storage scheme based on compressed sparse row (CSR) storage of tree levels; essentially, the tree is encoded as a sparse matrix in CSR representation. This alleviates most of the memory overhead of kd-trees, and they are able to perform cell location with reduced time and space complexity, and even demonstrate their scheme on GPUs.</p><p>The memory efficiency of both kd-trees and octrees suffers from the duplication of indices of cells that overlap multiple leaves of the tree; the corresponding cell index must be stored in each leaf. For large datasets and deep trees, this can often lead to a significant multiplication of the overall number of indices stored, and storage for these lists can exceed the dataset representation in size. To aggravate this problem, the number of duplications is highly dependent on the geometry and adjacency of the grid cells, and thus essentially unpredictable.</p><p>An innovative approach to cell location was given by Langbein et al. <ref type="bibr" target="#b11">[12]</ref>. They base their spatial subdivision on the vertices of the unstructured grid to quickly locate a grid vertex close to the interpolation point. Making use of cell adjacency information, an indicent cell is identified and a ray is propagated through the grid towards the interpolation point using cell walking. Through clever storage of the cellvertex incidence information, the storage overhead can be kept reasonable at the cost of a computational overhead. The authors demonstrate successful application of their scheme to a number of large and complex adaptive unstructured grids with several millions of cells on workstation class machines. However, there are a number of shortcomings to this approach. First, it does not work with unstructured grids that contain T-junctions or consist of multiple independent parts with differing vertex indexing, which is often the case for data obtained from parallel simulations involving decomposed grids. In these cases, the cell-vertex incidence cannot be reliably constructed, or only with significant preprocessing effort. Second, this approach has problems in the vicinity of sharp object boundaries, since the ray from the initial point can exit the grid and then has to be restarted from a different point, which requires complicated logic and renewed traversal of the point-based kd-tree. Finally, the separation of cell inclusion tests from cell face intersection tests can result in numerically ambiguous situations; this is especially problematic for cells with high aspect ratio. Last, the storage overhead incurred by the cell adjacency information is still significant, and its construction requires non-negligible computational effort. This approach is implemented in the FAnToM visualization tool <ref type="bibr" target="#b19">[20]</ref>, and we directly compare the performance against our approach (see Section 6).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">GPU-based Vector Field Visualization</head><p>Many interesting papers have been presented in the recent years that take advantage of the massive computational power of GPUs to deliver interactive visualization of vector fields, using e.g. large amounts of particles <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b2">3]</ref>, integral surfaces <ref type="bibr" target="#b1">[2]</ref>, or dye advection techniques <ref type="bibr" target="#b18">[19]</ref>. However, most of these techniques have been pioneered on uniform data representations; and unstructured grids are rarely used in GPUbased vector field visualization. The notable exception is the work by Schirski et al. <ref type="bibr" target="#b14">[15]</ref>, who presented a GPU-based scheme for particle tracing over purely tetrahedral grids using cell-adjacency based tetrahedral walking; however, locating the initial cell for a particle is still performed on the CPU, and a large overhead is incurred through the cell adjacency storage. Thus, there is a strong limit for the size of grids on which this scheme can be applied.</p><p>The celltree scheme we present here is directly applicable to GPUbased vector field visualization algorithms. Our scheme works on arbitrary unstructured grids, and no grid transformation such as tetrahedral decomposition is required to treat large grids on the GPU, resulting in storage advantages and improved robustness. The celltree is not geared towards a specific access pattern such as e.g. the cell walking used in <ref type="bibr" target="#b14">[15]</ref> for particle tracing, and can thus support a wide range of visualization algorithms that rely on unstructured grid cell location.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Ray Tracing</head><p>Spatial subdivision data structures play a very prominent role in the field of ray tracing. There, the focus is on accelerating ray-triangle intersection instead of cell location. However, the two problems share some similar traits. The cell location scheme we present here is quite similar to the skd-tree approach presented by Wächter and Keller <ref type="bibr" target="#b17">[18]</ref> and Zachmann <ref type="bibr" target="#b21">[22]</ref>, which among the possible candidate data structures presents a good trade-off of memory-efficiency and speed.</p><p>Furthermore, the construction of efficient bounding-interval or bounding-volume hierarchies has been investigated thoroughly. For the specific case of ray tracing, optimal spatial partitions are determined using the so-called surface area heuristic, first introduced by Goldsmith and Salmon <ref type="bibr" target="#b8">[9]</ref>. This heuristic provides a good model of the expected cost of traversing a single node of the hierarchy with a ray for a given choice partition, and various hierarchy construction algorithms have been proposed based on this. An excellent exposition on this topic, together with a number of theoretical considerations, is provided by Havran <ref type="bibr" target="#b9">[10]</ref>. The approach presented here is related to some of these ideas.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">Contribution</head><p>The celltree scheme we present here is based directly on a spatial decomposition using a bounding interval hierarchy based on the cell bounding boxes and offers the following advantages over the previous cell location methods in a visualization context:</p><p>• It allows general unstructured grids, consisting of multiple independent parts or with non-manifold structure, and can handle arbitrary cell types. Thus, it accommodates a wide range of dataset types and formats.</p><p>• It is numerically robust, in the sense that cell location does not suffer from bad numerical properties of individual cells.</p><p>• Our scheme does not optimize for a specific access pattern and can support a wide range of algorithms with good performance. Furthermore, it naturally supports the computational parallelism of multi-core CPUs and many-core GPUs.</p><p>• Memory overhead can be flexibly balanced against cell location performance, allowing fast cell location on very large unstructured grids with tens to hundreds of millions of cells on workstation-class machines.</p><p>In the following, we describe our data structure and the associated construction and traversal algorithms, and conduct a variety of experiments to demonstrate its viability under the stated goals.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">THE CELLTREE</head><p>In the following, we assume that an unstructured grid is given as a list of cells of size N, where for each cell c i , i = 1,...,N the lower bound cmin d i and upper bound cmax d i are known for each dimension d = 0, 1, 2 or can be determined. This setting is very general and accommodates unstructured grids consisting of multiple parts, and in addition does not constrain the topology of the grid.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Basic Structure</head><p>The celltree we describe here is essentially a bounding interval hierarchy (cf. <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b21">22]</ref>) data structure, with an associated construction scheme. A bounding interval hierarchy is a binary tree of axis-aligned boxes, where for each box, its children's boxes are generated from subdividing the parent box along the split dimension d. In this respect, it is similar to the kd-tree, and the difference lies in the fact that the child boxes (in the following called left and right) do not form an exact split of the parent box along d. Consequently, two axis-aligned bounding planes must be stored for each inner node of the tree, thus creating a slightly larger per-node storage requirement than kd-trees, which only need to store one split plane. We apply this concept to construct a hierarchy through the following procedure: 3. Attach two children to this node, each containing the corresponding list, and compute the corresponding bounding planes</p><formula xml:id="formula_0">L max = max i∈L {cmax d i } and R min = min i∈R {cmin d i }.</formula><p>4. Repeat from 2. until no more leaves can be split.</p><p>When compared to construction algorithms for octrees and kd-trees, it is apparent that the lists of cells in left and right children are disjoint; thus such partitioning can be performed in place, since the overall list of cell indices in all leaves is a constant. For kd-trees and octrees, indices for cells that overlap the splitting plane(s) must be stored in both children, creating a multiplication of overall indices stored that can lead to significant overhead. The bounding interval hierarchy avoids this, and thus the size of the resulting data structure is much less dependent on the specific form of a given unstructured grid.</p><p>In this setting, to perform cell location, the hierarchy is traversed from the root. At every node encountered, the interpolation point x is compared against both bounding planes. If x d ≤ L max , the left subtree must be traversed, and correspondingly, the right subtree must be traversed if x d ≥ R min . When the traversal reaches a leaf node, the leaf's index list indicates candidate cells that must be checked for point inclusion. If the point is contained in one of the cells, the traversal is terminated and the corresponding index returned. If no cell contains x, the traversal proceeds to other leaves. If no cell is found to contain the point, it is not contained within the domain described by the grid cells. The different cases encountered during the traversal are illustrated in <ref type="figure">Figure 2</ref>.</p><p>We note that the traversal of the bounding interval hierarchy is more complicated than that of a tree with exact splits, since both subtrees must be traversed in the case where L max ≥ x ≥ R min . Thus recursive traversal or a stack-based approach must be employed. While this appears as a disadvantage on first glance, the traversal can be optimized heuristically (see also Section 4). Furthermore, it can be terminated early in the case where x is contained in neither child node, i.e. L max &lt; x &lt; R min . We have found this form of empty-space skipping to be beneficial in the vicinity of grid boundaries, where holes in the grid are quickly identified.</p><p>As is typical for spatial hierarchies, we note here that if successive interpolations are performed in close spatial proximity, the tree traversal benefits strongly from caching effects since the hierarchy traversal takes a similar path. While one can optimize specifically for specific forms of traversal by including ancestor pointers into the tree, the resulting memory overhead and necessary state (i.e. information where to restart traversal) make this option unappealing. Furthermore, the stateful nature of restarted traversal complicates parallel interpolation significantly, which is an important consideration e.g. in the context of GPU applications (see Section 7).</p><p>We next turn to the question of how to partition the cell list during step 2. of the above algorithm.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Construction</head><p>Choosing a good partition of a node's cell index list I is a crucial step in achieving good performance. Assuming that the cost of a cell-point inclusion test is a unit constant, then the cost of a leaf node for cell location is</p><formula xml:id="formula_1">C I = N I ,</formula><p>where N I denotes the number of indices stored in I. If I is partitioned into left and right lists L and R with corresponding children, then the cost changes to</p><formula xml:id="formula_2">C I = P(L) • N L + P(R) • N R + C trav .</formula><p>where P(L) and P(R) denote the respective probabilities that the interpolation point is contained in L and R, and that descending one level of the hierarchy costs C trav . Under the assumption that point queries are uniformly distributed in space, this can be rewritten as</p><formula xml:id="formula_3">C I = vol(L) • N L + vol(R) • N R + C trav .<label>(1)</label></formula><p>Through recursive substitution, one can construct a global cost function C and construct the bounding interval hierarchy such that this function is minimized; however, such global minimization essentially amounts to brute force search which must be considered infeasible. Instead, we choose to neglect C trav and minimize Equation 1 locally upon splitting a leaf node. For our bounding interval hierarchy, it is easily computed that the child volumes vol(L) and vol(R) are proportional to L max and R min , hence we locally minimize the cost function</p><formula xml:id="formula_4">C = L d max • N L − R d min • N R<label>(2)</label></formula><p>for each potential split dimension d = 0, 1, 2. Before we consider the practical aspects of cost minimization, we will briefly discuss two common choices for splitting a leaf node in light of Equation 1. The split-middle approach divides the cell indices such that cells in L and R are left and right of the center of I's bounding box in the corresponding dimension. While this approximately balances the volume terms, it might result in a strong imbalance of N L and N R , such that the overall cost per split node is not minimal and very unbalanced trees can appear in the presence of strong cell size variations. Conversely, the split-median approach sorts the cells along the split dimension, and then divides I into two equally sized  halves L and R. This ensures a good balance of N L and N R and thus balanced trees with minimal depth, but can lead to extensive traversal if L max R min since many leaf nodes overlap. Thus, while splitmiddle and split-median are algorithmically very straightforward, they are not good choices for the general case of highly-adaptive unstructured grids.</p><formula xml:id="formula_5">p 0 p 1 p 2 p 3 b 0 b 1 b 2 b 3 b 4 vol(L) vol(R) N L = 4 N R = 5</formula><p>Practically, it is simplifying to postulate a split plane p and then sort cell indices into L and R depending on whether the cell center (or alternatively, its minimum or maximum) is located above or below the split plane. The location of p that minimizes Equation 2 is then determined per dimension, and the (p, d) pair with overall minimal cost is used to perform the split. While the candidate split planes can be narrowed down to the union over all minima and maxima of the bounding boxes of cells contained in I, the resulting list is of size N I in the general case. Evaluating every one of these split plane locations is computationally intensive, and thus finding a good split plane using this approach is not feasible Instead, we propose a fast algorithm based on sorting I into a small set of n b equidistant buckets that span the entire bounding box of I along a dimension d. We traverse the set I exactly once, and classify each cell into a bucket based on the center of its bounding box. Specifically, the bucket index b for the cell with index i is</p><formula xml:id="formula_6">b = n b • cmin d i + cmax d i I d min + I d max − 1,</formula><p>where I d min and I d max denote the bounds of all cells contained in I. Each bucket records a count and bounding box of the cells that are inserted into it. Then, we evaluate the cost function for the n b − 1 split</p><formula xml:id="formula_7">p d j = I d min + j + 1 n b I d max − I d min ,</formula><p>planes separating the buckets and choose the one that minimizes Equation 2. The effort involved in evaluating C is minimal since it counters and bounding boxes are accumulated over the small ranges of buckets left and right of the p i . <ref type="figure" target="#fig_1">Figure 3</ref> illustrates this construction. Conveniently, this evaluation can be performed simultaneously for d = 0, 1, 2 with only a single traversal of I by simply keeping three sets of buckets, one set per dimension. On occasion, this procedure will not yield a viable splitting plane. For example, in the rare case where all cells fall into one bucket in all dimensions, all cells would be assigned to L and R would be empty. In such cases, we fall back to split-median, ordering the cells by bounding box center. We have observed this case in our tests to occur about once in ten thousand leaf splits, and most frequently in splitting leaves with very few cells. Note that the case n b = 2 corresponds to splitmiddle exactly. Naturally, one wonders how to choose a value for n b . We have examined this question empirically in Section 5.</p><p>When considering the above scheme, the question arises why the above scheme produces better trees than split-median and split-middle in the general case, since Equation 1 is only evaluated in a small number of fixed locations. In general, we find that optimizing Equation 1 results in minimal overlap between the children of a node; thus, while the resulting trees can be unbalanced, the overall number of leaf nodes whose cells must be tested is much smaller. <ref type="figure" target="#fig_2">Figure 4</ref> illustrates this argument on an example configuration.</p><p>To allow a degree of control the final size of the celltree, we impose a maximum leaf size s max . Leaves whose size falls below this threshold are not split further. We have found this parameter to be much more effective that prescribing a maximum tree depth, as the latter is too closely tied to the assumption that trees are approximately balanced. Again, we investigate the influence of this parameter in Section 5.</p><p>Finally, we wish to point out that since both construction and traversal of the celltree rely solely on relational operations and no arithmetic is involved, the resulting system is very robust and does not suffer from numerical problems in the presence of badly shaped cells.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">IMPLEMENTATION</head><p>Our implementation is a straightforward realization of the concepts described in the previous section. To allow for more space efficiency, we have imposed the following design limitations, aimed at using our cell location scheme on a typical workstation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Data Layout and Construction</head><p>The bounding interval hierarchy underlying the celltree is a straightforward binary tree, stored in linear array. Each tree node consists of 12 bytes and has the following memory layout (in C notation): Since the split dimension is constrained to three-dimensions (0, 1, 2), the value 3 is used in dim to indicate a leaf. We further employ the convention that both children of a node are consecutive in memory, such that only one child index into the tree array must be stored. In the case of an inner node, lmax and rmin denote the corresponding bounding planes of the children, whereas a leaf node stores a starting index and a size into an array of cell indices, which indicate the cells that belong to the leaf. Note that we intentionally choose singleprecision floating point storage for the bounding planes due to decreased storage requirements for the tree nodes. We have verified the absence of numerical issues in this respect on the datasets described below (Section 5.1), and have found virtually no difference between using single or double precision.</p><p>Construction of the above structure is straightforward using the algorithm outlined in Section 3.2 and recursive splitting of children. New nodes that result from splitting a leaf are appended to the tree array. Growing this array represents the only memory allocation during the construction phase.</p><p>The cell index list is partitioned into two disjoint subarrays for left and right child, and splitting the children can be performed independently. Furthermore, most of the computation time spent goes into scanning the list of cells to determine the best split. This is an ideal scenario for parallel processing, and we perform celltree builds using multithreading to take advantage of multi-core and SMP architectures. Leaf nodes that must be split are recorded in a queue, and multiple threads fetch leaf nodes from this queue, analyze and split the corresponding leaf, and, if further splitting is required, put the children back into the queue. While queue access and tree array modification must be synchronized among the threads such that the structure remains consistent, we have observed only little contention among the threads. This parallel build can be significantly faster than a sequential build (typically 3 -3.5× using 4 threads). We expect further improvements by additionally parallelizing the partitioning step for large index list, but have not implemented this in our system.</p><p>There is one caveat, however: since multiple threads append to the tree array, the ordering of nodes is no longer deterministic. We address this problem by resorting the tree array after construction such that all nodes at the same tree level are consecutive in the array, and nodes at lower levels precede those at higher levels. This resorting step does not play a significant role in the overall build time. Moreover, we have found that even for sequential, recursive builds, this resorting is slightly advantageous with regard to the overall performance of cell location due to a more balanced memory access pattern.</p><p>We employ one further optional optimization. Since the split finding from Section 3.2 heavily relies on the bounding boxes of the cells in the grid, we have found it beneficial to precompute and cache these bounding boxes so that they must not be recomputed repeatedly as a cell is examined during successive splits. We observe build time improvements of 3 − 4× using cached bounding boxes, however, the memory overhead incurred is non-negligible and may play a role when dealing with very large unstructured grids. Thus, this feature is optional in our implementation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Traversal</head><p>Traversal of the bounding interval hierarchy is performed using a straightforward stack based implementation, and always starts at the root node. In cases where both subtrees of an internal node must be traversed, one child index is put on the stack and the other child's subtree is traversed. If the traversal ends in a leaf and the point is not contained in any of the leaf's cells, traversal is resumed at the node on top of the stack. However, instead of always traversing either subtree first (e.g. left always before right), we first traverse the subtree whose bounding plane has the larger distance to the sought point. This results in less overall traversal, and the correct cell is identified more quickly.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Point-in-Cell Test and Interpolation</head><p>When traversal reaches a leaf node, the query point is tested for inclusion in the candidate cells contained in the leaf. To determine whether a point is located inside a given cell, the global coordinates of the query point are typically transformed into a cell-local coordinate system where the inclusion test is simplified. For a general treatise of local coordinates and interpolation over different cell types, we refer the reader to the finite element literature, e.g. <ref type="bibr" target="#b4">[5]</ref>.</p><p>Our implementation contains corresponding mapping routines for a number of different cell types commonly found in unstructured grids, such as linear tetrahedra, tri-linear hexahedra, pyramids, and triangular prisms (sometimes called wedges). With the exception of tetrahedra for which local coordinates can be found by inverting a 3 × 3 linear system of equations, we use Newton iteration for numerical robustness and accuracy, in similarity to the VTK library <ref type="bibr" target="#b15">[16]</ref>. Since the celltree data structure does not rely on the specific nature of the point-in-cell test, it can accommodate arbitrary cell types, and our implementation could be easily extended to support e.g. higher-order elements or other interpolation schemes that rely on the definition of cells.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">EXPERIMENTS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Datasets</head><p>To cover a broad range of unstructured datasets with different properties, we make use of six datasets:</p><p>Ellipsoid This smaller dataset models the flow around an ellipsoid; the underlying grid is pseudo-unstructured in the sense that it derived from an originally structured grid over spherical/elliptical coordinates. We have included this case due to its strong variation in cells size but otherwise quite uniform distribution of cells.</p><p>ICE and BMW These datasets describe the flow of wind around a high-speed train and a car, respectively. They are of interest to us <ref type="table">Table 1</ref>. An overview of the datasets and grid statistics used in the experimental evaluation of the proposed cell location scheme.</p><formula xml:id="formula_8">Ellipsoid (157MB) ICE (99MB) BMW (898MB) N vert 2.6M N vert 1.0M N vert 8.6M N tet - N tet 0.9M N tet 15.6M N hex 2.5M N hex - N hex - N prism - N prism 1.7M N prism 11.1M N pyr 20K N pyr 10K N pyr 0.3M TDELTA (606MB) Fishtank (1.44GB) F6 (1.65GB) N vert 19.3M N vert 23.8M N vert 14.8M N tet 13.6M N tet - N tet 85.9M N hex - N hex 23.6M N hex - N prism 5.7M N prism - N prism - N pyr - N pyr - N pyr -</formula><p>because the contain large boundary layers composed of very thin prism cells, which poses a challenge for cell location schemes. TDELTA Here, the flow of wind around a delta-shaped wing is modeled. The sharp wing edges constitute a strong concave hole in the grid, and there is a very finely resolved boundary layer above the wing discretized using prisms. Furthermore, the grid is strongly adapted to resolve two large vortical systems above the wing. Fishtank This dataset studies the turbulent mixing of hot and cold air in a box-shaped domain. This dataset, simulated using a spectral element code <ref type="bibr" target="#b6">[7]</ref>, is unusual since it represents the union of about 67,000 hexahedral subdomains, each in turn discretized by a 9 3 rectangular structured grid with non-uniform spacing. Each subdomain carries its own vertex enumeration, thus there is no apparent connectivity between the cells of neighboring subdomains. We are especially interested in this grid due to its almost structured nature. F6 This purely tetrahedral grid is very large and models the flow around an airplane. It shows a strong gradient in cell size as the body of the plane is approached. <ref type="table">Table 1</ref> provides a number of statistics for each dataset. We next describe a number of benchmarks that we use to evaluate and compare the proposed cell location scheme.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Benchmarks</head><p>To evaluate and compare the performance our cell location scheme with real-world visualization applications in mind, we employ the following four benchmarks that represent a mix of typical visualization scenarios that require interpolation: Random We interpolate one million points that are uniformly distributed over the entire grid domain. The points are pregenerated, and all points lie inside the grid.</p><p>Plane We interpolate points on a regular two-dimensional grid. Grid sizes vary per dataset, but the grid is chosen such that it intersects with challenging regions of the dataset's grid, such as e.g. finely discretized boundary layers and grid boundaries.</p><p>Volume Similar to Plane, but using a three-dimensional grid.</p><p>Streamlines We integrate a number of streamlines using an adaptive integration scheme (DOPRI5, <ref type="bibr" target="#b12">[13]</ref>). The number of streamlines is dataset dependent but measures in the thousands. Streamlines are seeded to traverse challenging regions (e.g. flow around embedded bodies), and integration time is chosen sufficiently long that the streamlines traverse a significant portion of the grid.</p><p>Note that instead of considering cell location performance in isolation, we have opted to focus on the overall interpolation performance that our approach enables, since the computationally intensive part of unstructured grid interpolation is contained within the computation of local coordinates and the point-in-cell test. Furthermore, this allows us to conduct the data-dependent streamline benchmark which crucially relies on interpolation. For each dataset, we have used the proposed method to perform interpolation of the 3-component velocity field variable.</p><p>Instead of examining absolute running times for each of the above benchmarks, we instead count the number of interpolations n eval per benchmark and compute the interpolation rate for each benchmark. In some experiments, we present an average interpolation rate, which is computed by dividing the total number of interpolations for all benchmarks by the sum of the running times. All benchmarks were performed on a workstation with an Intel Core i7 2.66 GHz quad-core processor, equipped with 12GB of RAM.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Effect of Build Parameters</head><p>As promised in Section 3.2, we examine the influence of the build parameters n b and s max on the speed of cell location and the time required to build the data structure. <ref type="figure">Figure 6</ref> illustrates the results for both benchmarks and build times over all datasets as n b is varied.</p><p>It is apparent that n b has a strong influence on both results. It is interesting to observe that while for some datasets the influence is quite strong, for others it is more diminished. We suppose that this is strongly correlated with inherent symmetries within a dataset that are exploited by a specific choice of n b . To better understand the reason for these performance differences, we also show the average number of cells traversed per interpolation. Again, as we expect, this graph is strongly correlated with overall interpolation performance. Tree memory usage size was virtually unchanged across all tests and is thus not shown.</p><p>Note that the case n b = 2 corresponds exactly to the split-middle approach described above. In all datasets except the Fishtank, which has extremely regular cell distribution, we observe a marked increase for bucket numbers greater than two, of up to 33% for the F6 dataset, which is the largest dataset we have included here. For comparison purposes, we have also included figures for the split-median approach (denoted with "M" in <ref type="figure">Figure 6</ref>). This case is interesting since it generates balanced trees of minimal depth. Here, we find that the cell and node averages for strongly adaptive grids (ICE, BMW, F6) are literally off the charts, with corresponding bad interpolation rates re-  sulting. Regarding build time, split-median is the clear winner, which is of little surprise since this approach requires the least computational effort. However, we note that it also offers the worst performance; this indicates that tree depth is not a good quality indicator for cell location performance. Otherwise, build performance is not affected strongly by n b . Overall, we observe good performance values at acceptable build times for n b = 5. We have accepted this value as a default in our construction algorithm and have used it in all successive tests. <ref type="figure">Figure 7</ref> depicts the effect of the maximum leaf size s max on performance, memory size and build time. The figures have ideal shape: while the memory size and build time strongly decrease when doubling s max , performance drops off very gradually, and the performance penalty that is paid for large values of s max is not overwhelming. This result seems promising for the treatment of larger datasets than the one we have used here, since the overhead incurred by the celltree can be reduced without too much loss of performance. Since we are slightly biased towards treating large datasets, we choose s max = 8 as a default value for our implementation, and all further benchmarks were performed with this value. <ref type="figure" target="#fig_0">Figure 1</ref> provides a graphical illustration of the celltree and the cell location statistics discussed here, based on the above default values.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">COMPARATIVE EVALUATION</head><p>In this section, we compare our cell location schemes against two others. Integrating the celltree data structure into existing visualization frameworks is straightforward; the celltree construction algorithm requires only a method for obtaining the bounding boxes of cells. Note that we make use of the two systems' native routines for all grid and variable access as well as point-in-cell and interpolation routines. This explains the difference in performance and memory usage for identical datasets when comparing Tables 2 and 3.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">VTK</head><p>The Visualization Toolkit (VTK, <ref type="bibr" target="#b15">[16]</ref>) is a widely used generalpurpose framework that allows the rapid development and prototyping of visualization applications, but is mature enough for production applications. Several visualization tools and other frameworks (e.g. VisIt <ref type="bibr" target="#b5">[6]</ref> and ParaView <ref type="bibr" target="#b10">[11]</ref>) derive from it and make use of its internal pipeline architecture. VTK comes equipped with built in cell location capabilities for unstructured grids, encapsulated in the vtkCellLocator class. Internally, it uses an octree-based subdivision approach. In order to test the comparative efficiency of our scheme, we have implemented a vtkCellTree class that serves as a drop-in replacement for vtkCellLocator.</p><p>In addition, recent versions of VTK contain a more modern cell locator in the vtkModifiedBSPTree class that implements a modified kd-tree where cells overlapping the split plane are stored in an additional "middle" leaf. While this class is primarily aimed at ray-casting applications, we have nevertheless included it into our benchmarks. To ensure a fair comparison, vtkCellTree makes use of VTK's own cell interpolation and inclusion test routines. It is only the candidate search that is performed using the celltree data structure. Cell tree builds were performed serially, and all three classes were measured based on their default parameters.</p><p>The results of our tests, using the benchmarks described in Section 5.2, are summarized in <ref type="table" target="#tab_2">Table 2</ref>. Some benchmarks did not complete within reasonable time (10 minutes), thus some timings do not exist. For this reason we choose not to aggregate the performance of the individual benchmarks. We find that in most benchmarks, we generally outperform the faster of vtkModifiedBSPTree and vtkCell-Locator by a significant margin, while at the same time being more memory-efficient by a factor of 3-5. For the TDELTA, Fishtank and F6 datasets, the cell tree was the only locator to complete all benchmarks.</p><p>The good comparative performance of vtkCellLocator on the "Random" benchmark is explained by the fact that the corresponding interpolation points are uniformly distributed across the grid domain, and thus only rarely fall into complex grid regions. In all other benchmarks, we observe a strong advantage of our scheme in the presence of strongly adaptive grids.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">FAnToM</head><p>The FAnToM visualization tool <ref type="bibr" target="#b19">[20]</ref>, developed at the University of Leipzig, implements the innovative approach described by Langbein et al. <ref type="bibr" target="#b11">[12]</ref>. While not widely in use, its handling of large unstructured grids is considered state-of-the-art, thus it is an ideal candidate for comparison here to ensure the practical relevance of our results. Similar to the VTK comparison above, cell location functionality is encapsulated in a dedicated class (FCellLocator), for which we have again provided a drop-in replacement (FCellTree) that replaces only the cell candidate search with our approach. The benchmarks were run for both locators, with the same restrictions as above (serial celltree build, default parameters), and the results are documented in <ref type="table" target="#tab_3">Table 3</ref>.</p><p>The default FCellLocator class already offers good performance for smaller grids (Ellipsoid, ICE); however, the celltree possesses a strong advantage in memory overhead. It is interesting to note that while the performance numbers for streamline integration are very similar, the celltree has significantly better performance in the "Plane" and  "Volume" benchmarks that stress interpolation in complicated grid regions. Here, the increased robustness of our scheme is especially apparent. Note that the Fishtank dataset could not be benchmarked with the default locator since it does not have consistent cell adjacency (cf. Section 5.1).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">GPU INTERPOLATION</head><p>The celltree data structure, consisting of essentially two linear arrays containing the tree nodes and cell indices, directly allows the use of arbitrary unstructured grid interpolation on modern GPUs. To this purpose, we have implemented a prototype system based on the CUDA programming language, which uses essentially identical celltree traversal code to the CPU version. In the following, we discuss a number of possible minor modifications of the overall data structure and share some observations that affect the performance of the interpolation procedure on GPUs.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">Cell Inlining</head><p>While GPUs attain impressive memory transfer rates, they are only achievable for specific memory access patterns. General unstructured grid representations contain a number of indirections that typically do not work well with GPU memory architectures. For example, cells are represented as a list of (start,type) pairs, and to obtain the locations of all vertices of a cell requires indexing into a cell index array first, and the resulting indices must be used to fetch the actual coordinates. The celltree data structure adds an additional level of indirection, since candidate cell indices in the leaves must be traced to (start,type) pairs. To remove two levels of indirection, we propose the following storage layout as an ideal unstructured grid representation in conjunction with the celltree data structure on GPUs. Starting with the observation that currently available GPU configurations do not possess enough storage to handle unstructured grids approaching one billion vertices, we make the assumption that 30 bits are sufficient to represent a vertex index. Further noting that the minimum number of indices in any cell is 4 (tetrahedron), we replace each cell index in the leaf list by the full representation of the cell, consisting of all indices, and encoding the cell type in the most significant two bits of the first vertex. Correspondingly, the start indices in the celltree leaf nodes are adjusted to reflect the different starting offset in the cell leaf lists. Upon reaching a leaf during celltree traversal, the first vertex index is read from the leaf list, and the cell type is computed from the two most significant bits. Then, a corresponding number of further indices is read from the list, until the number of indices for the indicated cell type is complete.</p><p>This approach yields a more compact representation of the combination of grid and locator data structure, and removes two memory indirections at the lowest level of the interpolation procedure. While the number of possible cell types is reduced to four in this approach, it is readily generalized to include more cell types by encoding the type in the unused bits of multiple indices. <ref type="table" target="#tab_4">Table 4</ref> provides an overview of the memory savings achieved by cell inlining.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">Tree Traversal</head><p>Celltree traversal is accomplished very similar to the CPU implementation, with the only difference being a fixed-size stack with 64 entries. We estimate that this stack size is sufficient to treat unstructured grids up to current-generation GPU memory capacity. The stack resides in local memory, which causes some performance concern, however, we observe that the stack is rarely read from in the datasets and cases we tested, and thus the performance impact is negligible.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.3">Cell Interpolation</head><p>In our tests, we employ identical routines to the CPU case to achieve cell interpolation and inclusion tests. However, the high arithmetic intensity of the Newton iteration generates high register pressure and precludes large thread block sizes. Thus, if speed is desired over accuracy and strongly nonlinear cells are not present, we propose to decompose cells on-the-fly into tetrahedra, which can be interpolated with much less effort. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.4">Examples</head><p>In order to demonstrate the suitability of our scheme for interactive vector field visualization over unstructured grids, we implemented a particle advection scheme based on a third-order Runge-Kutta method similar to previous approaches on regular grids <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b2">3]</ref> and applied it to visualize particle movement for the datasets described in Section 5.1. <ref type="figure" target="#fig_6">Figure 8</ref> shows the measured frame rates and corresponding interpolation rates for an advection of 250K and 1M particles over 500 frames in the Fishtank dataset (illustrated in <ref type="figure" target="#fig_7">Figure 9</ref>). This dataset is ideal for testing, since coherently moving particles seeded from the inlet quickly diverge and traverse different parts of the dataset, thus reducing the amount of coherence. The test was run on an NVidia GeForce 285GTX with 2GB VRAM. The total GPU memory consumption for the combined celltree and grid representation as described above is 1377MB, which is equivalent to an overhead of 8% when compared to the original dataset size (cf. <ref type="table">Table 1</ref>). The interpolation rate, i.e. the number of interpolations performed per second, is around 26-30 million interpolations per second, after a dip that results from the particles traversing a more highly resolved region of the grid. Overall, we observe that the initially close particle locations translate into coherent memory access since the hierarchy traversal only diverges near the bottom. This effect is reduced after the particles spread out. Since the overhead for rendering the particles is small, the interpolation rate roughly translates to frames per second by taking into account that three interpolations are performed per particle per frame. For comparison, the figure also includes the performance achieved by our CPU implementation running an identical test with 250K particles. Overall, we note an average speedup of 16.5× for the GPU implementation in this example. <ref type="table" target="#tab_4">Table 4</ref> shows the sizes of the GPU celltree structure and the velocity variable. With the exception of F6, for which we choose s max = 16, all datasets fit into GPU memory with the default parameters and show performance comparable to the Fishtank. Overall, we find that GPU performance characteristics are very similar to those for CPUs (cf. Section 5). Please refer to the accompanying video for an illustration of these examples.</p><p>We wish to emphasize the fact that our implementation should be taken as a proof of concept. Since we obtained good results even without optimizing for the GPU (or even a specific GPU architecture), we expect that performance can be improved significantly. Since coherent memory access patterns are a crucial factor in this setting, an investigation of hierarchy memory layout and grid vertex ordering is planned for future work; however, the chosen example of particle tracing illustrates that coherent interpolation patterns cannot be expected for the general case. We finally note that the routines for point-in-cell testing are arithmetically complex and account for 90% of the register and instruction count in our implementation and present additional optimization potential. We attribute the good performance of the present implementation to the fact that our data structure is designed to use these routines only a small number of times per interpolation procedure. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">CONCLUSION</head><p>We have presented a novel cell location scheme, the celltree, with associated construction and traversal algorithms. The proposed scheme is fast, robust, flexible and memory-efficient, and can be used for interpolation over unstructured grids with good performance. Due to the flexibility and ease of use of the celltree data structure, we were able to devise drop-in implementations for two established and widely used visualization systems, VTK and FAnToM, and found overall performance and robustness increased while memory overhead was reduced. Furthermore, we have discussed and demonstrated a fully featured prototype GPU implementation.</p><p>Porting the celltree data structure to the CUDA environment for GPU computing was straightforward, and despite not performing any low-level GPU-specific optimizations, we obtain good performance that should help enable the use of general unstructured grids for GPUbased visualization applications. We are currently looking into further implementations targeted at the OpenGL shading language, to enable unstructured interpolation directly from the rendering phase of visualization applications. We are also interested in exploring our ideas in the context of the OpenCL framework. Furthermore, we are investigating the possibility of extending our approach to support parallel, distributed interpolation over decomposed unstructured grids on clusters. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>1 .</head><label>1</label><figDesc>Initialize the tree as a single leaf containing an indexed list of all cells in the dataset. 2. For each leaf node, select a split dimension d to form a disjoint partition of the cell indices contained in it into left and right lists L and R.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 .</head><label>3</label><figDesc>The fast bucketed split finding algorithm for n b = 5: Cells are classified into buckets according to their bounding box centers. Then the plane p i is chosen that minimizes vol(L) • N L + vol(R) • N R . In the shown example, p 2 is the optimal plane. vol(L), vol(R), N L and N R can be directly evaluated from accumulating the counters and bounding boxes of the buckets.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 4 .</head><label>4</label><figDesc>Split-middle divides the cell into L and R list depending on the position of their center relative to the middle plane p 2 , whereas splitmedian groups the cells in sorted order such the numbers in L and R are equal. The heuristic approach evaluates the cost function to determine the best split plane, here p 2 (with n b = 5). The lines indicate the extent of the cells contained in L and R for each approach, and it is apparent the heuristic approach results in the least overlap -at the cost of balancefor this specific example.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 .</head><label>5</label><figDesc>A subset of streamlines from the corresponding benchmark in the BMW dataset.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 .Fig. 7 .</head><label>67</label><figDesc>An illustration of the impact of the number of buckets used in celltree construction on performance and build time. The maximum leaf size parameter allows a flexible trade-off between interpolation speed and memory overhead. While the overhead drops sharply as the leaf sizes are increased, the interpolation performance degrades gradually.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 8 .</head><label>8</label><figDesc>Interpolation and frame rates for the GPU benchmark.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 9 .</head><label>9</label><figDesc>Interactive advection of 1 million particles on the GPU in an unstructured grid with 23.6 million hexahedra.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>Fig. 2. Different cases when traversing the bounding interval hierarchy. Points left of L max need to traverse the left subtree, points right of R min need to traverse the right subtree. In the top sketch, left and right child nodes overlap and both sides must be traversed. At the bottom, traversal stops since the left and right nodes bound a volume of empty space.</figDesc><table><row><cell>node</cell><cell></cell></row><row><cell>left child</cell><cell>right child</cell></row><row><cell>R min</cell><cell>L max</cell></row><row><cell>left child</cell><cell>right child</cell></row><row><cell>L max</cell><cell>R min</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 2 .</head><label>2</label><figDesc>Results of the comparison of the celltree data structure against VTK's built-in locators.</figDesc><table><row><cell>Dataset</cell><cell>Locator</cell><cell>Build time</cell><cell>Memory Overhead</cell><cell>Random</cell><cell>Plane</cell><cell>Volume</cell><cell>Streamlines</cell></row><row><cell>Ellipsoid</cell><cell>vtkCellTree</cell><cell>3.34s</cell><cell>22MB (8%)</cell><cell>4.32s</cell><cell>1.91s</cell><cell>11.58s</cell><cell>1.70s</cell></row><row><cell></cell><cell>vtkCellLocator</cell><cell>0.61s</cell><cell>90MB (34%)</cell><cell>7.71s</cell><cell>75.68s</cell><cell>559.98</cell><cell>-</cell></row><row><cell></cell><cell>vtkModifiedBSPTree</cell><cell>6.72s</cell><cell>236MB (91%)</cell><cell>30.37s</cell><cell>1.90s</cell><cell>116.33s</cell><cell>46.39s</cell></row><row><cell>ICE</cell><cell>vtkCellTree</cell><cell>3.27s</cell><cell>23MB (13%)</cell><cell>2.51s</cell><cell>1.68s</cell><cell>6.42s</cell><cell>2.66s</cell></row><row><cell></cell><cell>vtkCellLocator</cell><cell>0.53s</cell><cell>115MB (65%)</cell><cell>5.95s</cell><cell>89.93s</cell><cell>57.65s</cell><cell>211.45s</cell></row><row><cell></cell><cell>vtkModifiedBSPTree</cell><cell>7.65s</cell><cell>246MB (140%)</cell><cell>16.90s</cell><cell>13.43s</cell><cell>69.67s</cell><cell>43.57s</cell></row><row><cell>BMW</cell><cell>vtkCellTree</cell><cell>40.25s</cell><cell>229MB (14%)</cell><cell>2.34s</cell><cell>3.57s</cell><cell>8.94s</cell><cell>1.97s</cell></row><row><cell></cell><cell>vtkCellLocator</cell><cell>5.01s</cell><cell>921MB (56%)</cell><cell>5.15s</cell><cell>-</cell><cell>-</cell><cell>-</cell></row><row><cell></cell><cell>vtkModifiedBSPTree</cell><cell>303.23s</cell><cell>2476MB (151%)</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>-</cell></row><row><cell>TDELTA</cell><cell>vtkCellTree</cell><cell>28.08s</cell><cell>165MB (14%)</cell><cell>1.66s</cell><cell>4.65s</cell><cell>9.48s</cell><cell>25.33s</cell></row><row><cell></cell><cell>vtkCellLocator</cell><cell>4.2s</cell><cell>880MB (79%)</cell><cell>3.99s</cell><cell>-</cell><cell>-</cell><cell>-</cell></row><row><cell></cell><cell>vtkModifiedBSPTree</cell><cell>77.57s</cell><cell>1770MB (159%)</cell><cell>61.86s</cell><cell>-</cell><cell>-</cell><cell>-</cell></row><row><cell>Fishtank</cell><cell>vtkCellTree</cell><cell>27.59s</cell><cell>196MB (8%)</cell><cell>3.52s</cell><cell>3.79s</cell><cell>6.85s</cell><cell>27.11s</cell></row><row><cell></cell><cell>vtkCellLocator</cell><cell>6.16s</cell><cell>851MB (35%)</cell><cell>7.74s</cell><cell>12.04s</cell><cell>40.04s</cell><cell>28.75s</cell></row><row><cell></cell><cell>vtkModifiedBSPTree</cell><cell>199.41s</cell><cell>2162MB (91%)</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>-</cell></row><row><cell>F6</cell><cell>vtkCellTree</cell><cell>130.19s</cell><cell>743MB (16%)</cell><cell>1.59s</cell><cell>8.96s</cell><cell>17.63s</cell><cell>9.60s</cell></row><row><cell></cell><cell>vtkCellLocator</cell><cell>22.40s</cell><cell>5426MB (124.54%)</cell><cell>5.80s</cell><cell>-</cell><cell>-</cell><cell>-</cell></row><row><cell></cell><cell>vtkModifiedBSPTree</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>-</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 3 .</head><label>3</label><figDesc>Results of the comparison of the celltree data structure against FAnToM's built-in locator.</figDesc><table><row><cell>Dataset</cell><cell>Locator</cell><cell>Build time</cell><cell>Memory Overhead</cell><cell>Random</cell><cell>Plane</cell><cell>Volume</cell><cell>Streamlines</cell></row><row><cell>Ellipsoid</cell><cell>FCellTree</cell><cell>5.19s</cell><cell>22MB (18%)</cell><cell>24.08s</cell><cell>2.28s</cell><cell>29.88s</cell><cell>0.83s</cell></row><row><cell></cell><cell>FCellLocator</cell><cell>6.41s</cell><cell>150MB (76%)</cell><cell>21.17s</cell><cell>3.25s</cell><cell>30.14s</cell><cell>0.88s</cell></row><row><cell>ICE</cell><cell>FCellTree</cell><cell>4.93s</cell><cell>23MB (6%)</cell><cell>4.01s</cell><cell>1.93s</cell><cell>9.10s</cell><cell>3.22s</cell></row><row><cell></cell><cell>FCellLocator</cell><cell>3.06s</cell><cell>88MB (85%)</cell><cell>11.87</cell><cell>37.81s</cell><cell>26.62s</cell><cell>4.32s</cell></row><row><cell>BMW</cell><cell>FCellTree</cell><cell>57.84s</cell><cell>229MB (10%)</cell><cell>7.91s</cell><cell>4.91s</cell><cell>21.36s</cell><cell>4.06s</cell></row><row><cell></cell><cell>FCellLocator</cell><cell>24.56s</cell><cell>770MB (122%)</cell><cell>12.48s</cell><cell>51.88s</cell><cell>91.08s</cell><cell>4.01s</cell></row><row><cell>TDELTA</cell><cell>FCellTree</cell><cell>40.03</cell><cell>165MB (11%)</cell><cell>5.25s</cell><cell>7.33s</cell><cell>24.50s</cell><cell>5.11s</cell></row><row><cell></cell><cell>FCellLocator</cell><cell>15.2s</cell><cell>483MB (82%)</cell><cell>11.84s</cell><cell>290.65s</cell><cell>-</cell><cell>6.33s</cell></row><row><cell>Fishtank</cell><cell>FCellTree</cell><cell>43.28s</cell><cell>196MB (5%)</cell><cell>14.37s</cell><cell>5.19s</cell><cell>24.89s</cell><cell>6.93s</cell></row><row><cell></cell><cell>FCellLocator</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>-</cell><cell>-</cell></row><row><cell>F6</cell><cell>FCellTree</cell><cell>144.92s</cell><cell>734MB (56%)</cell><cell>2.55s</cell><cell>7.59s</cell><cell>25.72s</cell><cell>3.93s</cell></row><row><cell></cell><cell>FCellLocator</cell><cell>40.66s</cell><cell>1633MB (81%)</cell><cell>12.04s</cell><cell>119.99s</cell><cell>132.23s</cell><cell>4.36s</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 4 .</head><label>4</label><figDesc>Memory sizes for the inlined celltree data structure used for GPU interpolation of the test datasets.</figDesc><table><row><cell>Dataset</cell><cell>Grid + Velocity</cell><cell>Inlined Celltree + Velocity</cell></row><row><cell>Ellipsoid</cell><cell>156MB</cell><cell>149MB</cell></row><row><cell>ICE</cell><cell>99MB</cell><cell>92MB</cell></row><row><cell>BMW</cell><cell>898MB</cell><cell>821MB</cell></row><row><cell>TDELTA</cell><cell>606MB</cell><cell>553MB</cell></row><row><cell>Fishtank</cell><cell>1446MB</cell><cell>1377MB</cell></row><row><cell>F6</cell><cell>2138MB</cell><cell>1848MB (with s</cell></row></table><note>max = 12)</note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The authors wish to thank Paul Fischer and Aleksandr Obabko, Argonne National Laboratory, and Markus Rütten, DLR Göttingen, for supplying the benchmark data sets, and Hank Childs, Xavier Tricoche and Max Langbein for insightful discussion. We are also grateful to our colleagues at the Institute for Data Analysis and Visualization and to Xavier Tricoche at Purdue University for discussion and feedback. </p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Matrix *trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Andrysco</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Tricoche</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+	<note>to appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Interactive streak surface visualization on the gpu</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bürger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Ferstl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Theisel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="page" from="1259" to="1266" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Importancedriven particle techniques for flow visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bürger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kondratieva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE VGTC Pacific Visualization Symposium</title>
+		<meeting>IEEE VGTC Pacific Visualization Symposium</meeting>
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Interactive visual exploration of instationary 3D-flows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bürger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kondratieva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics/IEEE VGTC Symposium on Visualization (EuroVis)</title>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+	<note>to appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">F</forename><surname>Carey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">T</forename><surname>Oden</surname></persName>
+		</author>
+		<title level="m">Finite Elements: A Second Course</title>
+		<meeting><address><addrLine>Englewood Cliffs, NJ</addrLine></address></meeting>
+		<imprint>
+			<publisher>Prentice-Hall</publisher>
+			<date type="published" when="1983" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">A contract-based system for large data visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Childs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">S</forename><surname>Brugger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">S</forename><surname>Bonnell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S</forename><surname>Meredith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">J</forename><surname>Whitlock</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization 2005</title>
+		<meeting>IEEE Visualization 2005</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="190" to="198" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Petascale algorithms for reactor hydrodynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Fischer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Lottes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Pointer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Siegel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Physics: Conference Series</title>
+		<imprint>
+			<biblScope unit="volume">125</biblScope>
+			<biblScope unit="page" from="1" to="5" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Generation of accurate integral surfaces in time-dependent vector fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Garth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Krishnan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Tricoche</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Tricoche</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1404" to="1411" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Automatic creation of object hierarchies for ray tracing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Goldsmith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Salmon</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="14" to="20" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Heuristic Ray Shooting Algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Havran</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+			<pubPlace>Prague</pubPlace>
+		</imprint>
+		<respStmt>
+			<orgName>Czech Technical University</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">ParaView Guide. A Parallel Visualization Application</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Henderson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2007" />
+			<publisher>Kitware Inc</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">An efficient point location method for visualization in large unstructured grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Langbein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Scheuermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Tricoche</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Vision, Modeling, Visualization</title>
+		<meeting>Vision, Modeling, Visualization</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">High order embedded runge-kutta formulae</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Prince</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">R</forename><surname>Dormand</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computational and Applied Mathematics</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<date type="published" when="1981" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Visualizing lagrangian coherent structures and comparison to vector field topology</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Topology-Based Methods in Visualization II, Mathematics and Visualization</title>
+		<meeting><address><addrLine>Berlin Heidelberg</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="15" to="29" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Interactive Particle Tracing on Tetrahedral Grids Using the GPU</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schirski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Bischof</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Kuhlen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Vision, Modeling, and Visualization (VMV) 2006</title>
+		<meeting>Vision, Modeling, and Visualization (VMV) 2006</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="153" to="160" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">The Visualization Toolkit: An Object-Oriented Approach to 3D Graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Schroeder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Lorensen</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997" />
+			<publisher>Prentice Hall</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Smoke surfaces: An interactive flow visualization technique inspired by real-world flow experiments</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Funck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Weinkauf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Theisel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Seidel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1396" to="1403" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Instant ray tracing: The bounding interval hierarchy</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Wächter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Keller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 17th Eurographics Symposium on Rendering</title>
+		<meeting>the 17th Eurographics Symposium on Rendering</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">GPU-Based 3D Texture Advection for the Visualization of Unsteady Flow Fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">WSCG 2004 Conference Proceedings, Short Papers</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="259" to="266" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Fantom -lessons learned from design, implementation, administration, and use of a visualization system for over 10 years</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wiebel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Garth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hlawitschka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Wischgoll</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Scheuermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Refactoring Visualization from Experience</title>
+		<imprint>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+	<note>ReVisE) 2009, co-located with IEEE Visualization</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Octrees for faster isosurface generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions of Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="201" to="227" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Minimal hierarchical collision detection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Zachmann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM Symposium on Virtual Reality Software and Technology (VRST)</title>
+		<meeting>ACM Symposium on Virtual Reality Software and Technology (VRST)<address><addrLine>Hong Kong, China</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2002-11-13" />
+			<biblScope unit="page" from="121" to="128" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,1595 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/kermitt2/grobid/master/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Calibrate: Interactive Analysis of Probabilistic Model Output</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName><forename type="first">Peter</forename><surname>Xenopoulos</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Jo</forename><surname>Ão Rulff</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Gustavo</forename><surname>Luis</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Brian</forename><surname>Nonato</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Claudio</forename><surname>Barr</surname></persName>
+						</author>
+						<author>
+							<persName><surname>Silva</surname></persName>
+						</author>
+						<title level="a" type="main">Calibrate: Interactive Analysis of Probabilistic Model Output</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.7.2" ident="GROBID" when="2023-03-27T09:20+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>calibration</term>
+					<term>performance analysis</term>
+					<term>model understanding</term>
+					<term>reliability diagram</term>
+				</keywords>
+			</textClass>
+			<abstract>
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>Fig. 1. Calibrate visualizing model calibration across different subgroups for income prediction on the Census Income prediction task. A) Calibrate is implemented for easy, one-line use in Jupyter Notebooks. B &amp; C) Calibration View implements Learned Reliability Diagrams (red dotted line), an approach to address shortcomings in traditional reliability diagrams (blue line), as well as a histogram to show the density of predictions. D) Instance View shows instances contained by brushing prediction regions in the Calibration View. E) Feature View allows for subgroup analysis by interactive subgroup creation through brushing feature ranges. F) Performance View shows a confusion matrix for the brushed prediction region.</p></div>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Analyzing classification model performance is an important task for machine learning stakeholders. Furthermore, understanding model per- formance is a complex task which necessitates an alignment between one's model performance measurements and use case goals. Many machine learning practitioners assess model performance through countbased summary performance metrics, such as accuracy or recall, which rely on predicted labels. The components used to calculate count-based metrics are most commonly viewed in confusion matrices <ref type="bibr" target="#b41">[42]</ref>. Such a performance assessment is sensible for situations where practitioners are concerned that their model makes the correct decisions. However, when one is interested in a model's predicted probabilities, count-based model performance analysis obscures model performance with respect to the practitioner's goals. Model predicted probabilities are important for human decision making, as probabilities are more intuitive for humans than quantities like model scores or log odds <ref type="bibr" target="#b9">[10]</ref>. There are many applications which depend on predicted probabilities rather than labels, such as weather forecasting, sports betting, or credit default risk prediction. In these cases, practitioners are especially concerned that their model is calibrated. Although there are various formal notions of model calibration, a model is generally considered "calibrated" if the model's predicted probabilities correspond to the true class occurrence. Modern machine learning models appear to achieve high performance on count-based metrics, like accuracy, yet can be systematically miscalibrated <ref type="bibr" target="#b17">[18]</ref>. For example, consider the two models, based on ResNet-50 and built for the CIFAR-100 task, in Figure <ref type="figure" target="#fig_0">2</ref>. While Model B has a slightly higher accuracy, it is much less calibrated than Model A, as there is a large gap between the confidence (predicted probability) and the accuracy (true class rate).</p><p>In addition to count-based metrics, it is also common to assess classifier performance through scoring rules like Brier score or log loss <ref type="bibr" target="#b5">[6,</ref><ref type="bibr" target="#b21">22]</ref>. It is known that proper scoring rules are minimized if and only if classifier predictions recover the ground truth conditional distribution for all inputs. However, Kull and Flach show that proper scoring rules, like Brier score and log loss, measure more than just calibration <ref type="bibr" target="#b26">[27]</ref>. Furthermore, calibration is often an important consideration for model fairness. <ref type="bibr">Kleinberg et al.</ref> show that, if groups have different base rates for their labels, it is statistically impossible to ensure fairness across the balance of the positive and negative classes, as well as the calibration of the model <ref type="bibr" target="#b25">[26]</ref>. Thus, for many applications, it is critical to deeply understand a classifier's output beyond confusion matrices, count-based metrics, and scoring rule aggregates.</p><p>To assess model calibration, practitioners typically turn to visualization, specifically to reliability diagrams (shown in Figure <ref type="figure" target="#fig_0">2</ref>). Reliability diagrams are a static visualization showing the alignment between the predicted probabilities of the predicted class, referred to as the confidence, and ground-truth class prevalence for the predictions, often referred to as the accuracy. These visualizations require a data transformation that involves a binning stage, whereby predictions are binned by predicted probability, and an aggregation phase, where the average predicted probability and true class prevalence are calculated for each bin. A well-calibrated model will produce results that follow y = x, since the model's predictions will reflect the true class rate.</p><p>Reliability diagrams form the basis of many calibration-specific model performance metrics, since the binning and aggregation required to create reliability diagrams are identical for many calibration metrics. The aforementioned data transformation requires various hyperparameters, such as the number of bins or the bin creation strategy, which can drastically change the appearance of a reliability diagram <ref type="bibr" target="#b12">[13]</ref>. Furthermore, due to the aggregations that reliability diagrams necessitate, relationships that may be apparent in certain regions of data may be washed out by aggregation. Additionally, the static nature of reliability diagrams hinders subgroup or instance-level analysis. Thus, a visual analytics approach may provide an intuitive link between performance and the underlying data <ref type="bibr" target="#b38">[39]</ref>.</p><p>In this paper, we present Calibrate (Figure <ref type="figure">1</ref>), a visual analytics tool to analyze machine learning model calibration. We design and develop Calibrate through interviews with machine learning practitioners who routinely examine model calibration. Calibrate implements Learned Reliability Diagrams, a simple approach to construct reliability diagrams that can capture local calibration relationships. Additionally, Calibrate is integrated with Jupyter Notebooks, which enables analyses to be easily shared and deployed in a wide array of machine learning environments. We make the following contributions:</p><p>• Learned Reliability Diagrams, a new approach to construct reliability diagrams resistant to the pitfalls of conventional reliability diagrams.</p><p>• Calibrate, an interactive visual analytics tool to analyze model calibration. We design Calibrate to fulfill requirements derived from interviews with machine learning practitioners. Calibrate is designed with Jupyter Notebooks use in mind.</p><p>• An evaluation of Calibrate through use cases and expert interviews showing how Calibrate can be used to analyze calibration across subgroups and how we can use Calibrate to understand determinants of model calibration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK 2.1 Model Calibration</head><p>Calibration is a long-studied topic, particularly from the statistics, metereologic, and more recently, machine learning communities. However, there is limited visualization-specific work regarding calibration. In 1920, Hallenbeck introduced a tabular format to assess the probabilistic forecast of rain <ref type="bibr" target="#b19">[20]</ref>. Reliability diagrams are a direct mapping from the tabular format introduced by Hallenbeck to a line plot, and are a standard calibration visualization <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b27">28,</ref><ref type="bibr" target="#b30">31,</ref><ref type="bibr" target="#b40">41]</ref>. Reliability diagrams effectively bin predictions based on an observation's predicted probability and compares the average classifier probability prediction of the bin to the average rate of the true label in that bin. Hagedorn et al. encodes the size of each bin through each marker's corresponding size in the reliability diagram <ref type="bibr" target="#b18">[19]</ref>. Bröcker and Smith develop consistency bars to alleviate the problem of uneven distributions in bins <ref type="bibr" target="#b6">[7]</ref>. More recently, Vaicenavicius et al. introduce a method to visualize calibration for three-and four-class problems <ref type="bibr" target="#b42">[43]</ref>. Most prior work in calibration has revolved around metrics to assess a model's calibration or methods to calibrate a model. Brier first developed the Brier score in the 1950s to assess weather forecasts <ref type="bibr" target="#b5">[6]</ref>. Brier score, like log loss, is a proper scoring rule, meaning that it is minimized when the probability distribution output by the classifier recovers the true conditional distribution <ref type="bibr" target="#b21">[22,</ref><ref type="bibr" target="#b45">46]</ref>. Kull and Flach show that proper scoring rules can be decomposed into a sum of various losses, one of which is calibration loss. Thus, proper scoring rules do not only capture calibration loss.</p><p>Guo et al. demonstrate that modern neural architectures often produce uncalibrated outputs <ref type="bibr" target="#b17">[18]</ref>. Furthermore, they find that miscalibration can worsen even as classification error is reduced. To measure the calibration loss, they use a variety of metrics, such as expected and maximum calibration error (ECE and MCE, respectively), which measure calibration error relative to a reliability diagram <ref type="bibr" target="#b31">[32]</ref>.  <ref type="bibr" target="#b44">[45]</ref>. While there has been much work done towards quantifying model calibration characteristics, there has been little work directed towards visualizing model calibration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Assessing Model Performance</head><p>The ability to visualize common model performance metrics, like accuracy, precision, and recall, is a fundamental task for machine learning practitioners. Thus, the visualization capabilities needed to analyze model performance metrics are common to most machine learning platforms and libraries <ref type="bibr" target="#b23">[24]</ref>. For example, the sklearn Python library allows one to easily visualize confusion matrices, ROC curves and reliability diagrams. Likewise, TensorFlow allows a user to visualize relevant performance metrics model comparison <ref type="bibr" target="#b0">[1]</ref>. Hinterreiter et al. identify three levels of detail for model analysis, namely global-, classor instance-level <ref type="bibr" target="#b22">[23]</ref>. Global-level considers classifier performance across the whole data set, and may consider global metrics like accuracy. Class-level summarizes a model's performance over specific classes in the data. In practice, this may look like class-specific versions of global metrics or confusion matrices. Instance-level focuses on the errors of specific observations, based on predicted labels or probabilities.</p><p>Much class-level work revolves around the information contained within or derived from confusion matrices, a fundamental visualization in model performance analysis. Alsallakh et al. introduce the confusion wheel, which visualizes confusion between classes for a single classifier <ref type="bibr" target="#b1">[2]</ref>. Gleicher et al. present Boxer, a visual system to explore the results of multiple classifiers <ref type="bibr" target="#b15">[16]</ref>. Recently, Görtler et al. detail Neo, a system that generalizes confusion matrices <ref type="bibr" target="#b16">[17]</ref>. Similar to class-level analysis, there is also strong demand from machine learning practitioners to analyze their models across subgroups in their data. <ref type="bibr">Cabrera et al.</ref> propose FairVis, a visual analytics system which uses multiple coordinated views to investigate fairness metrics across subgroups of interest <ref type="bibr" target="#b7">[8]</ref>. Dingen et al. introduce RegressionExplorer, a visual analytics tool which enables users to compare logistic regression models across subpopulations <ref type="bibr" target="#b13">[14]</ref>. However, the aforementioned approaches do not allow for instance-level.</p><p>Increasingly, many class-level visualizations are turning towards designs that also allow for instance-level inspection. Amershi et al. propose ModelTracker, which arranges observations as boxes on a one-dimensional axis that conveys prediction score <ref type="bibr" target="#b2">[3]</ref>. These boxes allow a user to select instances of interest, while grouping instances in an easy-to-understand way. Ren et al. describe Squares, an interactive system that also visualizes observations using boxes, and is built for multiclass classification problems <ref type="bibr" target="#b38">[39]</ref>. <ref type="bibr">Kahng et al.</ref> propose ActiVis, an interactive visualization system that integrates several coordinated views to explore deep learning models <ref type="bibr" target="#b24">[25]</ref>. Although the aforementioned approaches may allow for subgroup analysis or instance-level inspection, none of them directly analyze model calibration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">CALIBRATION BACKGROUND</head><p>In this section, we provide a background on calibration. First, we enumerate and define various notions of calibration in Section 3.1. Then, in Section 3.2, we introduce reliability diagrams. Next, in Section 3.3, we define common calibration metrics. Finally, we outline issues with reliability diagrams in Section 3.4. We denote our classifier as p : X → Y , which outputs class probabilities for 1,...,K classes. Any instance x ∈ X input to p outputs a probability vector p(x).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Notions of Calibration</head><p>Filho et al. outline several types of model calibration <ref type="bibr" target="#b10">[11]</ref>. The first, and most common, type of calibration, coined confidence calibration, requires that among all instances where the probability of the most likely class is predicted to be α, the expected accuracy is also α, where α ∈ [0, 1]. This is a commonly deployed notion of calibration since it is easy to implement, as one only has to consider the highest predicted probability. Thus, a classifier is confidence calibrated if</p><formula xml:id="formula_0">P(Y = arg max( p(X)) | max( p(X)) = α) = α (1)</formula><p>Another form of calibration is classwise calibration, proposed by Zadrozny and Elkan <ref type="bibr" target="#b47">[48]</ref>. Classwise calibration requires that all onevs-rest probability estimators, derived from the original model p, are calibrated. That is, for class i ∈ 1,...,K and a predicted probability s,</p><formula xml:id="formula_1">P(Y = i | p i (x) = s) = s (2)</formula><p>where p i (x) represents the i-th index of p(x).</p><p>Finally, the strongest notion of calibration is multiclass calibration. Given prediction vector q = (q 1 ,...,q k ) ∈ Y , p is multiclass calibrated if the proportion of classes among all possible instances on x ∈ X getting the same prediction p(X) = q is equal to the prediction vector q.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>P(Y</head><formula xml:id="formula_2">= i | p(x) = q) = q i for i ∈ 1,...,K<label>(3)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Reliability Diagrams</head><p>Reliability diagrams are a popular method to assess model calibration <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b33">34]</ref>. Reliability diagrams group predictions into discrete bins and plot the expected accuracy on the y-axis and average classifier confidence on the y-axis. We call this line calibration curve. A calibrated model is one where the difference between the expected accuracy and the average classifier confidence is small. Thus, a perfectly calibrated model would follow the line y = x. Reliability diagrams are specified for a particular class of interest.</p><p>To estimate the expected accuracy, we group data into "bins". Typically, this is done by dividing predictions into W bins of width 1/W along the range of [0, 1]. We let B w be the set of indices of observations whose prediction confidence is contained within the interval</p><formula xml:id="formula_3">I w = ( w−1 W , w W ].</formula><p>The accuracy of B w , for a given class i, is defined as</p><formula xml:id="formula_4">acc(B w ) = 1 |B w | ∑ j∈Bw 1( y j = y j )<label>(4)</label></formula><p>where y j and y j are the predicted and true class labels for observation</p><p>x j , and 1 is an indicator function. We can define the confidence of B w as conf(B w ) = 1</p><formula xml:id="formula_5">|B w | ∑ j∈Bw p i (x j )<label>(5)</label></formula><p>where p i is the predicted probability of class i for observation j.</p><p>In some implementations, like sklearn, users define the number of bins, and then a strategy which will either generate bins of equal number of samples or of equal width. These parameters can be difficult to select, as they have drastic implications on the reliability diagram itself. We show an example of a reliability diagram in Figure <ref type="figure">3</ref>, as well as demonstrate how the parameters, namely the number of bins and binning strategy, can drastically change the visual representation of model calibration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Calibration Metrics</head><p>Proper scoring rules are loss measures that are minimized when the predicted class distribution equals the true class posterior distribution <ref type="bibr" target="#b26">[27]</ref>. The two most well-known proper scoring rules, which are also used as surrogate losses for optimization, are Brier score and log loss. Brier score (φ BS ) and log loss (φ LL ) are defined as</p><formula xml:id="formula_6">φ BS = 1 N N ∑ i=1 K ∑ j=1 ( y i j − y i j ) 2 φ LL = − 1 N N ∑ i=1 K ∑ j=1 y i j • log( y i j )<label>(6)</label></formula><p>where N is the total number of observations, K is the total number of classes, y i j is the predicted probability of class i for observation j, and y i j is equal to 1 if i is the true class of observation j and 0 otherwise. While scoring rules are minimized when the predicted class distribution from the classifier equals the true class posterior, we also know that proper scoring rules measure more than just calibration loss. This decomposition is shown in <ref type="bibr" target="#b26">[27]</ref>. Thus, we can construct strict measures of calibration using the information calculated that we use in reliability diagrams, namely, the accuracy and confidence of each bins. From these quantities, we can calculate the expected calibration error (ECE) and maximum calibration error (MCE) <ref type="bibr" target="#b31">[32]</ref>. We define ECE and MCE as</p><formula xml:id="formula_7">ECE = W ∑ w=1 |B w | N | acc(B w ) − conf(B w )| MCE = max w∈{1,...,W } | acc(B w ) − conf(B w )|<label>(7)</label></formula><p>Fig. <ref type="figure">3</ref>. Hyperparameters of reliability diagrams, namely the number of bins and binning strategy, can not only drastically change a diagram's visual representation but also the calculation of downstream metrics like Expected or Maximum Calibration Error. For example, the "quantile" strategy (bottom row), which creates bins of equal number of observations, would suggest the above model is well-calibrated. However, the "uniform" strategy (top row), which creates bins of identical width, suggests that the model is not well-calibrated between predicted probabilities of 0.5 and 0.9.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Issues with Reliability Diagrams</head><p>Reliability diagrams are simple to compute, requiring just a single pass through a model's predictions. In this pass, one assigns each prediction to a bin. Each bin contains a range of predictions, like those of [0, 0.1), [0.1, 0.2), and so on. The aforementioned simplicity makes sense from a historical point of view -Hallenbeck tabulated rain forecasts into a table of ten bins in 1920, long before modern computing <ref type="bibr" target="#b19">[20]</ref>. However, we still see influences of Hallenbeck's design choices in modern day calibration analysis. For example, many works still use ten bins or fewer <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b32">33,</ref><ref type="bibr" target="#b33">34,</ref><ref type="bibr" target="#b46">47]</ref>. The number of bins is important since it strongly influences the construction of popular calibration metrics, such as expected calibration error. Nixon et al. detail various problems with expected calibration error due to the design choices stemming from the binning and aggregation procedures required for a reliability diagram <ref type="bibr" target="#b34">[35]</ref>. In turn, these issues may also be associated with reliability diagrams. We discuss a few salient issues below. Issue 1: Variability from Bin Selection. Even small changes for the number of bins can have drastic effects on the produced reliability diagram. Furthermore, binning strategies, such as fixed bin width or quantile binning may induce certain shapes on the reliability diagram depending on the distribution of the predictions. Effectively, a large bin count may create many small bins that have high variance. On the other hand, a small bin count may wash out local calibration information.</p><p>Issue 2: Competing Bin Effects. One issue with reliability diagrams is that binning may wash out competing effects between overconfident and underconfident predictions in a bin. In practice, such an occurrence is common, and it hinders the ability of a practitioner to identify regions of interest in a reliability diagram. In the worst case, the effects would cancel to show no calibration error for a given bin, even though there may be substantial miscalibration within that bin. Thus, the userspecified binning parameters may have strong impacts.</p><p>Issue 3: Importance of Prediction Distribution. The distribution of predicted class probabilities is unlikely to be uniform in practice. In such a case, just a few bins will contribute the most to the expected calibration error. However, in modern reliability diagrams, each mark representing a bin is typically a single point; bin size is not usually visually encoded. Thus, it is possible for two reliability diagrams to look identical, yet have vastly different calibration errors due to the underlying distribution of predicted probabilities. The issue of conveying bin sample size is also important for uncertainty estimation -bins with low counts of observations will inherently have larger confidence intervals for their estimated average class prevalence. Possible solutions include encoding bin size through marker's size <ref type="bibr" target="#b18">[19]</ref> or by computing a confidence interval to visualize on the reliability diagram itself <ref type="bibr" target="#b6">[7]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">CALIBRATE</head><p>In this section, we describe Calibrate, a visual analytics tool that enables interactive analysis of model calibration. First, we present the results of interviews with machine learning experts who routinely examine model calibration. We use these interviews to construct a list of design requirements. Then, we outline the various views in Calibrate, and how these views address the requirements identified in Section 4.1. Finally, we discuss the implementation of Calibrate, which is available for use in Jupyter notebooks. We show an example of Calibrate applied to a predictive model trained with real world data, along with a brief description of Calibrate's views, in Figure <ref type="figure">1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Design Requirements</head><p>We conducted interviews with four machine learning practitioners who actively work on developing, refining and deploying machine learning models, especially those which predict probabilities. We denote each practitioner as P1 through P4. Each practitioner was familiar with reliability diagrams and used them in their work. We asked each expert about their usage of reliability diagrams, particularly how they create them, what types of tasks they attempt to complete using reliability diagrams, and what issues they have encountered using reliability diagrams in practice. Where relevant, we link expert interview feedback to issues described in Section 3.4.</p><p>For each practitioner, reliability diagrams were a common tool used in their analyses. P2 remarked that, especially recently, their organization is using more reliability diagrams to evaluate their models. A common characteristic among all practitioners was that reliability diagrams were most used in content created for other technical staff, such as analysts, data scientists, or data engineers, rather than for less technical stakeholders. However, P4 also mentioned that reliability diagrams may be more intuitive when they present a model's performance to non-technical stakeholders, noting that reliability diagrams are "generally easy to explain" and they "answer a natural question." Most practitioners engaged in binary classification tasks. For multiclass problems, they would typically use a one-versus-rest approach when constructing reliability diagrams.</p><p>All practitioners identified subset analysis as a routine task when analyzing model calibration with reliability diagrams. This task involved manually filtering data to create subgroup of interest and then creating reliability diagrams for these subgroups. Each practitioner mentioned that subgroup analysis was primarily a manual process and involved much domain knowledge to construct subgroups. P1 mentioned that typically they went into this subset analysis knowing specific subsets to analyze, based on domain knowledge. On the other hand, P3 remarked that they would "sanity check" their model across broad subgroups, particularly across subgroups that they may expect to be harder to predict. While these subgroups would be defined by filtering the data by its features, P4 noted that sometimes, although rarely, they would construct subgroups by manually grouping instances.</p><p>When practitioners found a subgroup which was miscalibrated, many of them turned to feature engineering rather than post-hoc corrections like Platt scaling or isotonic regression. For example, when they found a miscalibrated subgroup, P4 mentioned they would typically go back and attempt to create new features to target that specific subgroup. Similarly, P1 remarked that when they found an important subgroup which was miscalibrated, they would either perform more feature engineering, or they would create a separate model for their subgroup. In some cases, practitioners would change their model choice, as there was some understanding among the practitioners that model architecture had an impact on calibration. There were also shared concerns on class imbalance and their effects on calibration by P1, P2 and P4. We investigate this topic further in Section 5.2.</p><p>Displaying the density of the predictions was a common complement to reliability diagrams. In particular, this visualization was deemed by most practitioners to be important for understanding where their model's calibration estimate was more unreliable (Issue 3). Intuitively, where one has lower density of predictions, one would expect the "error" to be higher, as mentioned by P2. P1 mentioned that they sometimes used error bars on their reliability diagrams, but oftentimes opted to plot the distribution of the predictions underneath the reliability diagram, as most other stakeholders could infer which regions had highest variability. Furthermore, P1 described uncertainty estimation in common calibration libraries as having little support.</p><p>A common issue with conventional reliability diagrams was selecting the number of bins. Most practitioners used the default parameters or between 10 and 20 bins. P1 mentioned that they had "only ever seen bins between 10 to 20", and that they found a many bins as unhelpful in analyzing model calibration. P4 noted that they were not familiar with "industry practice" and that they had concerns over reliability diagrams potentially returning different conclusions due to different numbers of bins (Issue 1). Although the practitioners were seemingly less worried about competing effects within bins, P1 mentioned that "the binning obscures a lot of fine detail" (Issue 2), and that the static nature of reliability diagrams does not encourage exploration.</p><p>The practitioners unanimously stated that they implement reliability diagrams using popular packages in Python and R, and in particular, in Jupyter Notebooks. For example, P1 mentioned that they "perform virtually all model analysis and produce all reliability diagrams in Jupyter". One common aspect mentioned by the practitioners was that Jupyter Notebooks are easily reproducible, and therefore they were a desired for disseminating model performance analysis to other stakeholders. Additionally, P2 mentioned that much of their organization's model performance analysis is done in notebooks where the model building also takes place. P3 noted that although model training occurred outside of Jupyter, they would frequently read model predictions into a Jupyter notebook where they would analyze the model's calibration.</p><p>From the above interviews, we compiled the following requirements:</p><p>R1 Allow for identification of interesting calibration regions. Hyperparameter choice is a difficult task for our practitioners and indeed has effects on the visual representation of model calibration. In many cases, practitioners simply use the default parameters given by whichever library they use. However, as we describe in Section 3, traditional diagrams suffer from a variety of issues. Our system should address the issues with traditional reliability diagrams, while also allowing a user to easily change the parameters for conventional reliability diagrams.</p><p>R2 Connect performance to data, especially in bins. Due to the static nature of reliability diagrams, it is difficult for practitioners to inspect specific bins and analyze the instances that comprise the selected bin. Users should be able to select predictions regions, aside from the bins returned by conventional reliability diagrams, and analyze the instances contained within the region.</p><p>R3 Allow for subgroup analysis for reliability diagrams. A fundamental task is to analyze calibration on subgroups of predictions. Finding these subgroups is generally a manual process, whereby the practitioners rely on prior knowledge to manually define and filter subgroups. Thus, we should allow for users to interactively investigate and compare calibration among subgroups of predictions.</p><p>R4 Integrate with Jupyter Notebooks. The practitioners that we interviewed made their reliability diagrams through calibrationspecific packages in Python and to a lesser degree, R. Overwhelmingly, they also deployed the code to produce these diagrams in Jupyter Notebooks, which they found easier to disseminate to other stakeholders in their analytics processes. Furthermore, because many practitioners built their models in Jupyter, they prefer to perform their model analysis near to the model training workload. Therefore, it is important for the tool's implementation to be compatible with Jupyter Notebooks.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Learned Reliability Diagrams</head><p>Reliability diagrams are effectively an attempt to estimate the relationship between a model's predicted probabilities and their associated true outcomes. However, since we only know an observation's label outcomerather than its true probability, we use binning to estimate the "true probability" for a collection of samples. In practice, traditional approaches to reliability diagrams use 10 to 20 bins <ref type="bibr" target="#b17">[18]</ref>. Typically, these bins do not overlap, and they encompass distinct, uniform ranges of the model predictions. One variation is to use a "quantile" binning strategy, whereby bins are created according to the distribution of the data. However, as we show in Figure <ref type="figure">3</ref>, the quantile binning strategy, for some model outputs, can cause most bins to be created near 0 or 1, which complicates analysis of model calibration between the extreme predictions. Another approach to solve the aforementioned issues with reliability diagrams is to use overlapping bins. To the best of our knowledge, the only prior work using overlapping bins is that of Caruana and Niculescu-Mizil, which sorts predictions and creates rolling bins of 100 samples each to calculate confidence and accuracy <ref type="bibr" target="#b8">[9]</ref>. One issue with overlapping bins is that the distribution of the data may result in bins that encompass large ranges of the predicted probability distribution. Thus, local calibration changes may be muted.</p><p>In general, setting the appropriate binning parameters, such as the number of bins or binning strategy, is a difficult activity for many practitioners, and many rely on comfortable past choices. The choice of bins can lead to drastically different conclusions. In Figure <ref type="figure" target="#fig_1">4</ref>, we show various bin sizes for predictions from a random forest classifier trained on the Wisconsin Breast Cancer dataset. By simply considering ten instead of eight bins, we see a large difference in the conclusion one may draw about the model's calibration. Oftentimes, a small number of bins may suggest the model is calibrated, as the bins encompass larger regions, and a large number of bins suggests the opposite, as the bins have few samples in them.</p><p>To address the issues arising from binning parameter selection for conventional reliability diagrams (R1), we propose to learn reliability diagrams. Taking a set of predicted probabilities X, along with the true labels for these predictions Y , we learn a new function f : X → Y . This univariate function can be learned through any classifier that produces probabilistic predictions, such as a boosted tree or a generalized additive model. If our underlying predictions are calibrated, then f will closely follow the 45-degree line for all inputs. Our approach is similar to post-hoc calibration. In post-hoc calibration, one attempts to fix a model's predicted probabilities after the model has generated its predictions. Typically, one imposes a monotonic functional form on f , such as through a sigmoid (known as Platt scaling) <ref type="bibr" target="#b37">[38]</ref> or isotonic regression <ref type="bibr" target="#b47">[48]</ref>. However, in our case, the goal is not to fix the original predicted probabilities, but rather summarize their relationship with the true probabilities in a manner that is less sensitive to binning parameter choices. Thus, while in practice f can be any classifier, we generally want to choose f in a way that is agnostic to the f 's shape (e.g., using logistic regression for f would impose a sigmoid shape) and in a manner that is stable under parameter changes, since many of choices of f would require specific parameters. After learning f , we can plot f (x) for all x ∈ [0, 1] to visualize the learned reliability diagram (Figure <ref type="figure" target="#fig_1">4</ref>). A learned reliability diagram is understood the same way as a conventional reliability diagram. We can still calculate ECE for our learned reliability diagram by determining the total area between the curve and the 45-degree line. Lastly, since our prediction task only takes a single variable as input (the original model predictions), learned reliability diagrams are fast to generate.</p><p>By estimating the relationship between the predicted and true probabilities through a continuous function rather than through discrete intervals, we gain a few advantages. First, the issues of competing effects within a bin or variability imposed by binning parameter selection are largely avoided since learned reliability diagrams are beholden to the distribution of the predictions rather than arbitrary, user-selected binning parameters. Furthermore, many choices of f grant us the ability to easily extract confidence interval estimates. For our work, we use Explainable Boosting Machines (EBMs) <ref type="bibr" target="#b28">[29,</ref><ref type="bibr" target="#b29">30,</ref><ref type="bibr" target="#b35">36]</ref>, which are available in the interpret Python package. While some choices of f may still necessitate parameter tuning, we find that EBMs provide stable results across a wide parameter set. For example, in Figure <ref type="figure" target="#fig_1">4</ref>, we vary the "max bins" parameter in EBMs and find that the resulting learned reliability diagrams are quite resistant to parameter changes.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Calibration View</head><p>Building upon users' familiarity with reliability diagrams, the Calibration View (Figure <ref type="figure">1-C</ref>) visualizes both traditional and learned reliability diagrams (R1). Users may change the number of bins through a selection box at the top of the view (Figure <ref type="figure">1-B</ref>). To visualize calibration for different classes, we allow a user to select the class of interest, which presents the confidence calibration for the selected class. Additionally, users may interact to display learned reliability diagrams or to clear the current view. The calibration view is tied to the other views through select and brushing operations. Since a user may create many calibration curves, we allow the user to hover on a calibration curve, which displays a tooltip with salient information about the selected set of predictions, like expected calibration error. Furthermore, the user may click to "select" the calibration curve, which identifies which model to consider for the brushing operation which populates the Instance and Performance views. With a curve selected, users may also brush to select a prediction region of interest. Using the x-axis values of the brushed region, we then populate the Instance and Performance views with predictions that are within the brushed region.</p><p>Each interviewed expert mentioned that they often coupled a plot of the prediction distribution with the reliability diagram, as it helped to identify areas with high uncertainty due to low sample size. At the bottom of the selected curve, Calibrate provides a histogram of predictions for the observations used to create the selected curve. Understanding the distribution of predictions is important since, especially for difficult multiclass prediction problems, models may not even produce predictions with high confidence. Furthermore, with a density plot, users will be able to gauge the uncertainty of a prediction region, as regions with small amounts of samples will generally have more uncertain estimates.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Feature View</head><p>Subgroup analysis is an important yet arduous task for most users. To analyze subgroup calibration, users first define subgroups of interest, often on a single feature, but potentially on groups of features. Typically, these actions are performed manually in Jupyter Notebooks cells. Thus, with our Feature View (Figure <ref type="figure">1-E</ref>), we seek to make the subgroup creation process interactive to enable quick and iterative analysis. P1 mentioned that they typically view subgroups in terms of "distributions". Thus, we provide a view for users to create subgroups through brushing feature distributions (R3). Being able to visualize the distributions of features may also help practitioners understand the limitations of their own data. For example, P1 mentioned that through exploratory data analysis on their features, they sometimes find important subgroups for which they may lack data, and thus they investigate the calibration characteristics a subgroup defined in this low density region.</p><p>In the Feature View, a user must first select what features to visualize. Users may brush each histogram by dragging across a region of the histogram. Once a user has brushed a region, the user then can create a new reliability diagram. The samples that fit the brushed selection will populate a reliability diagram in the calibration view. One may one-hot encode categorical variables, therefore making subgroup creation a matter of brushing either the 0 or 1 part of the feature's domain. Within the Feature View, a user can scroll to see the full list of features.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.5">Instance View</head><p>Exploring errors on the instance-level is an important aspect of model performance analysis. However, due to the binning required, along with the static nature of reliability diagrams, instance-level inspection is usually not performed in calibration analysis. Furthermore, it is unclear how to assess calibration error on the instance level -two instance may differ in true and predicted labels, but assessing the difference between predicted probability and outcome is akin to a proper scoring rule, which is why binning is employed to measure calibration. Thus, it is difficult to connect performance (confidence regions) to particular instances. Nevertheless, inspecting individual instances manually can still yield interesting outcomes, and may guide model improvement.</p><p>To satisfy R2, we implement the Instance View (Figure <ref type="figure">1-D</ref>). As users brush on the calibration view, the instance view updates to reflect the instances in the selected prediction rage. Each row contains information on the features of each instance and the mean of each feature is shown at the bottom of the instance view.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.6">Performance View</head><p>Ultimately, confusion matrix-derived metrics are still important to visualize for model performance analysis, and was a standard procedure among the experts we interviewed. Thus, it is important to present these classic model performance measures alongside calibration performance measures. Therefore, we implement the Performance View (Figure <ref type="figure">1-F</ref>), which visualizes a confusion matrix, which forms the basis of many count-based performance metrics. The performance view is updated as users brush on the calibration view to select confidence ranges of interest or when a user selects another calibration curve.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.7">Implementation</head><p>Given many data scientists' background in Jupyter, we provide a solution compatible with Jupyter notebooks (R4). The main justification in providing a Jupyter-first tool was that, from our expert interviews, practitioners much preferred to keep their analysis within Jupyter notebooks. In fact, none of our interviewed experts relied on outside programs to analyze their models. The two main avenues of model analysis were either (1) combine model training and performance analysis into a single notebook or (2) model training, particularly for large models, was offloading to another resource, and a notebook read in the predictions for model analysis.</p><p>Calibrate is available as a Python library and is designed with Jupyter Notebooks use in mind. The front-end is implemented via JavaScript with React and D3 <ref type="bibr" target="#b4">[5]</ref>. The back-end, which creates reliability diagrams, is implemented in Python using Numpy <ref type="bibr" target="#b20">[21]</ref>, Pandas <ref type="bibr" target="#b43">[44]</ref> and Interpret <ref type="bibr" target="#b36">[37]</ref>. We use Interpret for its EBM implementation with its default parameters. To use Calibrate, a user first creates the Calibrate(data) class, where data is a dataframe with rows as observations and columns as features. To add models to the Calibrate, users use the .add model(preds, labels, model name) method, where preds is an N × K matrix of predicted probabilities, labels is a N × K one-hot encoded matrix representing the labels of the observations in data, and model name is a string indicating the model name. K is equal to the total number of classes. Finally, to visualize the Calibrate widget, a user may call the .visualize() method.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">EVALUATION 5.1 Case Study 1: Identifying Miscalibration in Subgroups</head><p>Analyzing model calibration among subgroups is an important task. Oftentimes, discovering that a model is miscalibrated for specific subgroups leads to important business or technical decisions. For example, if a sports bettor discovers their game outcome model is miscalibrated for games that occur at night, they may decide not to bet on such games. Like our experts indicated, if a machine learning practitioner uncovers miscalibration among subgroups in their model, they may decide to engineer more features or to change their model architecture. In this use case, we show how Calibrate can be used to analyze model miscalibration among subgroups in a real world data set.</p><p>The COMPAS (Correctional Offender Management Profiling for Alternative Sanctions) data was released by ProPublica in 2016 and is based on Broward County data from January 2013 to December 2014 <ref type="bibr" target="#b3">[4]</ref>. The data consists of information about defendants, such as their sex, race, or previous arrests, which are used to create models to predict a defendant's risk of recidivism. These models have increasingly come under scrutiny, due to their ability to cause significant harm to individuals. While the issue of whether or not these models should be used in practice is best left to other domains, understanding recidivism model calibration is nonetheless important and provides a unique example of how miscalibration may harm individuals.</p><p>We split our data with 50% of observations going to training and 50% going to testing. To start, we consider a defendant's sex, charge degree (misdemeanor or felony), juvenile misdemeanor and felony counts, as well as total prior charge count. We train a random forest classifier, which was noted by our interviewed practitioners as a common model choice they use in practice. Additionally, we consider a multilayer perceptron (MLP) and a logistic regression as other candidate models. We use the default parameters and implementation in sklearn for each model. Using Calibrate, we show the model's associated reliability diagram, along with its learned reliability diagram, in Figure <ref type="figure" target="#fig_2">5</ref>.</p><p>Figure <ref type="figure" target="#fig_2">5</ref> shows that the models are well-calibrated, with the exception of our random forest model in the very low and very high predictions, where we see under and overconfidence, respectively. Overconfidence is indicated by values of the reliability diagram below the y = x perfect calibration line. These are samples which are generally predicted as having a higher probability than the true occurrence rate. Conversely, underconfidence implies that the model predicts a lower probability than the true occurrence rate. For our domain, we may be especially concerned with model overconfidence, as such a characteristic results in higher predicted probabilities than the true rate, meaning a defendant will be rated as higher risk than they truly are, on average.</p><p>While investigating global calibration is typically the beginning of any calibration analysis, it is also important to check a model's calibration characteristics across subgroups of interest. In practice, one would perform subgroup analysis by using domain knowledge to manually define subgroups, through packages like Pandas <ref type="bibr" target="#b43">[44]</ref>. Analyzing regions of the global reliability diagram can also be a useful direction to identify subgroups. Using the brushing interaction, we analyze both the underconfident and overconfident regions in Figure <ref type="figure" target="#fig_2">5</ref>. Interestingly, through the instance view, we observe many young defendants in the overconfident region, which has an average age of 33. In this region, the average predicted probability is about 0.9, yet the average true rate is only about 0.75. Conversely, we see that the underconfident region is slightly older, with an average age of 35. At the same time, at the extremely low end of the underconfident region (i.e., prediction ≤ 0.1), the average age is just 31. Thus, it is reasonable to posit that the miscalibration, particularly in the low and high predictions, may be correlated to some degree with defendant age. Therefore, we define a subset of data encompassing older defendants, which we define as those of 45+ years of age. Using Calibrate's feature view, we create the associated reliability diagram for the "old" subset in Figure <ref type="figure" target="#fig_3">6</ref>. Interestingly, we see that this group faces systematic overconfidence in its predictions, regardless of the selected model choice. Many of our interviewed experts noted that when faced with model miscalibration, it was common for them to hypothesize what features they may be missing. In this instance, it is reasonable to assume that, since we do not include age as a feature, that we may be observe miscalibration associated with age. Thus, we may also include a defendant's age in our model and observe the resulting reliability diagram in Figure <ref type="figure" target="#fig_3">6</ref>. We see that the models become more calibrated on the old age subgroup, yet suffer no large deviation in accuracy. Interestingly, we also see that the characteristics of the lower 20% of predictions changes. For example, without "age" as a feature, these predictions are about half male and half female with an average of 17 prior arrests. However, when considering age, this subset of predictions drops to an average of about 1.5 prior arrests. Thus, the instance view can be useful for learning about the characteristics of prediction regions.</p><p>P1 noted that they sometimes noticed miscalibration with certain model choices. For example, P1 stated "we often use logistic regression as we noticed its outputs were well-calibrated for many prediction tasks". Aside from feature engineering, another avenue one may consider exploring is model architecture. While this may seemingly address global model calibration issues, as demonstrated in Figure <ref type="figure" target="#fig_2">5</ref>, subset analysis is still important. For example, consider the right panel of Figure <ref type="figure" target="#fig_3">6</ref>, where two models can exhibit similar performance on labels, yet have markedly different calibration characteristics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Case Study 2: Analyzing Determinants of Calibration</head><p>Understanding the factors that may induce miscalibration in a model is important. The experts we interviewed typically hypothesized miscalibration as a consequence of one of two factors: <ref type="bibr" target="#b0">(1)</ref>   We see systemic overconfidence in the predictions for all models that do not consider age as a feature.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>All Features 5 Informative Features 1 Uninformative Feature</head><p>Only predicts the mean</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Less confident predictions</head><p>Confident predictions features am I missing?" and "what is the balance of the classes in the data sets?". In this use case, we investigate how the aforementioned factors influence model calibration through experiments with synthetic data. We use sklearn's "make classification" implementation to design a classification task with 10 classes. We generate 20 features for each observation, with 10 of the features as informative and the remaining 10 as noise. We randomly select 50% of the generated samples for training and the remaining 50% for testing. We train a multilayer perceptron using the default parameters provided by sklearn.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Feature Set</head><p>Many experts mentioned that they would turn to feature engineering or to collecting different features when faced with model miscalibration.</p><p>For example, P1 pointed to a real-life use case where they identified a subgroup that was poorly calibrated, which they fixed by creating bespoke features for the subgroup. Thus, it is important to understand the effect of the feature set on model calibration. We also visually demonstrate how, somewhat paradoxically, a model with only uninformative features is often calibrated. We consider a classification task on 10,000 total observations where one class comprises 50% of all observations, and the remaining 50% of observations are spread equally among the other 9 classes. We consider three feature set scenarios: (1) all features, (2) only 5 informative features, (3) 1 uninformative feature. In Figure <ref type="figure" target="#fig_4">7</ref>, we visualize the calibration characteristics of the most prevalent class in red, along with the minority classes each as a gray line. We see that the model is well-calibrated when all features are used, as well as when only 5 informative features are used. Although our model is well-calibrated in (1) and ( <ref type="formula">2</ref>), the model attains a much lower accuracy in scenario (2). Thus, although two models may both be well-calibrated, shown in the calibration view, such a finding does not guarantee similar accuracy, found in the performance view. Furthermore, using the histogram, we notice that as the predictions become less confident (farther away from 1 or 0) as the number of informative feature decreases.</p><p>For scenario (3), we see a single point around 0.5 confidence and accuracy. Effectively, our model is learning no relationships in this case. Thus, for our dominant class, the model always predicts its base rate -50%. In a sense, this model is very well-calibrated since its expected calibration error will be 0. However, intuitively, this model has low accuracy. Thus, we show a canonical example with zero calibration loss, but high error rate (and thus high log loss). Furthermore, this demonstrates a strong case for the use of reliability diagrams in investigating calibration -simply calculating expected calibration error would not have led to the same conclusion.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Class Imbalance</head><p>Class imbalance, where a particular class is more prevalent than others (known as the dominant or majority class), is common in real-world data. Consider a simple data set with two classes, A and B, where the ratio of A instances to B is 99 : 1. A naive model which always predicts class A as 0.99 and class B as 0.01 will achieve 99% accuracy and technically be perfectly calibrated, as we saw above. However, this model would unlikely be used in practice, since it provides no new information to practitioners. Furthermore, imbalanced class scenarios often carry imbalanced costs between errors for different classes, which make identifying minority class instances important. Therefore, it is important to understand class imbalance's relationship with calibration.</p><p>We consider three scenarios: (1) equal class balance, (2) dominant class is 50% of samples, (3) dominant class is 90% of samples. In total we use 10 classes, and the non-dominant classes consist of equal portions of the remaining samples. In Figure <ref type="figure" target="#fig_5">8</ref>, we show the reliability diagrams for the dominant class (red) and the non-dominant classes (gray), which we created by toggling the selected class in the calibration view. Intuitively, the majority class instances are well-calibrated across the three imbalance levels. However, we see that as class imbalance increases, minority instances become systemically miscalibrated, as indicated by the many gray lines below the 45-degree dotted line. The direction of the miscalibration is also towards overconfidence. Overconfidence implies that the model predicts a class with high probability, yet the true probability, as indicated by the reliability diagram, is low.</p><p>One common approach to address class imbalance is to resample the training data in a way that evens out the class distribution. Undersampling evens the class distribution by sampling only a portion of the majority class so that the sampled number of points equals the total minority sample count. Oversampling resamples the minority classes so that the sampled number of points equals the total majority sample count. We run an experiment using the data from the 90%  majority dataset. We show the results of applying basic over and undersampling in Figure <ref type="figure" target="#fig_5">8</ref>. In our experiment, class-based resampling has significant effects on the resulting diagram, which appeared to make our predictions miscalibrated. Specifically, the majority class predictions became severely underconfident, while minority class predictions became severely overconfident. Furthermore, the prediction histogram shows that oversampling pushed majority class predictions towards 1, while undersampling pushed majority class predictions towards 0.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Expert Feedback</head><p>We conducted "think aloud" interviews with the same experts who had previously helped us identify the system requirements. In this session, the experts had access to Calibrate via a Jupyter notebook. The notebook was preloaded with a trained model on the Census Income data set <ref type="bibr" target="#b14">[15]</ref>. Before participants interacted with Calibrate, they were given a brief demo of Calibrate's functionality. Participants were free to explore the results of Calibrate in whatever way they wanted. User feedback was very positive. The experts mentioned that they found the system useful and were interested in using Calibrate for their own work. In particular, the experts appreciated the ability to quickly create subgroups through interaction. P1 mentioned that in the future, it may be useful to have an ordering to the features, such as by their variance. The experts also enjoyed the interaction of selecting a calibration curve, and seeing both the prediction distribution and instances. P2 remarked that the information displayed in Calibrate was clear and interpretable, and that they may consider using the tool for non-technical stakeholders as well. P3 found Calibrate easy to use, especially due to its Jupyter implementation.</p><p>P1 mentioned that although the learned reliability diagram was intuitive as a concept, that the shape of the learned diagram was unintuitive. For the given demo, we utilized an explainable boosting machine <ref type="bibr" target="#b36">[37]</ref> for the learned reliability diagram, which resulted in a "step-like" curve, according to P1. Because of this, P1 mentioned that they confused the steps in the curve as areas of significant calibration changes. When shown a learned reliability diagram using splines, P1 remarked that the smooth function created by the splines was much more intuitive.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">DISCUSSION</head><p>One limitation of our work is that we do not directly tackle the issue of multiclass calibration visualization, and we opt for a one-versus-rest approach instead. In part, this design choice is due to the ubiquity of traditional reliability diagrams, which appear to be easily understood by both technical and non-technical audiences. Furthermore, it was unclear from our domain requirements interviews that multiclass calibration was commonly analyzed, and if so, a one-versus-rest approach was often deployed. Works like Vaicenavicius et al. propose a method to visualize calibration across prediction tasks with three and four classes <ref type="bibr" target="#b42">[43]</ref>. One solution to multiclass calibration visualization may be to adopt a Squares-like <ref type="bibr" target="#b38">[39]</ref> approach, whereby each class is represented on a single horizontal axis by a vertical reliability diagram. Parallel coordinates could also be used to link bins and instances across classes.</p><p>One limitation of learned reliability diagrams is that the selected model architecture may induce particular reliability diagram shapes. For example, if one uses logistic regression as the basis of their learned reliability diagram, then one would see a sigmoid relationship, which, in some instances, may imply overconfidence in the high probabilities and underconfidence in low probabilities. For the case of EBMs, which we use to produce our learned reliability diagrams, we found that, for low max bin counts, the learned reliability diagram sometimes appeared underconfident at the low end of the predictions. However, as shown in Figure <ref type="figure" target="#fig_1">4</ref>, setting the max bins parameter to a high number has little effect on the shape of the learned reliability diagram. Thus, by using the default parameters of EBMs, one may avoid this problem.</p><p>While calibration has traditionally been a topic covered mostly in data mining or machine learning, there are exciting avenues for calibration work in visualization. For example, developing and evaluating new visual encodings for model calibration is particularly interesting. Reliability diagrams rely on many visual design decisions, such as whether to use points or bars, how to visualize uncertainty, or how to set the number of bins. Furthermore, as we saw in our expert study, some users may find certain learned diagram shapes confusing. Many of the questions regarding the aforementioned design decisions may ultimately best be examined through user studies. Indeed, the evaluation of Calibrate is another limitation of our work. While we primarily demonstrate Calibrate's effectiveness through case studies and expert interviews, a quantitative user study, like that performed by Sahann et al. <ref type="bibr" target="#b39">[40]</ref>, would be helpful to further demonstrate the effectiveness of Calibrate's features in aiding machine learning model calibration analysis. Furthermore, we note that our presented use cases represent starting points to generate hypotheses, and should be followed by deeper dives.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION</head><p>Machine learning model performance analysis is an important task that influences real-life model deployment. Much of current model performance analysis is centered around analyzing a model's predicted labels. However, many applications rely on predicting correct probabilities rather than labels. When a model's predicted probabilities align with reality, the model is said to be calibrated. Typically, calibration is explored through static visualizations called reliability diagrams. Since models can achieve high accuracy yet be poorly calibrated, it is important to analyze model calibration. In this work, we present Calibrate, an interactive tool to analyze model calibration. Additionally, we introduce Learned Reliability Diagrams, a simple approach to address the issues with standard binning procedures for traditional reliability diagrams. Calibrate allows users to perform a wide array of analyses, such as subgroup and instance-level analysis. We implement Calibrate for easy use within Jupyter Notebooks, so that calibration analyses can be easily created, reproduced and disseminated. To evaluate Calibrate, we present use cases which perform subgroup analysis and explore model calibration factors, along with expert interviews.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>Fig. 2. Calibration plots for two deep learning models on the CIFAR100 task. Although Model B attains better accuracy, it systematically achieves a larger calibration error (i.e., the prediction confidence is far from the true prevalence).</figDesc><graphic url="image-4.png" coords="2,64.69,72.95,113.52,77.22" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 4 .</head><label>4</label><figDesc>Fig. 4. Example of conventional 8 and 10 bin diagrams (left) along with learned reliability diagrams for a random forest classifier trained on the Wisconsin Breast Cancer dataset. The density of the predictions is shown below each graph using a rug plot. Learned reliability diagrams are resistant to parameter change, while simply going from 8 to 10 bins induces large changes.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 5 .</head><label>5</label><figDesc>Fig. 5. Reliability diagrams for each model, which consider a defendant's sex, charge type, and prior offense counts, on the full COMPAS test set. We can see significant regions of under and overconfidence in the random forest model (red, selected). The random forest's learned reliability diagram is shown as the red dotted line, and its histogram of the predicted probabilities is shown along the x-axis. Brushing indicates regions of predictions with above and below average age through the instance view.</figDesc><graphic url="image-56.png" coords="7,325.89,73.32,205.50,138.04" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 6 .</head><label>6</label><figDesc>Fig. 6. Reliability diagram for "old age" subgroup. Red indicates random forest model, gray indicates other models. Histograms of random forest predictions are shown along the x-axis. Left panel shows models without age as a feature, and the right panel shows models with age as a feature.We see systemic overconfidence in the predictions for all models that do not consider age as a feature.</figDesc><graphic url="image-75.png" coords="8,304.40,73.43,207.38,137.93" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 7 .</head><label>7</label><figDesc>Fig. 7. Dominant class reliability diagram by feature set (red). Each minority class is in gray. Histograms of dominant class predictions are shown along the x-axis. Models trained on all features or 5 informative features are well-calibrated, although the latter has less confident predictions (further from 0 or 1). Using a single uninformative feature produces a model which purely estimates base class -this model can deceptively yield zero calibration error (calibration curve shown in dotted box) yet be an uninformed model.</figDesc><graphic url="image-95.png" coords="8,64.30,270.29,74.89,75.00" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 8 .</head><label>8</label><figDesc>Fig. 8. Reliability diagram by class imbalance showing the majority class (red) and minority clsses (gray). The majority class histogram is shown along the x-axis. Each model is well-calibrated for the majority class. As class imbalance increases, minority class calibration worsens, and trends towards overconfidence. Class balancing techniques appear to make model predictions even more miscalibrated.</figDesc><graphic url="image-101.png" coords="9,97.10,168.87,72.02,72.57" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0"><head></head><label></label><figDesc></figDesc><graphic url="image-1.png" coords="1,166.11,144.49,239.34,211.03" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>Nixon et al. propose a new metric, adaptive calibration error, and show improvement over standard calibration metrics [35]. Vaicenavicius et al. propose a hypothesis test for the aforementioned calibration metrics to provide a more rigorous analysis of model calibration. Widmann et al. generalize common calibration metrics, like ECE and MCE, for multi-class problems</figDesc><table /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head></head><label></label><figDesc>lack of useful features or (2) class imbalance. For example, P4 mentioned that if a model was miscalibrated, they would try to answer questions like "what</figDesc><table><row><cell></cell><cell cols="2">Without "age" feature</cell><cell></cell><cell cols="2">With "age" feature</cell></row><row><cell></cell><cell></cell><cell>Acc.</cell><cell></cell><cell></cell><cell>Acc.</cell></row><row><cell></cell><cell>RF</cell><cell>68.4%</cell><cell></cell><cell>RF</cell><cell>67.1%</cell></row><row><cell>Avg. Priors 17.1 Avg. Priors A A 17.1</cell><cell>LR MLP</cell><cell>73.5% 71.9%</cell><cell>Avg. Priors 1.5 Avg. Priors A A 1.5</cell><cell>LR MLP</cell><cell>73.2% 73.2%</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>All Classes Equal 50% Majority 90% Majority Oversampling (90% Majority) Undersampling (90% Majority)</head><label></label><figDesc></figDesc><table><row><cell>Predictions pushed</cell><cell>Predictions pushed</cell></row><row><cell>towards 1</cell><cell>towards 0</cell></row></table></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>This collaboration has been supported by a grant from Capital One. Silva's research has also been supported by NASA; NSF awards CNS-1229185, CCF1533564, CNS-1544753, CNS-1730396, CNS-1828576, CNS-1626098; and DARPA PTG and D3M. Nonato's research has been supported by São Paulo Research Foundation (FAPESP)-Brazil (grant 2013/ 07375-0) and CNPq-Brazil (grant 307184/2021-8). Any opinions, findings, and conclusions or recommendations expressed in this material are those of the authors and do not necessarily reflect the views of DARPA, NSF, NASA, FAPESP, CNPq, or Capital One.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Tensorflow: Large-scale machine learning on heterogeneous distributed systems</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Abadi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Agarwal</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Barham</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Brevdo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Citro</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Davis</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Dean</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Devin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Ghemawat</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">I</forename><forename type="middle">J</forename><surname>Goodfellow</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Harp</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Irving</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Isard</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Jia</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Józefowicz</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Kaiser</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kudlur</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Levenberg</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Mané</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Monga</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Moore</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">G</forename><surname>Murray</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Olah</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Schuster</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Shlens</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Steiner</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Talwar</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">A</forename><surname>Tucker</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Vanhoucke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Vasudevan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><forename type="middle">B</forename><surname>Viégas</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">O</forename><surname>Vinyals</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Warden</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Wattenberg</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Wicke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Zheng</surname></persName>
+		</author>
+		<idno>CoRR, abs/1603.04467</idno>
+		<imprint>
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Visual methods for analyzing probabilistic classification data</title>
+		<author>
+			<persName><forename type="first">B</forename><surname>Alsallakh</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Hanbury</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Miksch</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Rauber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="1703" to="1712" />
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Modeltracker: Redesigning performance analysis tools for machine learning</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Amershi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Chickering</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">M</forename><surname>Drucker</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">Y</forename><surname>Simard</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Suh</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 33rd Annual ACM Conference on Human Factors in Computing Systems, CHI 2015</title>
+				<editor>
+			<persName><forename type="first">B</forename><surname>Begole</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">J</forename><surname>Kim</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">K</forename><surname>Inkpen</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">W</forename><surname>Woo</surname></persName>
+		</editor>
+		<meeting>the 33rd Annual ACM Conference on Human Factors in Computing Systems, CHI 2015<address><addrLine>Seoul, Republic of Korea</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2015">April 18-23, 2015. 2015</date>
+			<biblScope unit="page" from="337" to="346" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Machine bias</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Angwin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Larson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Mattu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Kirchner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Ethics of Data and Analytics</title>
+				<imprint>
+			<publisher>Auerbach Publications</publisher>
+			<date type="published" when="2016">2016</date>
+			<biblScope unit="page" from="254" to="264" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">D 3 data-driven documents</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Bostock</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Ogievetsky</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2301" to="2309" />
+			<date type="published" when="2011">2011</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Verification of forecasts expressed in terms of probability</title>
+		<author>
+			<persName><forename type="first">G</forename><forename type="middle">W</forename><surname>Brier</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Monthly weather review</title>
+		<imprint>
+			<biblScope unit="volume">78</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="3" />
+			<date type="published" when="1950">1950</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Increasing the reliability of reliability diagrams. Weather and forecasting</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Bröcker</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><forename type="middle">A</forename><surname>Smith</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2007">2007</date>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="page" from="651" to="661" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">FAIRVIS: visual analytics for discovering intersectional bias in machine learning</title>
+		<author>
+			<persName><forename type="first">Á</forename><forename type="middle">A</forename><surname>Cabrera</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Epperson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Hohman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kahng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Morgenstern</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">H</forename><surname>Chau</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">14th IEEE Conference on Visual Analytics Science and Technology, IEEE VAST 2019</title>
+				<editor>
+			<persName><forename type="first">R</forename><surname>Chang</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">D</forename><forename type="middle">A</forename><surname>Keim</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">R</forename><surname>Maciejewski</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Vancouver, BC, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2019">October 20-25, 2019. 2019</date>
+			<biblScope unit="page" from="46" to="56" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Data mining in metric space: an empirical analysis of supervised learning performance criteria</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Caruana</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Niculescu-Mizil</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Tenth ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</title>
+				<editor>
+			<persName><forename type="first">W</forename><surname>Kim</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">R</forename><surname>Kohavi</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">J</forename><surname>Gehrke</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">W</forename><surname>Dumouchel</surname></persName>
+		</editor>
+		<meeting>the Tenth ACM SIGKDD International Conference on Knowledge Discovery and Data Mining<address><addrLine>Seattle, Washington, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2004">August 22-25, 2004. 2004</date>
+			<biblScope unit="page" from="69" to="78" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Are humans good intuitive statisticians after all? rethinking some conclusions from the literature on judgment under uncertainty</title>
+		<author>
+			<persName><forename type="first">L</forename><surname>Cosmides</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Tooby</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cognition</title>
+		<imprint>
+			<biblScope unit="volume">58</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="73" />
+			<date type="published" when="1996">1996</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Classifier calibration: How to assess and improve predicted class probabilities: a survey</title>
+		<author>
+			<persName><forename type="first">T</forename><surname>De Menezes E Silva Filho</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Song</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Perelló-Nieto</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Santos-Rodríguez</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kull</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">A</forename><surname>Flach</surname></persName>
+		</author>
+		<idno>CoRR, abs/2112.10327</idno>
+		<imprint>
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">The comparison and evaluation of forecasters</title>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">H</forename><surname>Degroot</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">E</forename><surname>Fienberg</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the Royal Statistical Society: Series D (The Statistician)</title>
+		<imprint>
+			<biblScope unit="volume">32</biblScope>
+			<biblScope unit="issue">1-2</biblScope>
+			<biblScope unit="page" from="12" to="22" />
+			<date type="published" when="1983">1983</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Stable reliability diagrams for probabilistic classifiers</title>
+		<author>
+			<persName><forename type="first">T</forename><surname>Dimitriadis</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Gneiting</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">I</forename><surname>Jordan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the National Academy of Sciences</title>
+		<imprint>
+			<biblScope unit="volume">118</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page">2021</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Regressionexplorer: Interactive exploration of logistic regression models with subgroup analysis</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Dingen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Van 't Veer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Houthuizen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><forename type="middle">H J</forename><surname>Mestrom</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><forename type="middle">H M</forename><surname>Korsten</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">R A</forename><surname>Bouwman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">J</forename><surname>Van Wijk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="246" to="255" />
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">UCI machine learning repository</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Dua</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Graff</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Boxer: Interactive comparison of classifier results</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Gleicher</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Barve</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Heimerl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Graph. Forum</title>
+		<imprint>
+			<biblScope unit="volume">39</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="181" to="193" />
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<title level="m" type="main">Neo: Generalizing confusion matrix visualization to hierarchical and multi-output labels</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Görtler</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Hohman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Moritz</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Wongsuphasawat</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Nair</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kirchner</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Patel</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:2110.12536</idno>
+		<imprint>
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">On calibration of modern neural networks</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Pleiss</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><forename type="middle">Q</forename><surname>Weinberger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 34th International Conference on Machine Learning</title>
+				<editor>
+			<persName><forename type="first">D</forename><surname>Precup</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">Y</forename><forename type="middle">W</forename><surname>Teh</surname></persName>
+		</editor>
+		<meeting>the 34th International Conference on Machine Learning<address><addrLine>Sydney, NSW, Australia</addrLine></address></meeting>
+		<imprint>
+			<publisher>PMLR</publisher>
+			<date type="published" when="2017-06-11">2017. 6-11 August 2017. 2017</date>
+			<biblScope unit="volume">70</biblScope>
+			<biblScope unit="page" from="1321" to="1330" />
+		</imprint>
+	</monogr>
+	<note>of Proceedings of Machine Learning Research</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">The rationale behind the success of multi-model ensembles in seasonal forecasting-i. basic concept</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Hagedorn</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><forename type="middle">J</forename><surname>Doblas-Reyes</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">N</forename><surname>Palmer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Tellus A: Dynamic Meteorology and Oceanography</title>
+		<imprint>
+			<biblScope unit="volume">57</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="219" to="233" />
+			<date type="published" when="2005">2005</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Forecasting precipitation in percentages of probability</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Hallenbeck</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Monthly Weather Review</title>
+		<imprint>
+			<biblScope unit="volume">48</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="645" to="647" />
+			<date type="published" when="1920">1920</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Array programming with NumPy</title>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">R</forename><surname>Harris</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><forename type="middle">J</forename><surname>Millman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">J</forename><surname>Van Der Walt</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Gommers</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Virtanen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Cournapeau</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Wieser</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Taylor</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Berg</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><forename type="middle">J</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Kern</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Picus</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Hoyer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">H</forename><surname>Van Kerkwijk</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Brett</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Haldane</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">F</forename><surname>Del Río</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Wiebe</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Peterson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Gérard-Marchant</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Sheppard</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Reddy</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Weckesser</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Abbasi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Gohlke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">E</forename><surname>Oliphant</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Nature</title>
+		<imprint>
+			<biblScope unit="volume">585</biblScope>
+			<biblScope unit="issue">7825</biblScope>
+			<biblScope unit="page" from="357" to="362" />
+			<date type="published" when="2020-09">Sept. 2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<author>
+			<persName><forename type="first">T</forename><surname>Hastie</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Tibshirani</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">H</forename><surname>Friedman</surname></persName>
+		</author>
+		<title level="m">The Elements of Statistical Learning: Data Mining, Inference, and Prediction</title>
+				<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2009">2009</date>
+		</imprint>
+	</monogr>
+	<note>2nd Edition</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Confusionflow: A model-agnostic visualization for temporal analysis of classifier confusion</title>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">P</forename><surname>Hinterreiter</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Ruch</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Stitz</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Ennemoser</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Bernard</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Strobelt</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Streit</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="1222" to="1236" />
+			<date type="published" when="2022">2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Visual analytics in deep learning: An interrogative survey for the next frontiers</title>
+		<author>
+			<persName><forename type="first">F</forename><surname>Hohman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kahng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Pienta</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">H</forename><surname>Chau</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="2674" to="2693" />
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Activis: Visual exploration of industry-scale deep neural network models</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kahng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">Y</forename><surname>Andrews</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Kalro</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">H P</forename><surname>Chau</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="88" to="97" />
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Inherent trade-offs in the fair determination of risk scores</title>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Kleinberg</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Mullainathan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Raghavan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">8th Innovations in Theoretical Computer Science Conference, ITCS 2017</title>
+		<title level="s">23. Schloss Dagstuhl -Leibniz-Zentrum für Informatik</title>
+		<editor>
+			<persName><forename type="first">C</forename><forename type="middle">H</forename><surname>Papadimitriou</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Berkeley, CA, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2017">January 9-11, 2017. 2017</date>
+			<biblScope unit="volume">67</biblScope>
+			<biblScope unit="page" from="1" to="43" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Novel decompositions of proper scoring rules for classification: Score adjustment as precursor to calibration</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kull</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">A</forename><surname>Flach</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Machine Learning and Knowledge Discovery in Databases -European Conference, ECML PKDD 2015</title>
+		<title level="s">Lecture Notes in Computer Science</title>
+		<editor>
+			<persName><forename type="first">A</forename><surname>Appice</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">P</forename><forename type="middle">P</forename><surname>Rodrigues</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">V</forename><forename type="middle">S</forename><surname>Costa</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">C</forename><surname>Soares</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">J</forename><surname>Gama</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">A</forename><surname>Jorge</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Porto, Portugal</addrLine></address></meeting>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2015">September 7-11, 2015. 2015</date>
+			<biblScope unit="volume">9284</biblScope>
+			<biblScope unit="page" from="68" to="85" />
+		</imprint>
+	</monogr>
+	<note>Proceedings, Part I</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Calibration of probabilities: The state of the art. Decision making and change in human affairs</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Lichtenstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Fischhoff</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><forename type="middle">D</forename><surname>Phillips</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1977">1977</date>
+			<biblScope unit="page" from="275" to="324" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Intelligible models for classification and regression</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Lou</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Caruana</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Gehrke</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The 18th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, KDD &apos;12</title>
+				<editor>
+			<persName><forename type="first">Q</forename><surname>Yang</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">D</forename><surname>Agarwal</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">J</forename><surname>Pei</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Beijing, China</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2012">August 12-16, 2012. 2012</date>
+			<biblScope unit="page" from="150" to="158" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Accurate intelligible models with pairwise interactions</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Lou</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Caruana</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Gehrke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Hooker</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Koren</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Ghani</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">E</forename><surname>Senator</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Bradley</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Parekh</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><forename type="middle">L</forename><surname>Grossman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Uthurusamy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The 19th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</title>
+				<editor>
+			<persName><forename type="first">I</forename><forename type="middle">S</forename><surname>Dhillon</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Chicago, IL, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2013-08-11">2013. August 11-14, 2013. 2013</date>
+			<biblScope unit="page" from="623" to="631" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Reliability of subjective probability forecasts of precipitation and temperature</title>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">H</forename><surname>Murphy</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><forename type="middle">L</forename><surname>Winkler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the Royal Statistical Society: Series C (Applied Statistics)</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="41" to="47" />
+			<date type="published" when="1977">1977</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Obtaining well calibrated probabilities using bayesian binning</title>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">P</forename><surname>Naeini</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><forename type="middle">F</forename><surname>Cooper</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Hauskrecht</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Twenty-Ninth AAAI Conference on Artificial Intelligence</title>
+				<editor>
+			<persName><forename type="first">B</forename><surname>Bonet</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">S</forename><surname>Koenig</surname></persName>
+		</editor>
+		<meeting>the Twenty-Ninth AAAI Conference on Artificial Intelligence<address><addrLine>Austin, Texas, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>AAAI Press</publisher>
+			<date type="published" when="2015">January 25-30, 2015. 2015</date>
+			<biblScope unit="page" from="2901" to="2907" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Obtaining calibrated probabilities from boosting</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Niculescu-Mizil</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Caruana</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">UAI &apos;05, Proceedings of the 21st Conference in Uncertainty in Artificial Intelligence</title>
+				<meeting><address><addrLine>Edinburgh, Scotland</addrLine></address></meeting>
+		<imprint>
+			<publisher>AUAI Press</publisher>
+			<date type="published" when="2005">July 26-29, 2005. 2005</date>
+			<biblScope unit="page">413</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Predicting good probabilities with supervised learning</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Niculescu-Mizil</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Caruana</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Machine Learning, Proceedings of the Twenty-Second International Conference (ICML 2005)</title>
+		<title level="s">ACM International Conference Proceeding Series</title>
+		<editor>
+			<persName><forename type="first">L</forename><forename type="middle">D</forename><surname>Raedt</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">S</forename><surname>Wrobel</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Bonn, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2005">August 7-11, 2005. 2005</date>
+			<biblScope unit="volume">119</biblScope>
+			<biblScope unit="page" from="625" to="632" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Measuring calibration in deep learning</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Nixon</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">W</forename><surname>Dusenberry</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Jerfel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Tran</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conference on Computer Vision and Pattern Recognition Workshops, CVPR Workshops 2019</title>
+				<meeting><address><addrLine>Long Beach, CA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Computer Vision Foundation / IEEE</publisher>
+			<date type="published" when="2019">June 16-20, 2019. 2019</date>
+			<biblScope unit="page" from="38" to="41" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<title level="m" type="main">Interpretml: A unified framework for machine learning interpretability</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Nori</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Jenkins</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Koch</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Caruana</surname></persName>
+		</author>
+		<idno>CoRR, abs/1909.09223</idno>
+		<imprint>
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<title level="m" type="main">Interpretml: A unified framework for machine learning interpretability</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Nori</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Jenkins</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Koch</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Caruana</surname></persName>
+		</author>
+		<idno>CoRR, abs/1909.09223</idno>
+		<imprint>
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Platt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in large margin classifiers</title>
+				<imprint>
+			<date type="published" when="1999">1999</date>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="page" from="61" to="74" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Squares: Supporting interactive performance analysis for multiclass classifiers</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Amershi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Suh</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">D</forename><surname>Williams</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="61" to="70" />
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Histogram binning revisited with a focus on human perception</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Sahann</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Schmidt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">2021 IEEE Visualization Conference, IEEE VIS 2021 -Short Papers</title>
+				<meeting><address><addrLine>New Orleans, LA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2021">October 24-29, 2021. 2021</date>
+			<biblScope unit="page" from="66" to="70" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">On subjective probability forecasting</title>
+		<author>
+			<persName><forename type="first">F</forename><surname>Sanders</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Applied Meteorology and Climatology</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="191" to="201" />
+			<date type="published" when="1963">1963</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Theoretical analysis of an alphabetic confusion matrix</title>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">T</forename><surname>Townsend</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Perception &amp; Psychophysics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="40" to="50" />
+			<date type="published" when="1971">1971</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Evaluating model calibration in classification</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Vaicenavicius</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Widmann</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">R</forename><surname>Andersson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Lindsten</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Roll</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">B</forename><surname>Schön</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The 22nd International Conference on Artificial Intelligence and Statistics</title>
+				<editor>
+			<persName><forename type="first">K</forename><surname>Chaudhuri</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">M</forename><surname>Sugiyama</surname></persName>
+		</editor>
+		<meeting><address><addrLine>Naha, Okinawa, Japan</addrLine></address></meeting>
+		<imprint>
+			<publisher>PMLR</publisher>
+			<date type="published" when="2019-04-18">16-18 April 2019. 2019</date>
+			<biblScope unit="volume">2019</biblScope>
+			<biblScope unit="page" from="3459" to="3467" />
+		</imprint>
+	</monogr>
+	<note>of Proceedings of Machine Learning Research</note>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Data Structures for Statistical Computing in Python</title>
+		<author>
+			<persName><forename type="first">Wes</forename><surname>Mckinney</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 9th Python in Science Conference</title>
+				<meeting>the 9th Python in Science Conference</meeting>
+		<imprint>
+			<date type="published" when="2010">2010</date>
+			<biblScope unit="page" from="56" to="61" />
+		</imprint>
+	</monogr>
+	<note>Stéfan van der Walt and Jarrod Millman</note>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Calibration tests in multi-class classification: A unifying framework</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Widmann</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Lindsten</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Zachariah</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems 32: Annual Conference on Neural Information Processing Systems</title>
+				<editor>
+			<persName><forename type="first">H</forename><forename type="middle">M</forename><surname>Wallach</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">H</forename><surname>Larochelle</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">A</forename><surname>Beygelzimer</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">F</forename><surname>Alché-Buc</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">E</forename><forename type="middle">B</forename><surname>Fox</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">R</forename><surname>Garnett</surname></persName>
+		</editor>
+		<meeting><address><addrLine>NeurIPS; Vancouver, BC, Canada</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2019-12-08">2019. 2019. December 8-14, 2019. 2019</date>
+			<biblScope unit="page" from="12236" to="12246" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Scoring rules and the evaluation of probability assessors</title>
+		<author>
+			<persName><forename type="first">R</forename><forename type="middle">L</forename><surname>Winkler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of the American Statistical Association</title>
+		<imprint>
+			<biblScope unit="volume">64</biblScope>
+			<biblScope unit="issue">327</biblScope>
+			<biblScope unit="page" from="1073" to="1078" />
+			<date type="published" when="1969">1969</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Obtaining calibrated probability estimates from decision trees and naive bayesian classifiers</title>
+		<author>
+			<persName><forename type="first">B</forename><surname>Zadrozny</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Elkan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eighteenth International Conference on Machine Learning (ICML 2001)</title>
+				<editor>
+			<persName><forename type="first">C</forename><forename type="middle">E</forename><surname>Brodley</surname></persName>
+		</editor>
+		<editor>
+			<persName><forename type="first">A</forename><forename type="middle">P</forename><surname>Danyluk</surname></persName>
+		</editor>
+		<meeting>the Eighteenth International Conference on Machine Learning (ICML 2001)<address><addrLine>Williams College, Williamstown, MA, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>Morgan Kaufmann</publisher>
+			<date type="published" when="2001-07-01">June 28 -July 1, 2001. 2001</date>
+			<biblScope unit="page" from="609" to="616" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Transforming classifier scores into accurate multiclass probability estimates</title>
+		<author>
+			<persName><forename type="first">B</forename><surname>Zadrozny</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Elkan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Eighth ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</title>
+				<meeting>the Eighth ACM SIGKDD International Conference on Knowledge Discovery and Data Mining<address><addrLine>Edmonton, Alberta, Canada</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2002">July 23-26, 2002. 2002</date>
+			<biblScope unit="page" from="694" to="699" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

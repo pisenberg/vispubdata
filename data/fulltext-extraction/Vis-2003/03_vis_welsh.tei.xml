@@ -1,0 +1,702 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main"></title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:53+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>volume rendering</term>
+					<term>point-based rendering</term>
+					<term>splatting</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>This paper introduces a method for converting an image or volume sampled on a regular grid into a space-efficient irregular point hierarchy. The conversion process retains the original frequency characteristics of the dataset by matching the spatial distribution of sample points with the required frequency. To achieve good blending, the spherical points commonly used in volume rendering are generalized to ellipsoidal point primitives. A family of multiresolution, oriented Gabor wavelets provide the frequency-space analysis of the dataset. The outcome of this frequency analysis is the reduced set of points, in which the sampling rate is decreased in originally oversampled areas. During rendering, the traversal of the hierarchy can be controlled by any suitable error metric or quality criteria. The local level of refinement is also sensitive to the transfer function. Areas with density ranges mapped to high transfer function variability are rendered at higher point resolution than others. Our decomposition is flexible and can be used for iso-surface rendering, alpha compositing and X-ray rendering of volumes. We demonstrate our hierarchy with an interactive splatting volume renderer, in which the traversal of the point hierarchy for rendering is modulated by a user-specified frame rate.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Hierarchies of rendering primitives are desirable, since they allow the renderer to tune the size and number, and therefore the rendering effort, of the rendered primitives to the resolution of the screen (view-sensitive) or the local detail of the object (feature-sensitive) or both. Successful approaches that fulfill both metrics have been developed for polygonal surface-based objects a number of years ago (see <ref type="bibr" target="#b7">Hoppe [1997]</ref> and others). One motivation behind the recent trend to point-based surface rendering is that for objects of high geometric complexity a point primitive offers greater simplicity for projection and better delineation of fine object detail than a small triangle <ref type="bibr" target="#b25">[Zwicker et al. 2001a]</ref>, although hybrid approaches have been proposed <ref type="bibr" target="#b2">[Cohen et al. 2001;</ref><ref type="bibr" target="#b1">Chen and Nguyen 2001]</ref>. Similar advantages also exist for point-based volume rendering, often called splatting <ref type="bibr" target="#b23">[Westover 1990</ref>], when compared to imageorder rendering methods, such as raycasting <ref type="bibr" target="#b14">[Meissner et al. 2000]</ref>. However, volume rendering is inherently different from surface rendering (although iso-value volume rendering can also produce the image of a shaded surface). While surface rendering only maintains a collection of points on the surface, volume rendering covers the entire 3D function, supported by a full 3D grid of points, where many points can project and contribute to a single pixel on the screen. On the other hand, the rendering primitives used are similar, both renderers most often represent points as a smooth basis function of radial extent, such as a Gaussian, to provide good blending of the primitives. In surface rendering it is a collection of 2D Gaussians covering the modeled object surface, while in volume rendering it is a collection of 3D Gaussians that blend together to form the 3D function embodied by the grid.</p><p>A number of hierarchical point-based surface renderers have been proposed. Most of the earlier ones, such as <ref type="bibr" target="#b1">[Chen and Nguyen 2001;</ref><ref type="bibr" target="#b0">Botsch et al. 2002</ref><ref type="bibr">, Pfister et al. 2000</ref>; <ref type="bibr">Rusinkiewicz and</ref> Levoy 2000] construct their hierarchies without much consideration of local detail and are mainly view-sensitive, but more recent approaches do perform a feature-sensitive construction of the hierarchy <ref type="bibr" target="#b4">[Dey and Hudson 2002]</ref>.</p><p>While the research in hierarchical point-based surface rendering is numerous, there has not been much work on advancing the concept of hierarchies in the field of point-based volume rendering other than the early work by <ref type="bibr" target="#b10">Laur and Hanrahan [1991]</ref>. Most of the recent effort has been spent on using hierarchical representations for the purpose of opacity-based occlusion culling <ref type="bibr" target="#b8">[Lee and Ihm 2000;</ref><ref type="bibr" target="#b15">Mora et al. 2002]</ref>, while the rendering primitive is still a regular arrangement of points at the original grid resolution.</p><p>As in point-based surface rendering, minimizing the number of rendered points while maintaining a moderate amount of overlap for blending will also minimize the time required for rendering. We have already mentioned opacity-based culling as one important  <ref type="figure">Figure 1</ref>: The engine dataset (256 3 ), rendered semitransparent without occlusion culling at various error thresholds with our algorithm.</p><p>{tfwelsh, mueller}@cs.sunysb.edu, http://www.cs.sunysb.edu/~tfwelsh/Points <ref type="bibr">IEEE Visualization 2003</ref><ref type="bibr">, October 19-24, 2003</ref>, Seattle, Washington, USA 0-7803-8120-3/03/$17.00 ©2003 IEEE means to eliminate the occluded points from the rendering pipeline. A feature-sensitive point hierarchy will also reduce the number of non-occluded points that need to be rendered. The research reported in this paper is targeted at the latter, by constructing a feature-sensitive hierarchical decomposition of the volume, with capabilities to control the local rendering error on the fly. This enables time-critical rendering as well as view-dependent level of detail, both of which are not possible with a flat volume decomposition. Another important issue, unique to volume rendering, is the existence of transfer functions that map raw volume densities to colors and opacities. We can further reduce the number of rendered points by rendering volume regions that fall into uniform portions of the transfer function at lower resolution.</p><p>The basic idea of our work is motivated by the concept of adaptive, or importance sampling. In adaptive sampling, more sample points are placed in image areas with high detail, while less sample points are placed in homogenous regions (see discussion in <ref type="bibr" target="#b5">Glassner [1995]</ref>, chapters 7 and 9). Since we would like to synthesize a smooth image from this point distribution, we must fill the empty areas between the sample points by a suitable blending mechanism. For this purpose, we represent each sample point as an elliptical Gaussian basis function, each having an extent corresponding to the local point density. This is illustrated in <ref type="figure" target="#fig_5">Fig. 7</ref> (left). There are three stages to this process. First, we need to analyze the image/volume to find proper sample locations for the adaptive sampling. We do this by performing a Gabor wavelet decomposition. Second, from the analysis we obtain the decomposition hierarchy which is synonymous with the point placement in adaptive sampling, and assign an error metric to each component or node in the hierarchy. The third stage is the actual image synthesis where we traverse the hierarchy and pick the most appropriate points given the quality metric and other view-dependent and transfer function-dependent metrics, and splat these chosen points into the image. All of these three stages will be described in the following sections, after a discussion on previous work in this area.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Previous Work</head><p>As far as we know the only space-covering point hierarchies constructed were in the form of quadtrees and octrees. However, an undesirable property of quadtrees (octrees) is that a subdivision always gives rise to 4 (8) children (as shown in <ref type="figure" target="#fig_0">Fig. 2a</ref>). A more generalized point hierarchy, as the one shown in <ref type="figure" target="#fig_0">Fig. 2b</ref>, would allow for a lesser amount of children to be expanded. This reduction of nodes can have important implications on storage and rendering complexity. The hierarchical splatting technique proposed by <ref type="bibr" target="#b10">Laur and Hanrahan [1991]</ref> for volume rendering is based on an octree and stores the root mean square error in each node. This measure is then compared with an error threshold during traversal to decide if the node should be expanded or not. The error approximates the cost of rendering a region at the resolution of the hierarchy level and the root mean square error metric is related to the frequency content at that location.</p><p>The discrete wavelet transform offers a more versatile and rigorous framework for frequency analysis, and a number of visualization researchers <ref type="bibr" target="#b6">[Guthe et al. 2002;</ref><ref type="bibr" target="#b17">Muraki 1994;</ref><ref type="bibr" target="#b21">Westenberg and</ref><ref type="bibr">Roerdink 2000, Westermann 1994</ref>] have used this transform to find a decomposition. In this case, the basis functions are given by the scaled wavelets. A wavelet-based decomposition, with only the significant nodes shown, may look like the one given in <ref type="figure" target="#fig_0">Fig. 2c</ref>. Note that unlike the quadtree, where only the bottom nodes (the black ones) of the expanded tree have to be used for signal synthesis, in the wavelet transform all nodes with a significant coefficient (the black, blue, and red ones) have to be added, with potentially large overlap among the basis functions. This does not fulfill our minimum overlap criterion. In fact, the large extent of the basis functions encoding the low signal frequencies has prevented the use of wavelet splatting for anything more than X-ray projection, since the spatial order of the basis functions required for compositing does not exist.</p><p>A very different strategy to find an image decomposition into radial basis functions is to use numerical optimization. A list of available techniques includes the conjugate gradient method, nonlinear least squares, such as the Levenberg-Marquardt algorithm, or simulated annealing <ref type="bibr" target="#b19">[Press et al. 1988]</ref>. The latter was recently used by <ref type="bibr" target="#b9">[Kreylos, B. Hamann 2001]</ref> to find a (piecewise linear) polygonal decomposition of an image. Childs et al. <ref type="bibr">[2000]</ref> employed a modified version of the Marquardt algorithm to decompose images into a set of elliptical Gaussians. Although their implementation, termed Quickstep, is an order of magnitude faster than the Marquardt algorithm it still takes about one hour to find the decomposition of the Lena image (256 2 ), which will probably make the algorithm infeasible for volumes. The compression rates are rather impressive, but a drawback of the resulting assembly of Gaussians is that they will only yield a correct image when splatted into the same grid that was used to evaluate the minimization metric. In other words, the continuous function generated by the field of Gaussians is not smooth and can have sharp positive and negative spikes at off-grid positions, which would be disastrous for splat-based volume rendering or image magnification.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Overview</head><p>For a given dataset, the hierarchy consists of a number of fixed elements similar to a quadtree for images, or an octree for volumes. Thus, the basic structure is a tree with M levels, and each node has a fixed degree 2 D where D is the dimensionality of the dataset. Nodes higher in the tree represent coarser features while leaf nodes (level 0) represent the original grid samples of the dataset. The main difference between our representation and that of a quadtree or octree is that nodes above the leaf nodes are not constrained to represent regular data points but can contain irregular samples as well. In fact, each node contains a different set of primitives (not necessarily 2 D ) chosen from a fixed set of possibilities much like a basis set. <ref type="figure">Fig. 4</ref> shows the point primitives for the 2D case. Here, we see that a given node will maximally use four point primitives. However, by using horizontal or vertical splats we can cut this number in half. In the case of volumes, a node will maximally use up to eight points but 1/4 as many for the horizontal or vertical representation. Thus, by combining the structure of an octree with irregular sampling we are able to increase compression while retaining the traversal speed afforded by the octree-based space decomposition.</p><p>There are two main steps in building the point hierarchy. First, the analysis stage involves decomposing the dataset into individual frequency components (scale and orientation) using the Gabor wavelet family. We use this information to build the fundamental types of point primitives (elliptical Gaussians) and their location for a given level in the hierarchy (scale level). More specifically, we locate scale-space regions where features are oriented in a single direction. For these regions we direct sampling in the optimal direction and thereby reduce the number of samples required to capture that feature. This potentially can eliminate a large number of unnecessary samples at each level in the hierarchy while the structure of the tree remains fixed (each node has 2 D children). Second, we assign an error metric to each component (node) in the hierarchy. This error value is used later during rendering to determine how far in the hierarchy tree we must traverse from the coarsest, top level towards the finer, bottom level while still capturing the important features of the data. This stage allows a further reduction of points because we are able to render fewer, larger points in regions when there is a low error associated with nodes that are higher in the hierarchy.</p><p>The rendering stage involves traversing the hierarchy and splatting the nodes which fall below a threshold criterion. For images, the elliptical Gaussian splats for each node are accumulated in an image buffer along with the weights of these splats. The final image is then normalized by dividing the image buffer with the weight buffer. For volumes, we have implemented rendering using a pre-shaded splatting technique using texture mapping which does not normalize the image buffer <ref type="bibr" target="#b16">[Mueller et al. 1999]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Frequency Analysis</head><p>In this section we describe the analysis of the dataset's frequency characteristics using Gabor wavelets. The goal is to gather information in both the space and frequency domains to determine the proper sampling rates for different portions of the dataset. The end result is a decomposition of the 2D image or 3D volume into a hierarchy of multiresolution scales and orientations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Gabor Wavelet Decomposition</head><p>Gabor functions are well suited for the task of extracting oriented, multiresolution features from images and volumes. In particular, Gabor wavelets are attractive for our goal of combining spatial and frequency information. A well known property of these functions is that they provide the best theoretical trade-off between space and frequency resolution <ref type="bibr" target="#b3">[Daugman, 1988]</ref>.</p><p>Gabor functions are created by modulating a Gaussian function with complex sinusoids. In its general form, the 2D Gabor function is written <ref type="bibr" target="#b3">[Daugman, 1988;</ref><ref type="bibr" target="#b13">Manjunath and Ma 1996]</ref> as:</p><p>( <ref type="formula">1)</ref>where σ x and σ y are the extents of the Gaussian in the spatial domain and (u 0 ,v 0 ) is the frequency of the complex sinusoid. In the frequency domain, the Gabor function is simply a Gaussian function scaled differently in the x and y directions:</p><formula xml:id="formula_0">(2)</formula><p>where λ is the aspect ratio σ y/ σ x . , ω c is the central frequency value and θ is the central direction. Thus, to create the full family of oriented, multiscale wavelets we just rotate and dilate this mother wavelet in the frequency domain.</p><p>We set N=4 possible orientations and set the number of levels M in the hierarchy to depend on the dataset. More specifically:</p><p>(3)</p><p>Here, n and m are the direction and scale values for a given wavelet function. These parameters create the decomposition shown in <ref type="figure" target="#fig_1">Fig. 3a</ref>. Thus, we are able to capture horizontal, vertical and diagonal orientations. We should note that by using a linear combination of these values it would be possible to further localize features between these major directions. However, as this would have adverse effects on storage, we only use quantized directions.</p><p>For volumes, we quantize directions to the 13 edges, faces and vertices of a cube (see <ref type="figure" target="#fig_1">Fig. 3b</ref>). In spherical coordinates these correspond to the directions ={(-90,0), (-45,0), (-45,-45), (-45,-90), (-45,-135), (0,0), (0,-45), (0,-90), (0,-135), (45,0), (45,-45), (45,-90), (45,-135) in the frequency domain. The 3D version of equation <ref type="formula">2</ref>is: <ref type="formula">4</ref>The Gabor wavelet transform can be performed in the spatial domain as a set of separable 1D convolutions <ref type="bibr" target="#b12">[Loy 2002</ref>], however for simplicity, we extract our wavelet decomposition using multiplication of the Gabor function with the image/volume in the frequency domain. We use the Fast Fourier Transform (FFT) to transform the data into the frequency domain, perform the multiplications with the Gabor functions, and then transform each result back into the spatial domain using the inverse FFT operation</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Point Primitives</head><p>For images, the point primitives are 2D elliptical Gaussians oriented in four quantized directions and scaled to any size. <ref type="figure">Fig. 4</ref> shows the six different splat types that can occur in 2D: two isotropic and four anisotropic. The four primitives on the top left corner of the figure represent the original samples of image. The single large splat on the top right is used when no significant features exist for a given node. The anisotropic primitives are used when features are directed along a single direction. The orientation of the flattening corresponds to the arrow directions in <ref type="figure" target="#fig_1">Fig. 3a</ref>. The splat primitives in <ref type="figure">Fig. 4c</ref>-f correspond to the arrow directions in <ref type="figure" target="#fig_1">Fig. 3a</ref>, counterclockwise. In both images and volumes, the number and orientation of the points is designed to fully cover each node in the hierarchy spatially while limiting the sampling rate along the direction orthogonal to the feature. For example, if only a strong horizontal  feature exists for a given node in an image then the feature can be represented with only two thin splats <ref type="figure">(Fig. 4f</ref>). For diagonal features, the diagonal length of a node conservatively requires 3 directed splats as shown ( <ref type="figure">Fig. 4c,e</ref>). The size of the splats within a node are adjusted in order to spatially cover the node while minimizing overlap with neighboring nodes. It should be noted that if one normalizes the splatted image by the sum of weights, such that overlap between neighboring splats is corrected for, then the precise size and position of the diagonal splats is not important.</p><formula xml:id="formula_1">g x y u 0 v 0 , , , ( ) x 2 2σ x 2 --------- y 2 2σ y 2 --------- + - 2 πi u 0 x v 0 y + [ ] + exp = G u v , ( ) e 2π 2 λ 2 u′ u 0 ′ - ( ) 2 v′ v 0 ′ - ( ) 2 + ( ) - = u′ u θ cos v θ sin + = v′ u - θ sin v θ cos + = u o ′ v o ′ , ( ) ω c θ cos ω c θ sin , ( ) = θ nπ N ------1 n N ≤ ≤ , = ∆w 2 m - 2 -1 m M ≤ ≤ , = ω c 2 m - ∆w - = λ 2∆w k 1 - ( ) πω c ---------------------------- = φ θ , ( ) G u v w , , ( ) e 2π 2 λ 2 u′ u 0 ′ - ( ) 2 v′ v 0 ′ - ( ) 2 w′ w 0 ′ - ( ) 2 + + ( ) - = u′ u θ φ cos cos v φ sin - w θ φ cos sin + = v′ u - θ φ sin cos v φ cos w θ φ sin sin + + = w′ u - θ sin w θ cos + = V F F F V V E V E E E E E (a)<label>(b)</label></formula><p>For volumes, there are 15 splat primitive sets: two isotropic splat sets and 13 anisotropic splat sets directed along quantized directions of a cube depicted in <ref type="figure" target="#fig_1">Fig. 3b</ref>. A cube has 6 faces, 8 vertices and 12 edges but by symmetry there are only 13 relevant directions. The 3 face directions can be covered with two large, pancake-shaped splats (analogous to the 2D case of <ref type="figure">Fig. 4d,f)</ref>, while the 6 edge and 4 vertex directions can be covered with three splats flattened perpendicular to the direction vector, placed equidistant from each other (analogous to the 2D case of <ref type="figure">Fig. 4c,e</ref>). In addition, there is the single large-splat configuration and the standard 8-small-splats configuration. In practice, we have found that it is better to use 4 elongated cigar-shaped splats for the edge directions when normalization is not used in the volume rendering.</p><p>Note that the average occupancy of all of these configurations is less than 4 splats, which is considerably smaller than the standard 8-splat case. In conjunction with the fact that these loweroccupancy configurations can be tuned reasonably well to the local features, we expect a high utility during rendering and therefore considerable savings.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Selecting Node Types</head><p>For images, each node is assigned one of the 6 types shown in <ref type="figure">Fig. 4</ref>. For volumes, each node is assigned one of 15 possible types (single splat, 8 small splats or one of 13 possible directed splats). Based on the construction of the Gabor wavelet family, each node will have 4 Gabor coefficient values for images and 13 coefficients for volumes to examine. We use a simple algorithm to determine whether any directed feature exists for that node:</p><p>Thus, if no large Gabor coefficients exist, one large splat is sufficient. If, however, there is a large, dominant coefficient and no other large non-neighboring coefficients then we select a directed splat. By only considering non-neighboring directions we take care of the possibility that there could be a feature oriented between two quantized directions, which would give rise to large coefficients at both of these orientations. In our experiments we have found that thresholds around t 1 =2,t 2 =10 and t 3 =0.05 worked reasonably well.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Assigning Error Values to the Hierarchy</head><p>The final pre-processing step involves assigning an error value to each node in the hierarchy. It is this error which is used during rendering to determine whether a node should be rendered (because it is below a user-defined threshold) or whether the hierarchy needs to be traversed more (the error associated with splatting at a course resolution is too large). We examined a number of error metrics including: (i) the maximum Gabor coefficient at a given node, (ii) the root mean square error used by Laur and Hanrahan which assumes the rendering primitive is a spherical Gaussian, (iii) a direct measure of the difference between a node splatted using its assigned point primitives and the original volume.</p><p>The first method involves selecting the largest coefficient from the frequency decomposition generated by the Gabor wavelets for each node in the hierarchy. Clearly, we expect large coefficients to be associated with important features. On the other hand, since we traverse the hierarchy in a top-down fashion during rendering, we do not want to skip important nodes low in the hierarchy by selecting nodes above them before examining the entire hierarchy. Thus, we store for each node both the maximum error value (i.e., the coefficient) from the Gabor wavelet analysis and the value of the highest coefficient below it in the tree. We render nodes with a high coefficient value. The traversal algorithm is:</p><p>This traversal method makes sense when synthesizing a single image or a "cut" across the hierarchy <ref type="bibr" target="#b11">[Leven et al. 2002]</ref>. It is a conservative approach in that it will never cull nodes below a given node if the children nodes contain important high frequencies.</p><p>Although the traversal method using the Gabor coefficients directly produces acceptable results, there are at least two reasons for considering other error metrics. First, the Gabor wavelets were built in the frequency domain so there is always some amount of trade-off of spatial resolution for frequency resolution. In other words, the coefficients are somewhat susceptible to ringing artifacts and not always spatially precise. Also, it should be observed that we cannot expect gradual changes in the point reduction when the threshold is changed. For instance, when we raise the threshold, there can be a sudden drop in the number of rendered points when many coefficients in the lower hierarchy levels fall below the threshold. This lack of level of detail control leads to unexpected, irregular changes in the rendered image as the threshold changes.</p><p>A second error metric that we implemented is the root mean square error used by <ref type="bibr">Laur and Hanrahan: (5)</ref> where e j l is the error associated with node j at level l, s i is the value of the voxel sampled on a volume pyramid and each of the summation terms is over the entire node region. This metric effectively measures the variation for a node at the resolution of its pyramid level. Although this metric can be computed relatively quickly, it assumes a constant function throughout the node.</p><p>Because our point hierarchy uses irregular samples within a node, we found it more suitable to use a metric which is sensitive to the specific manner in which the point hierarchy was built. Ideally, we should use a metric which is sensitive to errors associated with the final rendered image. However, this is infeasible since the final choice of splats will be dynamic and unknown before rendering. Our simple approach is to splat each level of the hierarchy into a 2D or 3D image buffer and to assign an error to each node based on the difference between the original image and the splatted image at a given level. Although this approach is computationally slow, it produces the best results. It has an advantage over using the Gabor coefficients directly when an interactive traversal mechanism is required because the threshold is directly proportional to image quality. The traversal algorithm then becomes:</p><p>Note that we still need to use the Gabor coefficients to determine splat orientations. Had we used a slow, brute force technique and simply tested the error for each of the 15 possible configura-</p><formula xml:id="formula_2">2 2 2 2 + 2.83 ≈ if (foreach direction i, coeff i &lt; t 1 )</formula><p>then nodetype="single large splat" else if foreach direction i foreach direction j not neighboring i coeff i &gt; coeff j (i is the strongest direction) and coeff j &lt; t 2 (j is not too large) and coeff i /coeff j &gt; t 3 (i is comparably larger than j) then nodetype="directed towards i" else nodetype="maximum number of small splats" tions for each node, the error values would only be able to reflect properties local to the node and not take into consideration the global frequency characteristics due to overlapping nodesRendering 2D images using elliptical splats is straightforward and can be implemented efficiently in software <ref type="bibr" target="#b8">[Heckbert 1989</ref>]. The only major difference is that a final normalization step is required due to the irregular point arrangement. Normalization is performed by dividing the value buffer by a weight buffer, which is obtained by splatting the points with a value of 1.0.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Rendering</head><p>Rendering in 3D is a much more difficult task due to computational complexity. A further complication is the issue of how to composite semi-transparent samples before the normalization step can be applied. One solution would be to use a slice-based splatting approach <ref type="bibr" target="#b16">[Mueller 1999]</ref> where each sheet buffer is normalized before shading and compositing. However, for better speed we chose to implement the simpler composite-only pre-shaded splatting algorithm by <ref type="bibr">Westover [1989]</ref> which renders each splat as a whole and not in sections. The lack of interpolated volume sheets, however, makes normalization infeasible, which, to our surprise, has not compromised image quality significantly beyond the usual blurring associated with this type of algorithm (see Results).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Creating 3D Elliptical Gaussians</head><p>The shape of a 3D elliptical Gaussian can be modeled via the implicit equation of an ellipsoid (quadric surface):</p><p>Since we assume that the ellipsoid is centered about the origin for a given splat and of unit size (k=1), we let g=h=j=0 and drop the last four terms. We can represent this ellipsoid using matrix notation <ref type="bibr">[6]</ref>, giving rise to a 3x3 quadric matrix Q. With this representation we can create arbitrarily oriented and scaled ellipsoids by applying the desired 3D affine transformation contained in matrix M with the formula:</p><formula xml:id="formula_3">(6)</formula><p>where I is the identity matrix. In our application, a non-uniform scale followed by a rotation will generate each of the 13 configurations (for each scale). We can pre-multiply M by the viewing matrix V before application of (6) to obtain the screen space ellipsoid E. To obtain the 2D screen projection of E we can simply drop its last row and column to obtain E's 2D screen-space ellipse E'.</p><p>For orthographic rendering we can pre-compute E' for all cases and scales before the frame is rendered (the hierarchy only stores the ID for the case and scale per splat). For perspective rendering, V changes with distance from the screen and therefore we need to compute E' per splat <ref type="bibr" target="#b26">[Zwicker et al. 2001b]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Texture Mapping the Ellipse</head><p>Next we need to determine the function that maps the unit Gaussian function stored in the graphics board's texture map to the ellipse represented by E' (see <ref type="figure" target="#fig_3">Fig. 5</ref>). We can perform this affine mapping by simply scaling a unit circle in two orthogonal directions by factors s x and s y and then rotating the stretched circle by an angle θ to form the appropriate ellipse. A procedure that achieves this is described in <ref type="bibr" target="#b23">Westover [1990]</ref>, but we noticed that the derivation contains two crucial (possibly typographic) errors and thus we outline our own derivation in closer detail here.</p><p>Starting from the identity matrix we solve for the three unknown parameters s x , s y , θ, using equation <ref type="formula">6</ref>with the parameters of E' and scale and rotation matrices S and R:</p><formula xml:id="formula_4">(7)</formula><p>Plugging in the unknown parameters s x , s y , θ we get: <ref type="formula">8</ref>These are the terms that are incorrectly reported by <ref type="bibr" target="#b23">Westover [1990]</ref>. After some algebraic manipulation we get: <ref type="formula">9</ref>When d=0, the mapping is determined by scaling factors , and θ=0. When d is not 0, let:</p><p>We can now use equation <ref type="formula">8</ref>to compute s x , s y . This gives us all parameters of S and R to transform the four vertices of the polygon that maps the unit Gaussian texture to the screen.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Hierarchy Traversal and Image Synthesis</head><p>We now describe the final traversal algorithm for our interactive volume renderer. In this section we assume that method 3 (difference metric) is used to obtain the node error. Sensitivity to uniform transfer function regions. By making our traversal algorithm sensitive to uniform regions in the transfer function we can further reduce the number of rendered points (provided such uniform areas exist). When the corresponding density values are spatially localized then we can represent the same function with fewer, larger splats using our hierarchy. We are able to make our traversal algorithm sensitive to the transfer function by ways of a simple procedure. First, we build a 2D table TF[0-255][0-255] storing the variability of the transfer function for all of the quantized range intervals. For instance, we store the difference between the minimum and maximum values for ranges: {0-5},{0-10}, ... {0-255}, {5-10},{5-15}, ...{200-255}. Second, as a preprocessing step, we store at each node in the hierarchy the range of values of the volume v min , v max for the spatial region covered by that node. Thus, during traversal we have an additional error metric to consider, that is, TF var =TF[v min ][v max ], which indicates the variability of the transfer function for that node. If TF var is zero or below a threshold for a given node then there is no need to traverse the hierarchy further.</p><p>Smooth transients for speed and quality. Because our goal is to create an interactive system in which traversal depths between frames are expected to vary, we need to consider mechanisms to </p><formula xml:id="formula_6">E' S R ⋅ ( ) 1 - ( ) T = I S R ⋅ ( ) 1 - ⋅ ⋅ R S 1 - ( ) 2 R T ⋅ ⋅ = E' ----------------------- θ θ cos sin s y 2 ----------------------- + = a b - d ------------ θ cos θ sin ------------ θ sin θ cos ------------ - = s x 1 a ⁄ = s y 1 b ⁄ = G a b - ( ) d ----------------w , θ cos θ sin ------------ = = G w 1 w ---- -     or equivalently w 2 Gw - 1 - ( ) , 0 = = w G G 2 4 + ± 2 -------------------------------θ arc 1 w ----     tan = , =</formula><p>enforce smooth continuities between frames. Due to the manner in which the hierarchy is built, it is possible for scale size or resolution between a parent node and its child to differ by up to two levels (a parent node could be rendered as one large splat at size level i while its child might consist of 8 small splats at level i-1). Also, image quality tends to make large jumps when the threshold changes between certain critical regions. <ref type="figure" target="#fig_4">Fig. 6</ref> (pink line) demonstrates this effect. The plot shows the number of points being rendered as a function of increasing threshold. The sharp drops in the line indicate these critical regions where we suspect the traversal mechanism introduces discontinuities in rendering quality.</p><p>In order to lessen these effects, we introduce another layer to our node hierarchy for single large splats. This is actually just the large splat primitive type that we use to build our hierarchy, but we add an additional error term for rendering this type at each node. Thus we simply add another error test during traversal and do not need to store any additional information. <ref type="figure" target="#fig_4">Fig. 6</ref> (blue line) shows how this simple modification reduces the large discontinuities in the number of points being rendered. Note, the blue line is lower than the pink line because less, larger splats are being utilized. However, image quality falls at a greater rate.</p><p>Final traversal algorithm. Our final traversal algorithm is:</p><p>The final splat value is obtained by sampling a Gaussian pyramid. Also, because we render using compositing, we must order our splats from front to back. This is achieved using a standard bucket sorting algorithm which is performed before a view is rendered. Once the splats are properly ordered we send them to the video card where they are composited using OpenGL texture mapping and lighting.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Results</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Images</head><p>We implemented a 2D software splatter to demonstrate the results of applying our algorithm to images. <ref type="figure" target="#fig_5">Fig. 7</ref> shows a point reduction for the Lena image of 1/3 and 1/5 of the original number of points. At 1/5 of the original number of points, only very slight smoothing can be perceived. Looking closely at the shape of the points (bottom left image), we observe that the frequency analysis seems to be quite successful in placing oriented splats close to the appropriate features. Note that for this image the threshold was set very high, to bring the number of points down to a visibly differentiable level. We should mention that we do not compare our results to standard image compression algorithms such as JPEG, since the main goal of our system is to create a point hierarchy system and not image compression.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Volumes</head><p>In this section we show the results of applying our algorithm to volumes. Results were generated on a Pentium 4 (2.0 GHz) system with an nVidia Geforce4 4400 Ti graphics board and 1 GB of main memory. All voxels (including the original reference volume) were thresholded above values of 5 to eliminate "air" voxels. Also, no occlusion culling was used for all our experiments to show the pure speedup facilitated by our flexible point hierarchy. <ref type="figure">Fig. 1</ref> presents the 256 3 engine volume, rendered semi-transparently as a point cloud with no opacity-based gradient modulation. This example demonstrates the advantage of using a minimized point hierarchy when the goal is interactive rendering speeds. The original dataset uses over 2.6 million points and takes 9 seconds to render. However, a very high quality image (b) can be obtained with less than 1 million points and can be rendered in 3 seconds. Also, at near interactive frame rates, the volume only looks blurry but still retains all the important features (c, d). <ref type="figure">Fig. 8</ref> compares the results of using the three different error metrics that we have described in Section 4.4. The original image is shown on the left. Image (b) uses the default error metric (method 3) which is just the 3D difference between the original volume and the reduced point representation for the node. Image (c) uses the root mean square error used by Laur and Hanrahan. This error is faster to compute and good in quality but there is some image quality loss. For example, observe the loss of detail above the eye brow. Next, (d) shows the image generated using the Gabor coefficients directly. Although the quality is good, there are   A cut-out of the hat area (at a higher threshold for demonstration purposes): the elliptical orientation appears to follow the features well. many more points being used and there is also a lack of range in the compression level. Finally, (e) shows similar loss of detail around the brow when the full hierarchy is rendered with 8 spherical splats per node but using method 3. This indicates that by using oriented primitives we are able to render higher quality images even when the error metric and all other factors remain the same. Note that the octree decomposition of Laur and Hanrahan is a subset of our decomposition. To fit their approach, each of our featurealigned elliptical splats would have to be substituted by a set of spherical splats to achieve the same error and therefore more primitives would have to be rendered. <ref type="figure">Fig. 9 (left column)</ref> shows another example of a volume rendering, a semi-transparent foot. Using our decomposition we are able to get interactive framerates with minimal loss of image quality. Finally, <ref type="figure">Fig. 9 (right column)</ref> shows the results of our implementation for X-ray rendering. Here we are using a software implementation since the limited framebuffer precision does not allow the accumulation of X-ray images in hardware. We are however, able to perform normalization by a separately accumulated weight image, since X-ray performs order-independent summations. We achieve interactive frame rates at the expense of image blurring. Image (a) is the original dataset. Image (b) uses our technique with 1/4 compression, and we observe only slight quality degradations. Image (c) shows that at 1/10 compression overall structure is still present, but at a considerable amount of blurring.</p><p>Preprocessing time for the Gabor wavelet decomposition is currently the most lengthy step largely because it was implemented using the FFT rather than using a recently reported technique that employs a linear filter in the spatial domain <ref type="bibr" target="#b12">[Loy 2002]</ref>. A 256 3 volume was processed in 195 min. using MATLAB. The preprocessing time for building the node hierarchy using method 3 was 7 min. for a 128 3 volume and 156 min. for a 256 3 volume. However, building the hierarchy using method 1 and method 2 was only a few seconds for a 128 3 volume.</p><p>The hierarchy is implemented without pointers so each node stores only the type of primitive (1 byte) and two floating point error values (8 bytes). This allows the volume values (1 byte per point) and gradient (quantized to 2 bytes per point <ref type="bibr" target="#b21">[Rusinkiewicz and Levoy 2000]</ref>) to be stored in a separate full data pyramid. The location of each point is determined implicitly from the node location and type at rendering time in order to minimize the storage costs of the hierarchy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Time-Critical Volume Rendering</head><p>We have implemented a rendering system which permits time-critical volume rendering and progressive refinement of the image. Based on a history of previous frame-rates, the system adjusts the error threshold to achieve a specified frame rate to maintain a userselected frame rate. When there is no motion, the system progressively refines the image by lowering the error threshold and consequently increasing the number of points in the representation. Please see the conference DVD or project webpage for the video.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusions and Future Work</head><p>We have introduced a method for converting an image or volume sampled on a regular grid into an irregular point hierarchy. The conversion process retains the original frequency characteristics of the dataset while minimizing the number of points. The basic approach is straightforward. We use the Gabor wavelet to analyze the frequency characteristics of the source dataset at varying scalespaces. The analysis is used to determine the size, orientation and location of points which can be employed to reconstruct the original signal using an elliptical Gaussian splatting kernel. Our technique produces high-quality reconstructions of the original data for both 2-D images and 3-D volumes, and also allows for time-critical rendering with progressive refinement.</p><p>Although our technique works well for finding the initial size and placement of points, we believe that the quality of the image could be further improved by using a less quantized point position and orientation. A potential solution might involve using an error metric to guide point placement and resizing the points with a numerical optimization algorithm. However, in order to avoid the large computation times that global optimization solutions require, we believe a local optimization policy is necessary. Also, such a technique would result in a trade-off of computational speed and space efficiency. We have, however, experimented with an algorithm that flattens larger points based on local gradients and point occupancies in the lower hierarchy levels.</p><p>We also hope to increase the image quality by using a slicebased splat rendering algorithm <ref type="bibr" target="#b16">[Mueller 1999</ref>]. The current method of rendering via compositing-only does not permit normalization of the weights. Using slice-based splatting, we could normalize each image sheet after accumulating splats values and weights. This would result in fixing some of the artifacts caused by rendering variably-sized overlapping splats. If such a technique were implemented on graphics hardware, there would be little loss in speed. We would also like to test our hierarchy to decompose other, more efficient regular grids, such as the BCC grids <ref type="bibr" target="#b18">[Neophytou and Mueller 2002]</ref>. Finally we believe we can save substantial amounts of memory by quantizing the error metric. (c) Method 2 (851,690 pts) <ref type="figure">Figure 8</ref>: The CT head dataset (128 3 ) rendered with the different error metrics for hierarchy traversal <ref type="bibr">(a-d)</ref>. (e) This image was generated using the method 3 error metric but is rendered with 8 spherical points per node. This directly demonstrates the advantage of using splat primitives which are chosen based on frequency characteristics of the volume. While it is true that today's texture mapping hardware is heavily optimized to render large blocks of 2D and 3D textures, the continued rise in the popularity of point-based surface representations will undoubtedly lead to hardware that can also render point primitives at high rates. Once this hardware is available, we believe volume point approaches such as ours will become more competitive for a much broader range of volume datasets and applications.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 2 :</head><label>2</label><figDesc>Hierarchical point decompositions: (left) quadree; (middle) generalized; (right) wavelet (overlapping primitives).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 3 :</head><label>3</label><figDesc>The Gabor wavelet family coverage in the frequency domain(a)  for N=4 (orientations) and M=3 (scales) in 2D and (b) for a single level (N=13, M=1) in 3D. The 13 quantized directions in 3D are represented as faces (F), edges (E) and vertices (V) on a cube. Arrowheads also indicate the direction in which the point primitives are flattened.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure</head><label></label><figDesc>Figure 4: 2D splat primitives.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figure 5 :</head><label>5</label><figDesc>Mapping a unit 2D Gaussian function to ellipsoid E's screen-space elllipse E'.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 6 :</head><label>6</label><figDesc>Number of rendered points as a function of threshold value. The pink line shows rapid changes at critical points. The blue line is the result after modifying the traversal algorithm as described in the text.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 7 :</head><label>7</label><figDesc>(Top, left): The original Lena image (262,144 points). (Top, center): Reduction to 85,530 points (rms=0.0042). (Top, right): Reduction to 45,616 points (rms=0.0086). The only noticable difference is slight blurring. (Bottom, left):</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head></head><label></label><figDesc>Full Hierarchy (882,292 pts)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head>A Frequency-Sensitive Point Hierarchy for Images and Volumes</head><label></label><figDesc></figDesc><table><row><cell></cell><cell>Tomihisa Welsh</cell><cell>Klaus Mueller</cell><cell></cell></row><row><cell cols="3">Center for Visual Computing, Computer Science, Stony Brook University</cell><cell></cell></row><row><cell>(a) Orig. 2,608,070 pts, 9 sec</cell><cell>(b) 951,291 pts, 3 sec</cell><cell>(c) 195,854 pts, 0.5 sec</cell><cell>(d) 79,007 pts, 0.2 sec</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head></head><label></label><figDesc>TraverseNode(node){ if (node.error &lt; thresh or TF var &lt; tf_thresh or node.isLeafNode)</figDesc><table><row><cell>then render current node</cell></row><row><cell>else if (node.error2 &lt; threshold (error for rendering large splat))</cell></row><row><cell>then render single large splat</cell></row><row><cell>else traverse children nodes }</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgement</head><p>We would like to thank the anonymous reviewers for their helpful ideas and comments. This work was supported by NSF Career grant ACI-0093157.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Efficient High Quality Rendering of Point Sampled Geometry</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Botsch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wiratanaya</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Kobbel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of the 13th Eurographics Workshop on Rendering Techniques</title>
+		<meeting>of the 13th Eurographics Workshop on Rendering Techniques<address><addrLine>Pisa, Italy</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="53" to="64" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">A fast, space-efficient algorithm for the approximation of images by an optimal sum of Gaussians</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Childs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C.-C</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Potter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization&apos;01</title>
+		<meeting>Visualization&apos;01</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="45" to="52" />
+		</imprint>
+	</monogr>
+	<note>Graphics Interface&apos;00</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Hybrid simplification: Combining multi-resolution polygon and point rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Aliaga</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Visualization&apos;01</title>
+		<meeting>Visualization&apos;01</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="37" to="44" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Complete discrete 2-D gabor transforms by neural network for image analysis and compression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Daugman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Acoustics, Speech, and Signal Processing</title>
+		<imprint>
+			<biblScope unit="volume">36</biblScope>
+			<biblScope unit="issue">7</biblScope>
+			<biblScope unit="page" from="1169" to="1179" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">PMR: Point to mesh rendering: a feature-based approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Dey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hudson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization</title>
+		<meeting>IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="155" to="162" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Computer Graphics: Principles and Practice</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Foley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Dam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">K</forename><surname>Feiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">F</forename><surname>Hughes</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Glassner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Image Synthesis</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<publisher>Morgan-Kaufman</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Interactive rendering of large volume datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wand</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gonser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002" />
+			<publisher>IEEE Visualization</publisher>
+			<biblScope unit="page" from="53" to="60" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">View-dependent refinement of progressive meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH 97</title>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="189" to="198" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">On enhancing the speed of splatting using both objectand image space coherence</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Heckbert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Ihm</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Fundamentals of Texture Mapping and Image Warping</title>
+		<imprint>
+			<date type="published" when="1989-06" />
+			<biblScope unit="volume">62</biblScope>
+			<biblScope unit="page" from="263" to="282" />
+		</imprint>
+		<respStmt>
+			<orgName>University of California, Berkeley</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">M.Sc. Thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">On simulated annealing and the construction of linear spline approximations for scattered data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Kreylos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="17" to="31" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Hierarchical splatting: A progressive refinement algorithm for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Laur</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH 91</title>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="285" to="288" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Interactive visualization of unstructured grids using hierarchical 3D textures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Leven</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Corso</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Kumar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cohen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Symposium on Volume Visualization and Graphics</title>
+		<meeting>Symposium on Volume Visualization and Graphics</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="33" to="40" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Fast Computation of the Gabor Wavelet Transform</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Loy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of Digital Image Computing -Techniques and Applications (DICTA2002)</title>
+		<meeting>of Digital Image Computing -Techniques and Applications (DICTA2002)<address><addrLine>Melbourne</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2002-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Texture features for browsing and retrieval of image data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">S</forename><surname>Manjunath</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">Y</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Pattern Analysis and Machine Intelligence (PAMI)</title>
+		<imprint>
+			<date type="published" when="1996-08" />
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="page" from="837" to="879" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">A practical comparison of popular volume rendering algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Meissner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Bartz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="81" to="90" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">A new object-order raycasting algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Mora</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Jessel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Caubet</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization</title>
+		<meeting>IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="203" to="210" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">High-quality splatting on rectilinear grids with efficient culling of occluded voxels</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. on Vis. and Comp. Graph</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="116" to="134" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Multiscale 3D edge representation of volume data by a DOG wavelet</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Muraki</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Symp. on</title>
+		<imprint>
+			<biblScope unit="volume">Visualization</biblScope>
+			<biblScope unit="page" from="35" to="42" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Space-time points: 4D Splatting on effcient grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Neophytou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Symp</title>
+		<imprint>
+			<biblScope unit="page" from="97" to="106" />
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Press</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Flannery</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Teukolsky</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Vetterling</surname></persName>
+		</author>
+		<title level="m">Numerical Recipes in C</title>
+		<imprint>
+			<publisher>Cambridge University Press</publisher>
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Perceptionally optimized 3D graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Reddy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="68" to="75" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">QSplats: A multiresolution point rendering system for large meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rusinkiewicz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Theußl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">E</forename><surname>Gröller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Westenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Roerdink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 15th Internl&apos; Conference on Pattern Recognition</title>
+		<meeting>15th Internl&apos; Conference on Pattern Recognition</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="163" to="166" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of IEEE Visualization</note>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">A multiresolution framework for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 1994 Symp. on Volume Visualization</title>
+		<meeting>1994 Symp. on Volume Visualization</meeting>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="51" to="58" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Footprint evaluation for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Westover</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM SIG-GRAPH</title>
+		<imprint>
+			<biblScope unit="volume">90</biblScope>
+			<biblScope unit="page" from="367" to="376" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Interactive volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Westover</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 1989 Wo rkshop on Volume Visualization</title>
+		<meeting>1989 Wo rkshop on Volume Visualization<address><addrLine>Chapel Hill, NC</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1998-05" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Surface Splatting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zwicker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Baar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+			<publisher>ACM SIGGRAPH</publisher>
+			<biblScope unit="page" from="371" to="378" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">EWA Splatting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zwicker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Baar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization</title>
+		<meeting>IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="29" to="36" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">The foot dataset (128 3 ) rendered at different error thresholds</title>
+	</analytic>
+	<monogr>
+		<title level="j">Orig</title>
+		<imprint>
+			<biblScope unit="volume">281</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page">510</biblScope>
+		</imprint>
+	</monogr>
+	<note>sec (b) 107,708 pts, 0.3 sec (c) 76,038 pts, 0.2 sec Figure 9. Right column): X-Ray rendering of the CT head at different error thresholds. (a) Orig. 1,779,610 pts, 5.7 sec (b)551,950 pts, 2.4 sec (c) 76,038 pts, 0.2 sec</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

@@ -1,0 +1,960 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Efficient High-Quality Volume Rendering of SPH Data</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roland</forename><surname>Fraedrich</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Stefan</forename><surname>Auer</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Rüdiger</forename><surname>Westermann</surname></persName>
+						</author>
+						<title level="a" type="main">Efficient High-Quality Volume Rendering of SPH Data</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:55+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Particle visualization</term>
+					<term>volume rendering</term>
+					<term>ray-casting</term>
+					<term>GPU resampling</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1. A novel technique for order-dependent volume rendering of SPH data is presented. It provides rendering options like direct volume rendering (left), iso-surface rendering (middle), and mixed modes (right), and it renders data sets consisting of millions of particles at high quality and speed</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Particle-based simulation techniques like Smoothed Particle Hydrodynamics (SPH) have gained much attention due to their ability to avoid a fixed discretization of the simulation domain. By using an adaptive spatial data structure for particles, the memory requirements of particle-based methods depend only on the size of the fluid domain, but not on the size of the simulation domain. This makes the simulation less demanding on memory but substantially increases the computational load due to a more complex procedure to resolve particle adjacencies.</p><p>This limitation also becomes crucial in the rendering of a discrete SPH particle set, which, in general, means reconstructing a volumecovering and continuous density field from this set. To reconstruct a continuous least squares approximation, at every domain point a weighted average of the particle densities contributing to this point has to be computed. This can either be done by resampling and blending the densities onto a grid and using cell-wise interpolation, or instead by directly integrating along the rays of sight through the SPH kernels.</p><p>The first approach does not require particles to be processed in any specific order and results in a view-independent volume representa- tion. This representation can be rendered efficiently using standard volume rendering techniques. For example, 3D texture-based volume rendering can be used if the reconstruction is onto a uniform grid. On the other hand, the approach requires a fixed discretization of the simulation domain, with a resolution that is high enough to capture all simulated details. Thus, it takes away much of the advantage of particle-based simulation techniques. The second approach can leverage the same adaptive data structure as the simulation itself, but it is view-dependent and comes at high computational and memory access load to integrate particle quantities in the correct visibility order along the view rays. Due to these limitations, to the best of our knowledge the use of this approach is currently restricted to off-line visualizations <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b28">28]</ref>.</p><p>Our contribution. In this work we introduce a new volume rendering pipeline for SPH data on desktop PCs. This pipeline can efficiently render a continuous density field-or any other scalar quantity-that is given by a discrete SPH particle set. It employs 3D texture-based volume rendering on the GPU and therefore provides different rendering options like direct volume rendering and isosurface rendering. Some examples are shown in <ref type="figure">Figure 1</ref>.</p><p>Similar to previous approaches for the rendering of SPH data the particle quantities are resampled onto a regular 3D grid. In contrast, however, the grid is not fixed to the simulation domain but to the view volume. Thus, it moves with the viewer and discretizes only the visible space, i.e., the view frustum, in front of it.</p><p>A further difference is that the grid is not uniform but adaptively discretizes the visible domain. The grid resembles a classical raytracing grid which fans out with increasing distance from the view plane <ref type="bibr" target="#b3">[4]</ref>, but it has a spacing between the grid vertices along the view rays that increases logarithmically. Thus, the grid results in an adaptive sampling of the view frustum with decreasing sampling rate along the viewing direction. We will subsequently call this grid the perspective grid. <ref type="figure">Fig. 2</ref>. Order-dependent particle splatting (left) results in vastly different visualizations than volume ray-casting (middle) or hybrid rendering with iso-surfaces (right). Splatting approaches cannot accurately represent high-frequency color and opacity transfer functions and have difficulties in revealing surface-like structures in the data.</p><p>The advantage of the perspective grid is twofold: Firstly, by adjusting the sampling distance along the viewing direction a nearly isotropic sampling rate in view space can be enforced. In contrast to a uniform sampling this significantly reduces the number of sample points. Secondly, the perspective grid can be combined effectively with a hierarchical particle representation, in which sets of particles at one level are represented by one enlarged particle at the next coarser level. By always selecting the level of detail with respect to the current sampling rate, the number of particles to be resampled can be reduced substantially. It is clear, on the other hand, that the view-dependent volume representation has to be recomputed in every frame.</p><p>To render the SPH data efficiently, we store the perspective grid in a 3D texture on the GPU and use texture-based volume ray-casting. To correctly resample the particle quantities into this texture, we derive the transformation that maps a Cartesian grid onto the corresponding perspective grid and consider this transformation in the resampling step. Resampling is entirely performed on the GPU to exploit memory bandwidth and computation parallelism. In the Cartesian grid, perspectively correct gradients are computed to simulate shading and lighting effects.</p><p>Since our approach reconstructs the continuous scalar field from the discrete particle samples and renders this field via ray-casting, high quality visualizations using arbitrary transfer functions can be generated. Especially compared to particle splatting, which projects each particle's reconstruction function separately to form a 2D pre-shaded footprint, vastly different image quality can be achieved. <ref type="figure">Figure 2</ref> demonstrates this effect for a SPH data set in which the reconstruction functions from different particles overlap. The particle extents in this data set differ about a factor of 1400. While splatting (left) can only render a coarse approximation to this data, volume ray-casting (middle) generates a smooth continuous image of the discrete particle set and can reveal fine details of surface structures via additional iso-surfaces (right).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Particle-based simulation techniques like SPH have been studied extensively over the last years. There is a vast body of literature related to this field and a comprehensive review is beyond the scope of this paper. However, Monaghan <ref type="bibr" target="#b23">[23]</ref>, Müller et al. <ref type="bibr" target="#b24">[24]</ref>, and Adams et al. <ref type="bibr" target="#b1">[2]</ref> discuss the basic principles underlying such techniques and provide many useful algorithmic and implementation specific details.</p><p>Only very little work has been reported on the efficient rendering of SPH data. Most commonly this task is reduced to rendering isosurfaces in the continuous 3D density field derived from the discrete set of particles. This can be accomplished by resampling particle quantities into a proxy grid <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b26">26]</ref>, and by using iso-surface extraction <ref type="bibr" target="#b22">[22]</ref> or direct volume ray-casting <ref type="bibr" target="#b9">[9]</ref>. Zhu and Bridson use a correction term for the density before the reconstruction, leading to smoother surfaces <ref type="bibr" target="#b38">[38]</ref>. An efficient GPU technique for resampling particle quantities into 3D uniform grids has been presented recently in <ref type="bibr" target="#b37">[37]</ref>. For iso-surface rendering, resampling can be restricted to the surface boundaries <ref type="bibr" target="#b36">[36]</ref>. If a uniform proxy grid is used, high resolu-tion is required to capture all details, but GPU-based volume rendering approaches can be employed to achieve high speed <ref type="bibr" target="#b10">[10,</ref><ref type="bibr" target="#b21">21]</ref>.</p><p>In order to avoid the exhaustive memory consumption of a proxy grid, iso-surfaces can be rendered directly, for example, by evaluating ray-particle intersections on the GPU <ref type="bibr" target="#b20">[20,</ref><ref type="bibr" target="#b37">37]</ref>. Gribble et al. performed direct ray-sphere intersections on the CPU using a grid-based acceleration structure <ref type="bibr" target="#b14">[14]</ref>. An iso-surface extraction technique that works directly on the particle set was introduced by <ref type="bibr" target="#b29">[29]</ref>. Rosenthal et al. generate a surfel representation of the iso-surface from the discrete particle set <ref type="bibr" target="#b31">[31]</ref>. A high-quality yet time-consuming surface-fitting approach using level-sets was presented in <ref type="bibr" target="#b30">[30]</ref>.</p><p>Order-independent splatting of transparent particle sprites was presented by <ref type="bibr" target="#b12">[12,</ref><ref type="bibr" target="#b18">18,</ref><ref type="bibr" target="#b19">19]</ref> for volumetric astrophysical SPH data. Visualization systems for SPH data, including rendering options like splatting or slicing and providing application specific mechanisms to interact with and analyze particle data were discussed in <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b5">6,</ref><ref type="bibr" target="#b11">11,</ref><ref type="bibr" target="#b27">27,</ref><ref type="bibr" target="#b34">34]</ref>.</p><p>Recently, screen-space approaches for rendering iso-surfaces in SPH data have gained much attention due to their efficiency. Adams et al. render particles as spheres and blend the contributions in the overlap regions <ref type="bibr" target="#b0">[1]</ref>. Müller et al. reconstruct a triangle mesh in screen space from visible surface fragments that are generated via rasterization <ref type="bibr" target="#b25">[25]</ref>. The method was improved by <ref type="bibr" target="#b16">[16,</ref><ref type="bibr" target="#b33">33]</ref> to generate smooth surfaces and to avoid an explicit triangulation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">PERSPECTIVE GRID</head><p>The perspective grid is used to resample the particle data inside the view volume. It is a structured grid that partitions the view frustum into k × l × m oblique subfrusta. <ref type="figure" target="#fig_1">Figure 3</ref>(right) illustrates this grid, which has the specific property that the sampling rate along z is the same as along x and y.</p><p>The perspective grid is stored on the GPU in a 3D texture map (see <ref type="figure" target="#fig_1">Figure 3</ref>(left)). In the resampling process, the 3D texture map is used as a render target and resampled quantities are scattered to this target using accumulative blend.</p><p>To perform the resampling efficiently on the GPU, a mapping of a point r = (x , y , z ) from 3D texture space to a point r = (x, y, z) in view space and vice versa is required. In the following, we will derive this mapping and describe how to exploit it in the resampling process. Perspective Grid Mapping Let us denote by s (r ) = s x (x , z ) , s y (y , z ) , s z (z ) the mapping we are looking for, and let us note that the sampling rate p xy (z) along x and y is given by (2 • tan( f ov y /2)/res y ) • z, where f ov y is the vertical field of view and res y the vertical resolution of the viewport. The mapping of x and y in texture coordinates to x and y in view space is simply the inverse view-space to screen-space transformation:</p><formula xml:id="formula_0">s x x , z = 2 • x k − 1 • s z z • tan( f ov y /2)</formula><p>and for s y (y , z ), respectively. The mapping s z of z ∈ [0, m] in texture space to z ∈ [n, f ] in view space (n and f are the near and far plane) needs some further explanations. We observe that the sampling rate along z, p z (z), is equal to dz dz =</p><formula xml:id="formula_1">ds z (z )</formula><p>dz , since z is sampled uniformly with distance 1. Since p z (z) is supposed to be equal to p xy (z), we obtain:</p><formula xml:id="formula_2">p z (z) = σ • s z z = ds z (z ) dz ,<label>(1)</label></formula><p>where σ = </p><formula xml:id="formula_3">s z z = n • f n z /m .<label>(2)</label></formula><p>It's inverse is</p><formula xml:id="formula_4">s −1 z (z) = m • ln (z/n) ln ( f /n) .</formula><p>Note that this corresponds to the transformation derived in <ref type="bibr" target="#b32">[32,</ref><ref type="bibr" target="#b35">35]</ref> to equally distribute the aliasing error in perspective shadow map parameterizations. This mapping is only correct, however, on the z axis. On every other view ray the sampling rate is larger, since all of them perform the same z sampling in world space. In the extreme case, which is along the edges of the frustum, the sampling rate scales by the factor</p><formula xml:id="formula_5">λ = k • σ 2 2 + l • σ 2 2 + 1.</formula><p>We must further determine the number of sample points m along the z-axis for a given range [n... f ]. By inserting equation 2 into 1 and solving for m, we obtain</p><formula xml:id="formula_6">m = ln f n σ .</formula><p>Finally, to account for the increasing sampling distance towards the frustum boundaries, and thus to provide the appropriate sampling in the whole frustum, m must be scaled by λ .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">DATA RESAMPLING</head><p>To resample the particle data to the perspective grid, for every particle the grid vertices within the support of the particle's smoothing kernel have to be determined and the data is interpolated according to the kernel function:</p><formula xml:id="formula_7">A(r) = m j • A j ρ j •W (|r − r j |, h j ).</formula><p>Here, A(r) is the resampled data at position r, and m j , ρ j , r j , and A j are the particle's mass, density, position, and data value, respectively. W is the kernel function with a support h j that can vary from particle to particle. In Section 6 we describe the particular kernel functions underlying the SPH simulations used in this work. The interpolated value A(r) is added to the corresponding texel in the 3D texture map.</p><p>Key to an efficient and high quality resampling of large particle sets is the use of a multi-resolution particle representation <ref type="bibr" target="#b12">[12,</ref><ref type="bibr" target="#b18">18,</ref><ref type="bibr" target="#b19">19]</ref>. In such a representation the particle set is encoded at different levels of detail by merging subsets consisting of smaller particles into one larger particle. The hierarchical particle representation allows pruning particles that are too small to be reconstructed at the required sampling rate. Thus, aliasing artefacts can be avoided and the number of particles to be processed can be reduced.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Hierarchical Particle Representation</head><p>Our pre-computed multi-resolution particle representation is organized in an adaptive octree data structure similar to the one proposed in <ref type="bibr" target="#b12">[12]</ref>. In particular, for large particle sets and high spatial resolution of the simulation we employ the same regular domain partition to allow for the construction of the particle hierarchy in parts. In addition, for the Millenium gas dynamics simulation we scale each particle component logarithmically and compress the data using vector quantization. Spherical pre-fetching regions are realized on the GPU and the CPU to exploit frame-to-frame coherence and thus reduce memory access latencies.</p><p>In contrast, however, we use different rules for merging particles. These rules build upon the resampling operators presented in <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b17">17]</ref> for adaptive SPH simulations. <ref type="figure">Fig. 4</ref>. Bottom-up construction of the particle LOD-hierarchy. Particles are copied to the next coarser level until their diameter falls below the grid sampling (left). Particles falling below the grid sampling are merged and eventually enlarged to the grid spacing (right).</p><p>Starting with a uniform grid at the resolution at which the simulation has been performed, particles in contiguous blocks of 2 3 cells are merged into a single particle. The volume of this particle is the sum of the volumes of the merged ones, and the scalar quantities of the merged particles are averaged into this particle according to their mass contribution. The merging process is illustrated in <ref type="figure">Figure 4</ref>. This process is recursively repeated until a user-given resolution level is reached.</p><p>In the merging process, at a particular level only particles with a radius less than the cell size on the next coarser level are merged. If the radius of a new particle falls below this size, it is increased to this size and its density is decreased proportionally to reflect the volume increase. All other particles are copied to the coarser level to guarantee a consistent representation of the particle field at all levels of detail.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Hierarchy Traversal</head><p>In every frame, of all particles those to be resampled at the current view have to be determined. This is done by traversing the particle hierarchy top-down on the CPU and pruning those nodes which do not overlap the view-frustum. For the remaining nodes, depending on the shortest distance of the node to the viewer the highest sampling rate of the particles in this node is computed. The traversal is stopped once the minimum size of the particles falls below this sampling rate, i.e., when sampling the particles into the grid would result in aliasing. The particles are then packed into vertex and associated attribute arrays, and they are sent to the GPU for resampling.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">GPU Particle Slicing</head><p>GPU voxelization of particles into a 3D texture map work similar to the approach presented in <ref type="bibr" target="#b37">[37]</ref>. For each particle a single vertexpositioned at the particle center and attributed by the particle quantity to be resampled-is sent to the GPU and passed to the geometry shader. The geometry shader computes the first (s min ) and the last (s max ) 2D texture slice that is covered by the particle as</p><formula xml:id="formula_8">s min = s −1 z (z center − h) − 0.5 , s max = s −1 z (z center + h) − 0.5 .</formula><p>Here, h is the particle's smoothing length, which can vary from particle to particle. The shader spawns s max − s min + 1 equilateral triangles from this vertex, one for each slice i, i ∈ {s min , ..., s max }. The triangles are centered at the particle position and oriented orthogonal to the viewing direction. For the i-th triangle, it's depth i + 0.5 in texture space is transformed to view space as z i = s z (i + 0.5).</p><p>Before rendering a triangle, the shader computes the radius of the circular cross-section between the sphere of radius h centered at the particle position and the slice z i in view space, and it uses this value to resize the triangle so that it just covers the cross-section. <ref type="figure">Figure 5</ref> illustrates this process. For every triangle vertex the distance vector to the particle center is determined and assigned as vertex attribute. Finally, the triangle is rendered into slice i of the 3D texture map using the standard perspective projection. <ref type="figure">Fig. 5</ref>. Particle resampling on the GPU. As many proxy triangles as there are slices overlapped by a particle are rendered. Triangles are scaled to cover the particle-slice cross-sections.</p><p>During triangle rasterization the distance vectors are interpolated and its length is used in a pixel shader to test whether the corresponding texel is inside or outside the particle's kernel support. For fragments that are inside, the kernel function is evaluated using the interpolated distance vector and the smoothing length h, and the computed quantity is blended into the render target. Otherwise, the fragment is discarded.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">RENDERING</head><p>Once the particle quantities have been resampled to the perspective grid, the data can be rendered in turn on the GPU using texture-based volume ray-casting. This enables using different rendering options like iso-surface rendering or direct volume rendering simultaneously at very high speed. The major difference to classical texture-based ray-casting is in the kind of grid that is rendered. Usually, the data is given on a Cartesian grid in world space and has to be interpolated tri-linearly at the sample points along the rays. The data in the perspective grid, on the other hand, is already at the positions in view space where a sample is placed during ray-casting. Consequently, the data values in the 3D texture map that stores the perspective grid can be accumulated directly in front-to-back order along the z coordinate axis in texture space. To account for the varying sampling distances, opacity correction of the samples has to be performed.</p><p>For simulating local illumination effects we compute the gradient of the resampled particle quantity. A gradient's x and y components can be approximated directly via central differences along x and y , respectively. However, due to the perspective distortion of the resampling grid, an offset along the z -coordinate axis in texture space does not correspond to an offset along the z-coordinate axis in view space. Thus, the texel center, (x t , y t , z t ), is first transformed to view space, (x t , y t , z t ), and the positions of the two points (x t , y t , z t + ) and (x t , y t , z t − ) are transformed back to texture space. Here, denotes the distance between the current and the previous slice in view space.</p><p>Hence the gradient of the sampled field f at a texel position (x t , y t , z t ) in texture space is computed as</p><formula xml:id="formula_9">∇ f = ⎛ ⎝ f (x t + 1, y t , z t ) − f (x t − 1, y t , z t ) f (x t , y t + 1, z t ) − f (x t , y t − 1, z t ) f s z s −1 z (x t , y t , z t ) + − f s z s −1 z (x t , y t , z t ) − ⎞ ⎠</formula><p>As can be seen, computing a gradient's z component requires interpolating in texture space. 3D texture mapping hardware on the GPU supports tri-linear interpolation, which is not exact in our scenario due to the frustum-shaped cells underlying the texture grid. In order to improve the interpolation accuracy we have implemented distance-based interpolation in texture space. <ref type="figure" target="#fig_3">Figure 6</ref>, however, indicates the differences in the resulting illumination to be rather low. We thus use hardware-supported tri-linear interpolation throughout this work. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Grid Partitioning</head><p>Due to the limited amount of graphics memory on the GPU, it is not possible in general to store the entire perspective grid on the GPU. For this reason we partition the perspective grid into a number of viewaligned slabs of size k × l × m s , each of which is small enough to fit into the graphics memory (see <ref type="figure">Figure 7)</ref>. In front-to-back order these slabs are processed as described. <ref type="figure">Fig. 7</ref>. If the perspective grid does not fit into GPU memory, it is partitioned into view-aligned slabs (illustrated by different colors) which are resampled and rendered in front-to-back order.</p><p>In order to reduce the overall workload on the GPU, for every slab only the particles contributing to this slab are resampled into the respective sub-grid. This is accomplished during the traversal of the spatial hierarchy by computing for every visible node the slabs it overlaps and rendering for every slab only the overlapping nodes. In the computation we consider an overlap between slabs as well as at the slab boundaries to allow for a consistent gradient computation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Occlusion culling</head><p>To minimize the number of rendered particles on the GPU, we employ a hierarchical opacity-buffer similar to the hierarchical depth-buffer proposed in <ref type="bibr" target="#b13">[13]</ref>. After each n-th node we store the accumulated opacity in a separate texture. This texture is converted into a boolean mipmap to encode ever larger areas that are completely opaque. At ever coarser mipmap levels a texel is set to 1 (opaque) only if all covered texels in the previous finer level are 1. By employing bilinear texture interpolation, 4 child texels can be tested with one texture lookup. The algorithm takes care of Non-Power-of-Two textures as described in <ref type="bibr" target="#b15">[15]</ref>.</p><p>The mipmap is used to discard all nodes, and further on all particles, which are covered completely by opaque structures in front of them. This is done by constructing a screen space bounding circle for each node and particle. We choose to sample the first mipmap level in which the circle radius is below half the texel width. By sampling at the circle center using bilinear interpolation, all 4 texels that are possibly covered by the circle can be analyzed at once. If the bounding circle covers only mipmap texels marked by 1, the object can be safely discarded. Occlusion culling is applied first to the visible octree nodes, and it is then tested on a per-particle basis to avoid resampling of occluded particles. During rendering it is used to avoid ray traversal in occluded areas.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">RESULTS AND DISCUSSION</head><p>To demonstrate the efficiency and quality of our approach we render SPH simulation data from fluid dynamics and astrophysics (see <ref type="figure" target="#fig_6">Figure 11)</ref>. <ref type="table" target="#tab_0">Table 1</ref> gives specific information on these data sets. Particle positions and quantities are encoded in 32 bit and 16 bit floating point values, respectively. The first three data sets simulate fluid dynamics. WDMerger simulates merging of two white dwarf stars. SNIaEjecta simulates the impact of a supernova ejecta on a companion star. The Millenium data set contains one time step of a simulation of the evolution of the universe. The poly6-kernel was used in all fluid dynamics simulations with constant h for each dataset:</p><formula xml:id="formula_10">W poly6 (r, h) = 315 64πh 9 (h 2 − r 2 ) 3 , 0 ≤ r ≤ h 0, otherwise</formula><p>In the astrophysical simulations the cubic spline-kernel was used for particles with varying smoothing length: <ref type="table" target="#tab_1">Table 2</ref> shows the times required for resampling and rendering the data sets. Timings were performed on a 2.4 GHz Core 2 Duo processor and an NVIDIA GTX 280 graphics card with 1024 MB local video memory. The viewing parameters were selected so that the entire set of particles is within the view volume. Successive time steps of timevarying particle sets are streamed consecutively to the GPU. Upload times are not included in the given timings. For the Millennium Run with a total number of 10 billion particles, the given timings and the number of rendered particles in <ref type="table" target="#tab_0">Tables 1 and 2</ref> are averages over a continuous flight through the data.</p><formula xml:id="formula_11">W (r, h) = 8 πh 3 ⎧ ⎨ ⎩ 1 − 6 r h + 6 r h 2 , 0 ≤ r h ≤ 1 2 1 − r h , 1 2 ≤ r h ≤ 1 0, r h &gt; 1</formula><p>As can be seen, resampling induces a high workload on the GPU and thus vastly dominates the overall performance. Especially for rendering the astrophysics data, which is represented by many particles with very large smoothing kernels, resampling causes a significant performance bottleneck. 3D texture-based volume ray-casting, on the other hand, only contributes marginally-below 10%-to the overall time. The quality of our multi-resolution hierarchy is illustrated in <ref type="figure">Figure 8</ref>. It shows the LWSB and the Ejecta data set resampled to grids of different resolutions with a corresponding node selection from the LOD hierarchy. The particle hierarchy preserves the basic structures in the data, at the same time providing an effective anti-aliasing structure. Compared to the first image the number of rendered particles decreases from 3.2M over 2.1M and 0.7M down to 0.3M particles for the LWSB data set, and from 8.7M over 4.6M and 3.3M down to 1.4M particles for the Ejecta data set. On a 1024 2 viewport the total rendering time decreases by a factor of 4.2/10/27 and 2.9/8.2/19, respectively. This also demonstrates that interpolation between grid samples can be used to decouple the resolutions for resampling and raycasting, which allows to find a good trade-off between image quality and rendering speed. Apart from the achieved performance gain, a LOD representation is mandatory for the rendering of very large data sets. For example, the image of the Millennium Run in <ref type="figure" target="#fig_6">Figure 11</ref> would require 607 million particles instead of 48 million particles to be rendered without such a hierarchy.</p><p>The performance gain due to occlusion culling depends on the depth complexity and the opacity of the rendered data. The effect becomes apparent if many particles are completely occluded. For example, in the scene shown in <ref type="figure" target="#fig_3">Figure 6</ref> occlusion culling leads to performance gain of about 68%. In <ref type="figure">Figure 8</ref> (upper row) an increase of only 5% could be observed due to low depth complexity. In <ref type="figure" target="#fig_5">Figure 10</ref> (first row, second image) the gain was only 17% due of high transparency.</p><p>In extreme close-ups where most particles are occluded, however, we measured an overall performance gain of up to factor 8.</p><p>Finally, we have carried out a performance comparison between our approach and order-dependent splatting. Particle sorting was performed on the GPU using an optimized sort routine, which required less than 5% of the overall rendering time. Rendering the Merger data set <ref type="figure">(Figure 2(left)</ref>) was performed at 7.85 fps. Using our techniques, the frame rate dropped to 1.7 fps <ref type="figure">(Figure 2(right)</ref>).</p><p>In a second experiment we compared our approach to screen-space methods for the visualization of iso-surfaces in SPH data. Such methods first render particles as spheres in an arbitrary order to obtain the visible surface parts and then generate a smooth surface from the resulting depth buffer imprint. <ref type="figure">Figure 9(left)</ref> shows the resulting image after the first pass for the LWMO data set. This image was generated at 12.5 fps. <ref type="figure">Figure 9</ref>(right) demonstrates an iso-surface reconstructed by our approach. This image was rendered at 5.75 fps, and, thus, only requires about twice the time of screen-space methods. Given that our method provides high-quality iso-surface and volume rendering, this seems to be a reasonable compromise.  . Sphere rendering of the particle's support radius versus perspective grid-based iso-surface extraction. Screen-space techniques smooth the surface given by the depth buffer imprint of the left image, while our approach on the right directly reconstructs any given iso-surface.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION AND FUTURE WORK</head><p>By eliminating the need for a uniform discretization of the fluid domain, we have overcome an essential limitation in the rendering of SPH data. We have introduced the perspective grid as an adaptive high-resolution discretization of the view volume, and we have shown how to efficiently resample particle quantities to this grid by using multi-resolution hierarchies for particle sets and by exploiting the GPU. Since the perspective grid places sample points along the view rays, resampled quantities can be rendered directly using 3D texture mapping. This enables integrating volumetric effects into SPH rendering, like volumetric emission and absorption, and using direct volume rendering and iso-surface rendering in combination.</p><p>To the best of our knowledge, for the first time we have shown that order-dependent resampling of high resolution SPH data can be performed at almost interactive rates. Compared to screen-space approaches for the rendering of iso-surfaces in SPH data, our technique is only slightly slower but achieves higher quality.</p><p>The proposed view-dependent discretization also has its limitation. Since resampling the fluid domain is restricted to the view volume, only parts of the fluid within this volume can be considered in the simulation of secondary effects like reflections or refractions. Especially in animations this can result in shimmering due to frame-to-frame incoherence.</p><p>In the future we will pursue research on filtering techniques for data given on a perspective grid. Since even with some improvements the surfaces in SPH data tend to look bumpy and can not adequately resolve flat structures, curvature-based smoothing as proposed in <ref type="bibr" target="#b33">[33]</ref> will be considered on the grid.   <ref type="table" target="#tab_0">Table 1</ref> for more information). SPH fluid simulations (1st column, from top to bottom): Large Wave Moving Obstacles (LWMO), Large Wave Static Boundaries (LWSB), and Flume. Gas dynamics simulations (2nd column, from top to bottom): Millennium Run, SNIaEjecta, and WDMerger.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>•</head><label></label><figDesc>Roland Fraedrich (E-mail: fraedrich@tum.de) is with the with the Computer Graphics and Visualization Group, Technische Universität at München. • Stefan Auer (E-mail: auer@in.tum.de) is with the Computer Graphics and Visualization Group, Technische Universität at München. • Rüdiger Westermann (E-mail: westermann@tum.de) is with the Computer Graphics and Visualization Group, Technische Universität at München. Manuscript received 31 March 2010; accepted 1 August 2010; posted online 24 October 2010; mailed on 16 October 2010. For information on obtaining reprints of this article, please send email to: tvcg@computer.org.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 .</head><label>3</label><figDesc>The Cartesian grid in texture space (left) transforms onto the perspective grid in view space (right) under the mapping s. The grid has the same sampling rate along x and y (p xy (z)) as along z (p z (z)). We assume that the viewer is looking along the positive z-axis.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>2•tan( f ov y /2) res y and z has been replaced by s z (z ) in the second term. This differential equation is solved by any s z (z ) of the form s z z = a • b c•z /m . Since z ∈ [0, m] is mapped to z ∈ [n, f ], and by setting c = 1, s z (z ) equates to</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 6 .</head><label>6</label><figDesc>Gradient computation in the perspective grid. Left: Trilinear interpolation; Right: Distance-based interpolation.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 8 .Fig. 9</head><label>89</label><figDesc>Resampling to perspective grids of different resolutions with corresponding level of detail. Iso-Surface rendering of the LWSB data set (top row) and volume rendering of the ejecta data set (bottom row) at different grid resolutions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 10 .</head><label>10</label><figDesc>Different transfer functions and camera settings reveal various details of the Ejecta (top row) and the Millennium data set (bottom row).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 11 .</head><label>11</label><figDesc>The data sets we have used in our experiments (see</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head>Table 1 .</head><label>1</label><figDesc>The data sets used in our experiments.</figDesc><table><row><cell>Data set</cell><cell>Time steps</cell><cell># Particles</cell><cell>Quantities</cell></row><row><cell>Flume</cell><cell>2209</cell><cell>110 − 83,275</cell><cell>Density</cell></row><row><cell>LWMO</cell><cell>604</cell><cell>2,575,500</cell><cell>Density</cell></row><row><cell>LWSB</cell><cell>1232</cell><cell>3,232,000</cell><cell>Density</cell></row><row><cell>WDMerger</cell><cell>84</cell><cell>2,000,000</cell><cell>Density + Temp.</cell></row><row><cell>SNIaEjecta</cell><cell>99</cell><cell>8,745,571</cell><cell>Density + Temp.</cell></row><row><cell>Millennium Run</cell><cell>1</cell><cell>42,081,574</cell><cell>Density + Vel. Disp.</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 2 .</head><label>2</label><figDesc>Performance statistics for resampling and rendering in milliseconds. The viewport resolution is 512 2 , with a corresponding resolution of the perspective grid. Timings for a 1024 2 viewport and corresponding grid resolution are given in brackets.</figDesc><table><row><cell cols="2">Data set Grid Resolution</cell><cell>Resampling</cell><cell>Rendering</cell><cell>Total</cell></row><row><cell>Flume</cell><cell>512 2 ×364</cell><cell>6 (38)</cell><cell>43 (76)</cell><cell>49 (114)</cell></row><row><cell>LWMO</cell><cell>512 2 ×544</cell><cell>87 (549)</cell><cell>65 (127)</cell><cell>152 (676)</cell></row><row><cell>LWSB</cell><cell>512 2 ×664</cell><cell>135 (804)</cell><cell>79 (178)</cell><cell>214 (982)</cell></row><row><cell>Merger</cell><cell>512 2 ×292</cell><cell>642 (1492)</cell><cell>40 (81)</cell><cell>682 (1573)</cell></row><row><cell>Ejecta</cell><cell>512 2 ×396</cell><cell>1560 (4574)</cell><cell>49 (100)</cell><cell>1609 (4674)</cell></row><row><cell>Millen.</cell><cell>512 2 ×480</cell><cell>2267 (7771)</cell><cell>83 (162)</cell><cell>2350 (7933)</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The authors wish to thank Rüdiger Pakmor, Fritz Röpke, Volker Springel, and Gerard Lemson from the Max-Planck-Institute for Astrophysics for providing the gas dynamics data sets. We also thank Matthias Teschner for providing the fluid dynamic data sets and Markus Rampp (RZG) for his support. This work was funded in part by the Munich Centre of Advanced Computing at the Technische Universität München.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Particle splatting: Interactive rendering of particle-based simulation data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Adams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Lenaerts</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Dutre</surname></persName>
+		</author>
+		<idno>cw 453</idno>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+		<respStmt>
+			<orgName>Katholieke Universiteit Leuven</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Adaptively sampled particle fluids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Adams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Pauly</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Keiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">J</forename><surname>Guibas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page">48</biblScope>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">SPHRAY: a smoothed particle hydrodynamics ray tracer for radiative transfer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Altay</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A C</forename><surname>Croft</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Pelupessy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Monthly Notices of the Royal Astronomical Society</title>
+		<imprint>
+			<biblScope unit="volume">386</biblScope>
+			<biblScope unit="page" from="1931" to="1946" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">A new space subdivision method for ray tracing CSG modelled scenes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Arnaldi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Priol</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Bouatouch</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Visual Computer</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="98" to="108" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Time dependent processing in a parallel pipeline architecture</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Biddiscombe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Geveci</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Moreland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Thompson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1376" to="1383" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Visualization and analysis of SPH data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Biddiscombe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Graham</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Maruzewski</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ERCOFTAC Bulletin</title>
+		<imprint>
+			<biblScope unit="volume">76</biblScope>
+			<biblScope unit="page" from="9" to="12" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">GPU-assisted high quality particle rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Son</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Ihm</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="1247" to="1255" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Space-time adaptive simulation of highly deformable substances</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Desbrun</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M.-P</forename><surname>Cani</surname></persName>
+		</author>
+		<idno>3829</idno>
+	</analytic>
+	<monogr>
+		<title level="j">INRIA</title>
+		<imprint>
+			<biblScope unit="page" from="105" to="78153" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Le Chesnay Cedex -France</forename></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Drebin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Carpenter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIG-GRAPH &apos;88: Proceedings of the 15th annual Conference on Computer Graphics and Interactive Techniques</title>
+		<imprint>
+			<date type="published" when="1988" />
+			<biblScope unit="page" from="65" to="74" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">High-speed marching cubes using histopyramids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Dyken</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Ziegler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Theobalt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Seidel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="2028" to="2039" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Interactive terascale particle visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Ellsworth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Green</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Moran</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VIS &apos;04: Proceedings of the Conference on Visualization &apos;04</title>
+		<meeting><address><addrLine>Washington, DC, USA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society</publisher>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="353" to="360" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Exploring the Millenium Run -scalable rendering of large-scale cosmological datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Fraedrich</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Schneider</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1251" to="1258" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Hierarchical z-buffer visibility</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Greene</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kass</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Miller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 20th annual Conference on Computer Graphics and Interactive Techniques</title>
+		<meeting>the 20th annual Conference on Computer Graphics and Interactive Techniques</meeting>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="231" to="238" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">A coherent grid traversal approach to visualizing particle-based simulation data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">P</forename><surname>Gribble</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ize</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kensler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Wald</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">G</forename><surname>Parker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="758" to="768" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Non-power-of-two mipmap creation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Heckbert</surname></persName>
+		</author>
+		<idno>TR-01838-001</idno>
+		<imprint>
+			<date type="published" when="2003" />
+			<publisher>NVIDIA Corporation</publisher>
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Interactive screen-space surface rendering of dynamic particle clouds</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">H</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">O</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Graphics, GPU, and Game Tools</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1" to="19" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Adaptive particles for incompressible fluid simulation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">H</forename><surname>House</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Keyser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Vis. Comput</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">7</biblScope>
+			<biblScope unit="page" from="535" to="543" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Hierarchical splatting of scattered data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VIS &apos;03: Proceedings of the 14th IEEE Visualization 2003 (VIS&apos;03)</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="443" to="440" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Hierarchical splatting of scattered 4D data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Luttenberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="64" to="72" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">GPU-based fast ray casting for a large number of metaballs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kanamori</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Szego</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Nishita</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="351" to="360" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Acceleration techniques for GPU-based volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Krüger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">VIS &apos;03: Proceedings of the 14th IEEE Visualization 2003 (VIS&apos;03)</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="38" to="43" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Marching cubes: A high resolution 3D surface construction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIGGRAPH Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="163" to="169" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Smoothed particle hydrodynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">J</forename><surname>Monaghan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Rep. Prog. Phys</title>
+		<imprint>
+			<biblScope unit="volume">68</biblScope>
+			<biblScope unit="page" from="1703" to="1758" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Particle-based fluid simulation for interactive applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Charypar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SCA &apos;03: Proceedings of the 2003 ACM SIG-GRAPH/Eurographics Symposium on Computer Animation</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="154" to="159" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Screen space meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Schirm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Duthaler</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SCA &apos;07: Proceedings of the 2007 ACM SIGGRAPH/Eurographics Symposium on Computer Animation</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="9" to="15" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Visualization of cosmological particle-based datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">A</forename><surname>Navrátil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">L</forename><surname>Johnson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Bromm</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Visualization and Computer Graphics (Proc. IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2007-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Splash: An interactive visualisation tool for smoothed particle hydrodynamics simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">J</forename><surname>Price</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Publications of the Astronomical Society of Australia</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="159" to="173" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Reinecke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Dolag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Gheller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Jin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Splotch</surname></persName>
+		</author>
+		<ptr target="http://www.mpa-garching.mpg.de/kdolag/Splotch,2009.RaycastingSPHdata" />
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Real-time particle isosurface extraction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">D</forename><surname>Rosenberg</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Birdwell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">I3D &apos;08: Proceedings of the 2008 Symposium on Interactive 3D Graphics and Games</title>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="35" to="43" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Smooth surface extraction from unstructured point-based volume data using PDEs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Rosenthal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Linsen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1531" to="1546" />
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Direct surface extraction from smoothed particle hydrodynamics simulation data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Rosenthal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rosswog</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Linsen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 4th High-End Visualization Workshop</title>
+		<meeting>the 4th High-End Visualization Workshop</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Perspective shadow maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Stamminger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Drettakis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIG-GRAPH &apos;02: Proceedings of the 29th annual Conference on Computer Graphics and Interactive Techniques</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="557" to="562" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Screen space fluid rendering with curvature flow</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">J</forename><surname>Van Der Laan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Green</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Sainz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">I3D &apos;09: Proceedings of the 2009 Symposium on Interactive 3D Graphics and Games</title>
+		<imprint>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="91" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Visualization of smoothed particle hydrodynamics for astrophysics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Walker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Kenny</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Miao</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Theory and Practice of Computer Graphics</title>
+		<editor>L. Lever and M. McDerby</editor>
+		<meeting><address><addrLine>University of Kent, UK</addrLine></address></meeting>
+		<imprint>
+			<publisher>Eurographics Association</publisher>
+			<date type="published" when="2005-06" />
+			<biblScope unit="page" from="133" to="138" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Light space perspective shadow maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wimmer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Scherzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Purgathofer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Rendering Techniques 2004 (Proceedings Eurographics Symposium on Rendering)</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="143" to="151" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Fast rendering of particle-based fluid by utilizing simulation data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yasuda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Harada</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kawaguchi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Eurographics 2009 -Short Papers</title>
+		<editor>P. Alliez and M. Magnor</editor>
+		<meeting>Eurographics 2009 -Short Papers<address><addrLine>Munich, Germany</addrLine></address></meeting>
+		<imprint>
+			<publisher>Eurographics Association</publisher>
+			<date type="published" when="2009" />
+			<biblScope unit="page" from="61" to="64" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Adaptive sampling and rendering of fluids on the GPU</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Solenthaler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pajarola</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Point-Based Graphics</title>
+		<imprint>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="137" to="146" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Animating sand as a fluid</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Bridson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH &apos;05: ACM SIGGRAPH 2005 Papers</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="965" to="972" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

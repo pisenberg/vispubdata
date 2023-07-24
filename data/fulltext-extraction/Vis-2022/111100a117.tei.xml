@@ -1,0 +1,1876 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/kermitt2/grobid/master/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Revealing the Semantics of Data Wrangling Scripts With COMANTICS</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName><forename type="first">Kai</forename><surname>Xiong</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Zhongsu</forename><surname>Luo</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Siwei</forename><surname>Fu</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Yongheng</forename><surname>Wang</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Mingliang</forename><surname>Xu</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Yingcai</forename><surname>Wu</surname></persName>
+						</author>
+						<title level="a" type="main">Revealing the Semantics of Data Wrangling Scripts With COMANTICS</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.7.2" ident="GROBID" when="2023-03-27T09:15+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Data Transformation</term>
+					<term>Semantic Inference</term>
+					<term>Program Understanding</term>
+					<term>Table Comparison</term>
+				</keywords>
+			</textClass>
+			<abstract>
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>df = pd.read_csv("students.csv") df.id = df.id.str.extract('(\d+)') df.drop_duplicates(inplace=True) df.loc[:, 'total'] = df.math + df.art results = df.sort_values("total", a...</p></div>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Generate Intermediate Tables</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>• K. <ref type="bibr">Xiong</ref>  Data wrangling is an arduous and time-consuming routine <ref type="bibr" target="#b10">[13,</ref><ref type="bibr" target="#b14">17]</ref> for data workers who carry out data analysis tasks with different levels of expertise <ref type="bibr" target="#b6">[9,</ref><ref type="bibr" target="#b37">40]</ref>. A commonplace method of wrangling data is writing custom cleaning scripts in various programming languages <ref type="bibr" target="#b26">[29,</ref><ref type="bibr" target="#b31">34]</ref>, such as R and Python. In this case, data workers usually seek to understand the semantics of wrangling scripts in various scenarios <ref type="bibr" target="#b65">[70]</ref>, including debugging for potential code issues, reusing scripts for their data, and maintaining code that is not well-documented. Here, the semantics of wrangling scripts means the type of data transformation and its parameters. For example, given a line of code written in R, tb2 = arrange(tb1, -num), the semantics of the code refers to sorting the column num of the input table tb1 in descending order, and returning the output table tb2.</p><p>However, understanding the semantics of intricate scripts requires advanced programming skills and is error-prone <ref type="bibr" target="#b33">[36,</ref><ref type="bibr" target="#b47">51,</ref><ref type="bibr" target="#b56">60]</ref>. Novice data workers may find it challenging for three reasons. First, data workers need to work across programming languages in some scenarios, such as learning a new programming language and reusing code written in another language. However, different scripting languages have diverse regulations in implementing data transformations. For example, the sort transformation can be implemented by the function arrange in dplyr <ref type="bibr" target="#b63">[68]</ref> (R), and the descending order is represented by a minus sign or the desc function. While in Pandas <ref type="bibr" target="#b49">[53]</ref> (Python), the same transformation is implemented by the function sort_values, and the descending order is noted as ascending=False. Second, in one language, there are different functions to implement the same data transformation. For instance, both gather and pivot_longer in tidyr <ref type="bibr" target="#b61">[66]</ref> (R) can perform the fold transformation, and there is a subtle difference in their usage. Third, some functions may omit important parameters for simplicity. These functions either have default parameters (e.g., the sort_values function in Pandas performs sorting in ascending order by default), or can extract parameters from the input data tables (e.g., the left_join function in dplyr has built-in rules to infer join keys from the two input tables).</p><p>A quantity of prior work has been proposed to understand wrangling scripts. Some tools such as Unravel <ref type="bibr" target="#b53">[57]</ref> and WrangleDoc <ref type="bibr" target="#b65">[70]</ref> are used for exploring and debugging wrangling scripts. These tools are useful for revealing changes in data tables after performing a data transformation. However, they cannot directly inform data workers of the type of transformation. Others, such as SOMNUS <ref type="bibr" target="#b64">[69]</ref>, Datamations <ref type="bibr" target="#b46">[50]</ref>, and Data Tweening <ref type="bibr" target="#b28">[31]</ref>, illustrate the semantics of data transformations using well-designed visualization. However, they rely on hand-crafted rules to parse scripts, resulting in poor generalizability and scalability.</p><p>In this paper, we propose a pipeline, called COMANTICS meaning code semantics, that identifies the semantics of wrangling scripts. We observe that, given a line of wrangling code, changes between input and output tables highly relate to the type of transformation. To have an overview of the changes, we summarize the characteristics of table changes by analyzing a corpus containing 921 lines of real-world wrangling code and present a design space comprising two primary dimensions, i.e., the types of data objects and the properties of data changes. Then, we construct the pipeline consisting of three key steps, i.e., Data Preprocessing, Type Inference, and Parameter Inference. For Data Preprocessing, COMANTICS executes the script and obtains intermediate data tables for each line of wrangling code. Then, the characteristics of table changes are identified automatically. The Type Inference step consists of two components. The first component infers transformation type based on the characteristics and obtains a list of candidate transformation types. To identify the transformation with maximum possibility, we employ a Siamese convolutional neural network <ref type="bibr" target="#b5">[8]</ref> to rank transformation candidates. Based on the inferred transformation, Parameter Inference aims to identify parameters for transformations. We borrow the "slot filling" strategy and detect parameters based on the wrangling script, table contents, and characteristics. Finally, COMANTICS outputs a data transformation with maximum likelihood and its parameters, which can be applied to a variety of downstream tasks.</p><p>We design experiments to evaluate the performance of COMAN-TICS. We first annotate the real-world corpus with data transformations. Then we assess the generalizability across different programming languages and the contribution of different components of COMANTICS based on five experiment settings. To evaluate the flexibility of our pipeline, we apply it to three applications in different domains, i.e., improving Jupyter Notebook with automatic annotation, augmenting SOMNUS <ref type="bibr" target="#b64">[69]</ref> with scalable backend, and enhancing TACO <ref type="bibr" target="#b43">[47]</ref> with additional information.</p><p>In summary, the contributions of this paper are four-fold: First, we summarize a design space including 103 characteristics of table changes. Second, we construct a novel pipeline, COMANTICS, for inferring semantics, i.e., the types of transformations and their parameters, of wrangling scripts. Third, we evaluate the performance of our pipeline using quantitative experiments. A sub-contribution is that we have built a real-world dataset including 921 lines of wrangling code where each is annotated with a data transformation. Fourth, to assess the flexibility of COMANTICS, we apply our pipeline to three example applications in different domains.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>In this section, we discuss techniques from three aspects, i.e., data wrangling, program understanding in data wrangling, and table comparison.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Data Wrangling</head><p>Data wrangling is a nontrivial activity of cleaning, transforming, and enriching data into the desired form palatable for downstream tasks <ref type="bibr" target="#b14">[17,</ref><ref type="bibr" target="#b26">29]</ref>. Data wrangling often involves a significant number of data transformations <ref type="bibr" target="#b48">[52]</ref>. Kasica et al. <ref type="bibr" target="#b27">[30]</ref> developed a concise and actionable framework describing multi-table transformation operations.</p><p>There are two kinds of approaches for facilitating the process of data wrangling. On the one hand, a plethora of interactive applications has been proposed. Tools for wrangling tabular data <ref type="bibr" target="#b9">[12,</ref><ref type="bibr" target="#b35">38]</ref> like Microsoft Excel, Tableau Prep Builder <ref type="bibr" target="#b54">[58]</ref>, OpenRefine <ref type="bibr" target="#b20">[23]</ref>, and Trifacta <ref type="bibr" target="#b59">[64]</ref> provide an interactive menu for selecting the desired transformation. Further, Trifacta and its predecessor Data Wrangler <ref type="bibr" target="#b14">[17,</ref><ref type="bibr" target="#b26">29]</ref> integrate an inference engine that generates a ranked list of suggested transformations. Others aim to address wrangling graph <ref type="bibr" target="#b7">[10,</ref><ref type="bibr" target="#b17">20,</ref><ref type="bibr" target="#b19">22,</ref><ref type="bibr" target="#b39">42,</ref><ref type="bibr" target="#b41">44,</ref><ref type="bibr" target="#b58">62]</ref> and website <ref type="bibr" target="#b4">[7,</ref><ref type="bibr" target="#b21">24,</ref><ref type="bibr" target="#b36">39,</ref><ref type="bibr" target="#b38">41,</ref><ref type="bibr" target="#b42">46]</ref> data. Some of the above tools <ref type="bibr" target="#b14">[17,</ref><ref type="bibr" target="#b20">23,</ref><ref type="bibr" target="#b26">29,</ref><ref type="bibr" target="#b54">58,</ref><ref type="bibr" target="#b59">64]</ref> support recording the process of data transformations through a domainspecific language, and provide textual descriptions of transformations. On the other hand, numerous scripting languages (e.g., Python and R) with data manipulation libraries (e.g., Pandas <ref type="bibr" target="#b49">[53]</ref>, dplyr <ref type="bibr" target="#b63">[68]</ref>, tidyr <ref type="bibr" target="#b61">[66]</ref>, and tidyverse <ref type="bibr" target="#b62">[67]</ref>) have been commonly used to wrangle data for their flexibility. However, programming is a complicated and burdensome activity, requiring developers to master specialized skills <ref type="bibr" target="#b33">[36,</ref><ref type="bibr" target="#b44">48]</ref>. To reduce this barrier, increasing research work <ref type="bibr" target="#b12">[15,</ref><ref type="bibr" target="#b13">16,</ref><ref type="bibr" target="#b16">19,</ref><ref type="bibr" target="#b23">26]</ref> is motivated by programming by example that synthesizes target code given examples provided by data workers. Compared to the aforementioned approaches, our pipeline has different goals, which focus on helping data workers understand wrangling scripts.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Program Understanding in Data Wrangling</head><p>Program understanding in data wrangling is a hot research topic that aims to help data workers comprehend code. Prior work roughly falls into two categories. Firstly, some tools are designed for debugging. For example, WrangleDoc <ref type="bibr" target="#b65">[70]</ref> is a JupyterLab extension that leverages program synthesis techniques to automatically generate summaries of code fragments to find subtle bugs. Unravel <ref type="bibr" target="#b53">[57]</ref> provides summaries for data transformation functions and an always-on visualization for fluent code to explore and debug the chain of expressions in R. Besides, TweakIt <ref type="bibr" target="#b32">[35]</ref> is a system implemented as an extension to Microsoft Excel that applies live interactions to help data workers explore and understand the effects of unfamiliar code. COMANTICS shares the same design goal of facilitating the comprehension of wrangling scripts. However, we focus on the semantics of data wrangling, which consists of the types of data transformations and their parameters.</p><p>Secondly, some tools are proposed to visualize the semantics of data wrangling. For instance, Datamations <ref type="bibr" target="#b46">[50]</ref> creates animated transitions for data transformations to explain the entire data analysis pipeline. SOMNUS <ref type="bibr" target="#b64">[69]</ref> supports transformation inference based on function information and generates a glyph-based provenance graph to visualize the evolution of tables. These visualization tools are useful and effective in depicting the semantics of data processing workflow. However, they rely on a rule-based engine to parse the semantics of the wrangling process, which can hardly scale to different programming languages and a variety of functions. In addition, crafting rules is a laborious process and is limited in real-world applications. COMANTICS, on the other hand, infers the semantics of wrangling scripts from input/output tables and individual lines of code. It is independent of programming languages, libraries, and functions, resulting in better scalability and generalizability. We have successfully applied COMANTICS to three applications (see Sec. 6) to assess its flexibility.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Table Comparison</head><p>Data comparison techniques are widely used to investigate differences between multiple versions of data. Although plenty of work aims to compare time series data, image data, graphs, etc., there are few techniques designed to compare tabular data <ref type="bibr" target="#b43">[47]</ref>. Available table comparison tools, such as ExcelCompare [4], AQT <ref type="bibr" target="#b0">[1]</ref>, DiffKit <ref type="bibr" target="#b2">[3]</ref>, Daff <ref type="bibr" target="#b1">[2]</ref>, Ridom SeqSphere+ <ref type="bibr" target="#b3">[5]</ref>, and Compare <ref type="bibr" target="#b22">[25]</ref>, identify and compute differences between two input tables according to metrics including table size differences, cell content differences, the number of unique records and fields, etc., and output statistical results, textual summaries, or visualizations. Sutton et al. <ref type="bibr" target="#b57">[61]</ref> presented a tool to detect and explain the differences between two tables and formulate executable patches that can transform one table to be compatible with the other. In addition, Niederer et al. <ref type="bibr" target="#b43">[47]</ref> developed TACO, a visual comparison tool for tabular data. It encodes table differences through interactive visualizations to illustrate different types of changes. The aforementioned approaches are successful in comparing differences between tables. COMANTICS goes one step forward in which table differences are identified to infer the semantics of wrangling scripts.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">A DESIGN SPACE FOR TABLE CHANGES</head><p>The semantics of wrangling scripts consists of transformation types and their parameters. According to Xiong et al. <ref type="bibr" target="#b64">[69]</ref>, identifying the transformation type is the key challenge. We observe that differences between input and output tables of a line of wrangling code can reveal the transformation type to some extent. For example, if some rows are deleted while the others remain unchanged, the transformation seems to belong to delete rows. Further, if all deleted rows contain missing values while the remaining do not, the transformation type is likely to be delete rows with missing values. Motivated by this observation, we explore the characteristics of table changes and present a design space to understand how a table is changed based on data transformations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Methodology</head><p>To understand the characteristics of table changes, we collect real-world corpus and analyze how wrangling scripts transform input data tables into outputs. The corpus is collected from GitHub<ref type="foot" target="#foot_0">1</ref> and Kaggle<ref type="foot" target="#foot_1">2</ref> . We use keywords such as data wrangling and data cleaning to find target scripts. Furthermore, we collect corpus from prior work <ref type="bibr" target="#b13">[16,</ref><ref type="bibr" target="#b27">30]</ref>. The collection procedure is based on two inclusion criteria. First, as our approach relies on table changes, we focus on scripts with data tables. Second, due to our expertise in programming, we keep scripts written in Python and R, and balance the number of scripts in both languages. After collecting the corpus, we manually "clean" these scripts to meet the requirement of COMANTICS. Besides data wrangling, the scripts usually include code for other purposes, such as visualization and machine learning. We carefully remove these code and ensure that the remaining can run and process the input data correctly. Then, we deal with function chaining, where multiple functions are executed consecutively on the same variable. An example is shown in Fig. <ref type="figure" target="#fig_1">2</ref>(a), four functions (i.e., filter, mutate, select, and arrange) are called in sequence on the dataset mtcars. This language pattern is efficient for developers. However, it is not supported in COMANTICS because we can hardly obtain intermediate tables. Hence, we rewrite chained functions into individual lines of transformations (Fig. <ref type="figure" target="#fig_1">2(b)</ref>). Finally, our corpus contains 74 curated scripts, where 42 of them are written in Python and 32 are in R, adding up to 921 lines of wrangling code. To code the characteristics of table changes, we first execute these scripts to obtain the intermediate tables for each line of wrangling code. Then we record the differences between tables in detail from various aspects as much as possible. Next, we apply a qualitative method, open coding and axial coding rooted in grounded theory, to these table differences. Specifically, we label each difference with a descriptive code and draw connections between these codes. Based on our observations and wrangling experiences, we adopt the codes which are conducive to distinguishing between different transformations. After frequent discussions with two data scientists, we group and condense related codes into broader categories. Finally, we derive five properties of data changes and four data objects from these categories.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Dimensions of the Design Space</head><p>By analyzing the characteristics of table changes, we construct the design space consisting of two primary dimensions, i.e., data objects and the property of data changes. Data objects include four different types, i.e., Tables, Columns, Rows, and Cells. The first three data objects are recognized in various prior work in data wrangling <ref type="bibr" target="#b27">[30,</ref><ref type="bibr" target="#b64">69]</ref> and table comparison <ref type="bibr" target="#b43">[47]</ref>. We introduce Cells additionally because it relates to a wide range of transformations including editing the text of a cell and filling empty cells with adjacent cells. The second dimension is the property of data change. We identify five high-level properties, i.e., Number, Order, Relation, Value, and Type. Intersections between data objects and properties mean a set of characteristics, which are described by inequalities. For example, the intersection between Tables and Number includes five characteristics, i.e., the number of input and output tables goes from "0 → 1", "1 → 0", "1 → 1", "1 → many", and "many → 1", as illustrated in Fig. <ref type="figure">3</ref>. We notice that the mapping between data objects and properties is not complete, meaning that some properties are only applicable to specific data objects. In the following paragraphs, we describe the five properties in detail.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.1">Number</head><p>Numerous transformations can result in a change in the number of data objects including create tables, delete columns, etc. Number is applicable to tables, columns, and rows, as shown in Fig. <ref type="figure">3</ref>, For tables, the comparison between the number of inputs and outputs is critical. For example, the create tables transformation may increase the number of tables from 0 to 1. Meanwhile, the separate tables may generate more tables based on one input table. Therefore, we include five characteristics in this category, i.e., the number of input and output tables goes from "0 → 1", "1 → 0", "1 → 1", "1 → many", and "many → 1", which corresponds to characteristics 1-5 in Fig. <ref type="figure">3</ref>.</p><p>For columns and rows, we summarize characteristics based on singleor multiple-table operations. In terms of single-table transformations, we focus on whether the number of columns/rows in the output table is greater than (i.e., &gt;, the 8th characteristic in Fig. <ref type="figure">3</ref>), equal to (=), or smaller than (&lt;) the number in the input table. In terms of multipletable transformations, changes in the number of columns/rows may vary. For example, considering the inner join transformation, the number of rows in the output table is smaller than or equal to the minimum number of rows in the input tables. On the contrary, the split table by groups transformation may split a table row-wise. And the number of rows in the input table equals the sum of rows in the output tables. For detailed categorization, we further divide multiple-table transformations into two cases, i.e., 1 → many (one input table and many output tables) and many → 1. For the 1 → many case, we compute the minimum, maximum, and sum of the number of columns/rows in all output tables, and compare them to the number in the input table (e.g., characteristics 9-15). For the many → 1 case, the same computation is performed for input tables, which is compared to the number of outputs (e.g., characteristics <ref type="bibr" target="#b13">[16]</ref><ref type="bibr" target="#b14">[17]</ref><ref type="bibr" target="#b15">[18]</ref><ref type="bibr" target="#b16">[19]</ref><ref type="bibr" target="#b17">[20]</ref><ref type="bibr" target="#b18">[21]</ref><ref type="bibr" target="#b19">[22]</ref>. Each case includes seven characteristics, which are described in Fig. <ref type="figure">3</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.2">Order</head><p>The order property describes the position change of columns and rows, which can be performed manually or be sorted according to criteria including disorder, ascending, and descending <ref type="bibr" target="#b27">[30]</ref>  ) )</p><formula xml:id="formula_0">) &gt; ) &gt; ) &amp; ) &amp; ) &amp; ) &amp; ) = ) = ) = ) = ) = ) = ) &lt; ) &lt; ) &lt; ) &lt; ) &lt; ) &lt; &lt;</formula><p>) )</p><p>) )</p><p>) )</p><p>) )</p><p>)</p><p>) ) index( <ref type="formula">)</ref>) 4.</p><formula xml:id="formula_1">) &gt; ) &gt; ) &gt; ) &gt; &lt; max ( &lt;</formula><formula xml:id="formula_2">) = index( ) = index( ) )</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>3.</head><p>2.  <ref type="figure">3</ref>. The design space describes characteristics of table changes that consist of two dimensions, i.e., data objects and properties of data changes. 103 characteristics are included in the space. The blue and orange square indicates data objects in the output and input table, respectively. A detailed description of each characteristic is provided in the supplemental material. manually, the index of columns/rows is changed (e.g., characteristics 40 and 41). When sorted based on criteria, the content of the output column/row may be ordered (e.g., characteristics 42-44).</p><formula xml:id="formula_3">1. &amp; &gt; 0 &gt; 0 &gt; 0 &gt; 0 &amp; &amp; &amp; &amp; = 0 &gt; &lt; = &gt; 0 = 0 ) ) ) ) ) = type ( ) type (</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.3">Relation</head><p>Some data transformations involve relations between data objects (e.g., columns, rows, and cells). Taking the unite function in tidyr as an example, df2 = unite(df1,'Z', X, Y) forms the column Z in df2 by concatenating strings of columns X and Y in df1. Relations can be triggered by mathematical formulas and functions. However, the relation space between data objects is too large to be exhausted. By analyzing real-world wrangling scripts, we focus on four commonlyused set relations, i.e., subset (⊂), superset (⊃), equal (=), and others (i.e., apart from these three relations, =).</p><p>For relations between columns (or rows), we summarize within-and between-table characteristics, respectively. In terms of between-table characteristics, we focus on whether the content of columns in the input table is a subset (⊂), superset (⊃), identical (=), or others ( =) to that of the output table (e.g., characteristics <ref type="bibr" target="#b46">[50]</ref><ref type="bibr" target="#b47">[51]</ref><ref type="bibr" target="#b48">[52]</ref><ref type="bibr" target="#b49">[53]</ref>. In terms of within-table characteristics, we mainly focus on identical (=) relations. That is, we first identify the existence of identical columns within input and output tables, and compare them using boolean operators (e.g., characteristics <ref type="bibr" target="#b50">[54]</ref><ref type="bibr" target="#b51">[55]</ref><ref type="bibr" target="#b52">[56]</ref><ref type="bibr" target="#b53">[57]</ref>. For relations between cells, the characteristics are described by whether the values are equal (=), substring (e.g., ⊂ and ⊃), or others ( =) to each other (e.g., characteristics 66-69). Besides, we check whether cells in the same column or row have identical values in the input and output tables (e.g., characteristics 70-77).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.4">Value</head><p>Some transformations relate to special values, e.g., missing values and user-defined values. For example, the dropna function in Pandas detects and removes rows with missing values. Meanwhile, the replace function replaces cells with user-defined values. The value property is applicable to all data objects. For tables, columns, and rows, we establish characteristics by identifying the existence of missing values within input and output data objects, and compare them using boolean operators (e.g., characteristics 78-81). In addition, we detect whether the data objects include (⊇) a user-defined value or not ( ). As for cells, the characteristics are described by whether a cell is a missing value, and whether a cell has changed from one value to another.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2.5">Type</head><p>This property, which describes changes in data type, is applicable to columns. We focus on three types of columns, i.e., nominal, quantitative, and temporal. The characteristics are described as, given a column in the input table, whether its data type is changed in the output table.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Inferring Transformations With Characteristics</head><p>We summarize the characteristic space for the purpose of inferring the type of data transformation. We begin with collecting a set of transformations. Then we discuss the principles of type inference.</p><p>Kasica et al. <ref type="bibr" target="#b27">[30]</ref> presented a design space encompassing 15 highlevel transformations, which provides a good start for our investigation. However, some transformations are too rough to distinguish detailed semantics. For example, constructing columns manually, mutating values from existing columns, and merging multiple columns, are all summarized by Create Columns without distinction. On the other hand, Wrangler <ref type="bibr" target="#b14">[17]</ref> and Trifacta <ref type="bibr" target="#b59">[64]</ref> provide vocabularies describing lowlevel operations, such as Extract, Merge, and Replace. To support finer-grained semantics, we manually annotate each line of code in our corpus (see Sec. 3.1) by linking one high-level transformation and one low-level operation. Taking the above three transformations as examples, the new vocabularies of them are create columns create, create columns mutate, and create columns merge, respectively. This strategy is effective in generating a large number of low-level transformations. In addition, we observe that some wrangling code does not change data tables, such as group, ungroup, and reset_index functions in Pandas. Though not changing data tables immediately, these functions usually act as prerequisites for the following transformations.</p><p>Hence, we include an identical operation transformation to describe these functions.</p><p>To infer transformation type, we establish a mapping between transformations and characteristics. For each transformation, we categorize characteristics into three groups, i.e., impossible, possible, and inevitable. Impossible characteristics refer to those that should not appear when performing a transformation. Inevitable characteristics, on the other hand, will definitely exist after a transformation. The above two sets play major roles in characteristic-based inference (see Sec. 4.2.1). Possible characteristics are those that may or may not appear. For example, given a line of code, df=df[df.num&gt;1], which removes rows not meeting the condition df.num&gt;1, the number of columns will not change (e.g., characteristics 6 is inevitable), and the number of rows in the output table can be smaller or equal to that in the input table (e.g., characteristics 23 and 24 are possible). However, changes in the number of columns (e.g., characteristics 7 and 8) are impossible. As a result, the problem of inferring transformation type is turned into detecting a set of impossible, possible, and inevitable characteristics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">THE COMANTICS PIPELINE</head><p>This section introduces COMANTICS, an automatic pipeline for inferring semantics for data wrangling scripts. Our pipeline takes data tables and a wrangling script as input, and generates a sequence of data transformations with parameters. As illustrated in Fig. <ref type="figure" target="#fig_0">1</ref>, COMANTICS consists of three key steps, i.e., Data Preprocessing (Fig. <ref type="figure" target="#fig_0">1(b)</ref>), Type Inference (Fig. <ref type="figure" target="#fig_0">1(c</ref>)), and Parameter Inference (Fig. <ref type="figure" target="#fig_0">1(d)</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Data Preprocessing</head><p>Since table changes highly relate to the semantics of transformation, the goal of this step is to identify a set of characteristics of table changes. To this end, we first execute the wrangling script on the given source table, and obtain intermediate input and output tables for each line of code, which are saved as CSV files for further analysis. These input tables are critical for type inference as one line of wrangling code could have different semantics given different input tables <ref type="bibr" target="#b64">[69]</ref>. Second, we detect table changes based on the design space for each wrangling code and output a set of characteristics. We notice that the detection is time-consuming since some characteristics require content-based comparison between two tables. For example, detecting the relation of two columns involves a pair-wise comparison of the content in each cell. Therefore, we employ two pruning strategies to facilitate the detection.</p><p>Characteristics Pruning: Most detection relies on the existence of input and output tables. Hence, a number of characteristics can be pruned if the prerequisite does not stand. For example, if only output tables exist, the transformation is likely to be Create Tables, and the detection of other characteristics, such as changes in order and relation, is not applicable.</p><p>Data Objects Pruning: We observe that, given new data objects in the output table, characteristics are mainly caused by the new ones. Hence, we prune the remaining objects for content-based comparison. For example, after detecting new columns in the output table, we focus on the detection of characteristics based on the new columns. Other columns in the output tables, however, will not be involved in the content-based comparison.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Type Inference</head><p>To infer the transformation type of a line of wrangling code, the Type Inference step includes two components, i.e., characteristic-based inference and model-based inference. As the space of transformations could be large, the first component filters out impossible transformations and results in a smaller number of candidates. The second component utilizes a Siamese convolutional neural network to assess the possibility of each candidate and returns a sorted list based on possibilities.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.1">Characteristic-Based Inference</head><p>Given a collection of characteristics, we filter out impossible transformations based on the mapping described in Sec. 3.3. We establish two main strategies. First, we identify whether characteristics fall into the impossible set of each transformation. If true, the transformation is not included in the candidate list. Second, we filter out transformations whose inevitable set is not a subset of the set of characteristics. In this component, the type of transformation can hardly be uniquely identified because of two kinds of ambiguities. First, the output table may be identical to the input one. This may be because the conditions of transformations do not meet. An example is shown in Fig. <ref type="figure">4</ref>(a), the input table may be unchanged after Remove Duplicate Rows because no duplicates exist in the input. However, the same result may be caused by Remove Rows with Missing Values or Sort Age in Ascending Order, etc. Second, more than two transformations lead to the same changes between tables. As Fig. <ref type="figure">4(b)</ref> shows, changes between two tables may be caused by Filter Rows Where Gender is Male, Remove Rows with Missing Values, etc. Hence, this component results in a set of transformation candidates.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2.2">Model-Based Inference</head><p>To resolve the ambiguities in characteristic-based inference, the analysis of scripting code seems a feasible solution. However, due to the variety of programming languages, functions, and parameters in data wrangling, crafting rules to parse code is time-consuming and limited in generalizability and scalability. Besides table changes, we observe that the semantics of a transformation is usually implied in the code. For example, some functions, e.g., drop_duplicates in Pandas, distinct in dplyr, and unique in R, perform Removing Duplicate Rows, which can be inferred from the function name to some extent. It is also true for some parameters, such as ascending=False, remove=TRUE, etc. Therefore, we employ a machine learning model to alleviate ambiguities and compute the possibilities for each transformation candidate. One key step in machine learning is feature engineering, which identifies critical information and generates vectors for it. Here we incorporate the characteristics, function names, and parameters as key information for feature engineering.</p><p>To reveal the semantics of function names and parameters, we vectorize them using text embedding approaches. The embedding, however, is not straightforward. To be specific, some wrangling code does not include a function name. Fig. <ref type="figure">6</ref>(c) presents an example where a new column in the output table is created by an addition statement. In this case, we set None as its function name. In addition, function names and parameters usually contain out-of-vocabulary (OOV) words. For example, some functions are named drop_duplicates, inner_join, and fillna, and some parameters are called by_group, to_replace, and skipna. To tackle this problem, we adopt FastText <ref type="bibr" target="#b8">[11]</ref> for text embedding because it can handle the OOV words by considering subword information. Finally, we obtain two 1 × 300 vectors capturing the semantics of function names and parameters, respectively. Similarly, we present each characteristic using natural language, and use FastText to vectorize each characteristic. After obtaining all feature vectors of characteristics, we average all vectors to form one with dimension 1 × 300. Finally, we linearly combine these vectors to obtain a semantic vector with dimension 3 × 300.</p><p>To calculate the likelihood of each transformation, we employ a Siamese Convolutional Neural Network (CNN) <ref type="bibr" target="#b5">[8]</ref> which can address two challenges. First, the problem of inferring transformation type is relatively new, and training samples are hard to find in the existing corpus. Second, the data transformation space could be large. However, only a few of them are used commonly in practice (details are described in Sec. 5.1). That means training samples from the real-world corpus are likely to be imbalanced. CNN is a kind of flexible classification architecture that is suitable for few shot problems and imbalanced data <ref type="bibr" target="#b30">[33]</ref>. We acknowledge that COMANTICS does not rely on one model architecture, and the CNN model can be replaced by others. In this paper, we use CNN to verify the idea of COMANTICS.</p><p>The Siamese network model comprises two identical subnetworks, and each utilizes five convolutional layers followed by a flatten layer. The input of each subnetwork is a semantic vector encompassing three types of information, i.e., the characteristics of changes, the function name, and the function parameters. In this model, we refer to Hadsell et al. <ref type="bibr" target="#b15">[18]</ref> to define and optimize the contrastive loss. After a pair of semantic vectors is fed into the model, the similarity of the two vectors is computed based on Euclidean distance. The output of the model is 1 or 0, which means whether the two inputs belong to the same transformation type. After training the model on the labeled dataset (see Sec. 5.1), we apply it to obtain the likelihood of each transformation in the candidate set.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Parameter Inference</head><p>Parameters define how a transformation performs. Taking the set of transformation candidates with likelihood as input, this step aims to infer parameters for transformations. Borrowing the idea of slot filling in task-based dialog systems <ref type="bibr" target="#b52">[56]</ref>, we first manually define a set of parameters, i.e., slots, that a transformation should include. Then, we detect these parameters, i.e., filling slots, based on the wrangling code, characteristics of table changes, and the content of input/output tables. For example, given a piece of code, df2 = unite(df1, 'Z', X, Y), COMANTICS infers that the transformation merge columns has the maximum likelihood. Then, we detect parameters of merge columns, which are pre-defined as one input table, multiple columns in the input, one output table, the merged column in the output, and a separator. The input and output tables can be obtained from the Data Preprocessing step. To fill other slots, we first extract column names from the code, i.e., Z, X, and Y. Then, we obtain relations between the three columns using characteristics of table differences, and fill the two slots, i.e., multiple columns in the input and the merged column in the output. Since the separator is not available in the code, we extract it from the table content. Note that COMANTICS only supports the inference of a limited number of separators, and can be easily extended.</p><p>However, the slot filling process may fail. If so, COMANTICS will filter out the transformation and turn to the one with the second maximum likelihood and detect whether parameters meet the transformation, and so forth. COMANTICS stops detection until parameters match the transformation type. Following the above example, if relations between columns cannot be detected, the transformation type, e.g., merge, does not stand. Then, COMANTICS will turn to the next transformation and continue the slot filling process. This step can also filter out impossible transformations to some extent, which is beneficial to the overall accuracy of COMANTICS.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">EXPERIMENTS</head><p>We design experiments to evaluate COMANTICS from two aspects. First, since characteristic-based inference is independent of programming languages, we assess whether the pipeline trained in one programming language can be generalized to the other. Second, we evaluate how each part of COMANTICS contributes to the overall performance.</p><p>Table <ref type="table">1</ref>. Statistical analysis of the dataset on five metrics, including the total lines of wrangling code (#Instances), the average lines of wrangling code in scripts (Avg #Inst), the number of distinct data transformation types (#Trans), the number of distinct functions (#Func), and the average number of implementations for each data transformation (Avg #Imps). </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>#Instances Avg</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Dataset</head><p>Based on the corpus described in Sec. 3.1, we manually annotate the transformation type for each line of code. To ensure the accuracy, the labeling process is based on the documentation of each function describing its usage. After that, we verify the labeling results using the characteristics between the input and output tables. Finally, we have labeled and verified 74 script files including 921 lines of code. We distinguish scripts written in Python and R, and report the statistical results of our dataset on five metrics (see Table <ref type="table">1</ref>). Here we define the number of implementations (#Imps) as how many methods (including different functions or the non-functional equation) can be utilized to perform a data transformation. For example, there are two functions (i.e., pivot_longer and gather) in tidyr that can be used to fulfil transform tables fold, so its #Imps is 2.</p><p>From Table <ref type="table">1</ref>, we have some interesting findings. Though we have tried to balance the number of scripts (42 for Python and 32 for R), the number of instances between the two languages varies (606 versus 315). It is because Python scripts are usually longer than those of R (14.43 Avg #Inst for Python versus 9.84 for R). The number of transformations and functions that appeared in the corpus is similar. COMANTICS can support 99 functions in total, which is significantly more than previous work including Datamations <ref type="bibr" target="#b46">[50]</ref> and Sonmus <ref type="bibr" target="#b64">[69]</ref>. We argue that our pipeline is scalable in terms of the number of functions. However, we notice that the Avg #Imps in Python (3.86) is greater than that in R (2.14), meaning that Python is more flexible in implementing data transformations. The dataset and its statistical analysis are provided in the supplemental material.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Metrics</head><p>Following the previous work <ref type="bibr" target="#b51">[55]</ref>, we adopt Top-N accuracy metrics to evaluate the performance of COMANTICS. These metrics are usually used for multi-class classification models. Top-1 accuracy is a conventional classification metric that measures the proportion of samples where the highest probability prediction matches the target label. However, due to a large number of categories (i.e., 30 distinct transformations) and a few training/testing samples (i.e., 921 instances), Top-1 accuracy may limit our understanding of COMANTICS. Hence, we employ Top-3 accuracy, which measures the possibility that the top three predictions include the correct answer. We also report the training times in minutes for each experiment to get a rough idea about how computationally-demanding the training process is.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Methods and Apparatus</head><p>To evaluate how each component contributes to the performance, we prepare two techniques, i.e., the entire pipeline and the Siamese Convolutional Neural Network (CNN). Similar to COMANTICS, the CNN technique includes three steps. The difference between them is that the second step of the CNN technique does not include a characteristicbased inference component.</p><p>We split the dataset using four strategies. Firstly, to evaluate how each technique performs across Python and R, we use the scripts in Python as the train set and R as the test set, and vice versa. To ensure that the space of data transformations is consistent between the train and test, we select common transformations (27 types in total) in both sets. Secondly, we split the Python instances by random selection in each transformation type at a ratio of 80 : 20, which are used as the train and test sets, respectively. Based on the Python test set, we form the third strategy where we include R scripts into the train set. Finally, we combine all Python and R instances and randomly split them at a ratio of 80 : 20. The experiments are performed on a Windows 10 desktop with a 3.20GHz Intel Core i7-8700 CPU and 32 GB RAM.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">Results and Analysis</head><p>Contribution of each component: The Type Inference step of COMAN-TICS consists of two components, i.e., characteristic-based inference and CNN-based inference. By incorporating the characteristic-based inference component, the pipeline results in better accuracy compared to the CNN-based model on both Top-1 and Top-3 accuracies. Specifically, based on the Top-1 accuracy, the accuracy increases by 21.32% on average (σ = 7.06) for the five data splits. It is also notable that CNN-based inference achieves acceptable performance for the last three data splits, indicating that both components have a great contribution to the pipeline.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Generalizability to different languages:</head><p>To understand the generalizability, we focus on the first two experiment settings. Generalization across Python and R is a hard task. COMANTICS achieves 53.8% and 44.5% Top-1 accuracy for Python-R and R-Python, respectively, while the accuracy of CNN-based model is lower, merely 19.1% and 23.2%, respectively. We speculate the low accuracy is due to the small number of train samples which are not enough for the model to capture features.</p><p>Rationality of semantic vector: By comparing the results of the 3rd and 4th data splits, we infer that the embedding of function names and parameters is significant in type inference. Specifically, by incorporating R scripts into the train set, the semantics in R has joined for inference, which improves the Top-1 accuracy of both CNN-based model and COMANTICS by 9.9%. This finding inspires us for improving the pipeline design in future research, where we plan to include synonyms for each transformation in model training.</p><p>Analysis of Confusion Matrix: Referring to the normalized confusion matrix (provided in the supplemental material), we observe that create rows summarize (i.e., creating rows by summarizing other rows with aggregate operations such as mean, sum, and max) tends to be predicted as create rows create, which means rows are created manually. Another case is that some transform columns extract (i.e., transforming columns by extracting values from one column) are classified as transform columns mutate. We infer two reasons for the two cases. First, characteristics in our design space cannot describe complex relations such as summarization and regular expressions. Second, the instances of these transformations are few, making it difficult for COMANTICS to learn their features.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.5">Potential Improvements</head><p>Although COMANTICS has achieved 92.2% of the Top-1 accuracy when combining R and Python scripts in the train and test sets, the analysis of failure cases informs us of potential improvements in our pipeline.</p><p>First, the semantics of parameters should be investigated by advanced approaches. Currently, we use FastText to convert all parameters into one feature vector, which may overlook key semantics. For example, by analyzing a failure case, df4 = filter(df3,!is.na(ST)), it should be classified as delete rows dropna, while COMANTICS incorrectly predicted it as delete rows filter. This case is "difficult" because the two transformations are semantically similar, i.e., deleting rows with missing value is a kind of deleting rows using filtering conditions. By analyzing the code, we note that the parameter !is.na(ST) is a key factor to distinguish it from delete rows filter. The failure case indicates that the Type Inference step of COMANTICS has not fully revealed the semantics of parameters. We plan to investigate natural language processing techniques such as tokenization <ref type="bibr" target="#b11">[14,</ref><ref type="bibr" target="#b24">27,</ref><ref type="bibr" target="#b40">43,</ref><ref type="bibr" target="#b60">65]</ref> to address this issue.</p><p>Second, characteristics detection can be further augmented. The characteristic-based inference component is powerful in improving the performance of the pipeline. However, given a pair of input and output tables, characteristics detected in the current prototype are sometimes ambiguous for type inference (as described in Fig. <ref type="figure">4</ref>). We observe that the detection of characteristics highly relies on the input data tables. Thus, to resolve ambiguity, we plan to employ well-crafted data tables to verify each transformation candidate. For example, if delete rows deduplicate is one of the candidates, a well-designed input table with duplicate rows would be constructed to check whether delete rows deduplicate stands for the line of code.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">EXAMPLE APPLICATIONS</head><p>In this section, we demonstrate the flexibility of COMANTICS through three applications in different domains. First, we show how COMAN-TICS supports semantic annotation for scripts in Jupyter Notebooks. Second, we integrate COMANTICS into an existing program visualization system to augment its ability to parse wrangling scripts. Third, we demonstrate an idea of improving an existing visualization system with additional information obtained from COMANTICS. Computational notebooks leverage an interactive literate programming <ref type="bibr" target="#b29">[32]</ref> paradigm that combines code, natural language text, and execution results of code cells in a single document. Nowadays, increasing data workers adopt them for exploratory data analysis and sharing of computational narratives <ref type="bibr" target="#b45">[49]</ref>. However, writing comments for each line of code could be burdensome. To assist the processing of documenting for data workers, we implement COMANTICS as a Jupyter Notebook extension to generate semantic annotations for wrangling code snippets. Specifically, to obtain intermediate input and output tables, we utilize the Variable Inspector [6] to collect all variables with their types, sizes, and values. After COMANTICS infers the transformation type and its parameters of a line of wrangling code, the extension employs a template-based approach to generate a natural language sentence describing the semantics. And the sentence will be appended above to the original code as a comment. As presented in Fig. <ref type="figure" target="#fig_3">5(a</ref>) and (b), there are five lines of wrangling code in the script, which are distributed in two different code cells. After clicking the extension button (Fig. <ref type="figure" target="#fig_3">5(c</ref>)), comments will be automatically inserted above each line of code (Fig. <ref type="figure" target="#fig_3">5(d)</ref>). As code annotation is a hot topic in the domain of software engineering <ref type="bibr" target="#b18">[21,</ref><ref type="bibr" target="#b34">37]</ref>, COMANTICS shows potential for code annotation in data wrangling.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Code Annotation in Jupyter Notebook</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">SOMNUS Re-visited</head><p>COMANTICS can also be used to expand the capacity of existing visualization systems that reveal the semantics of transformations. For example, SOMNUS <ref type="bibr" target="#b64">[69]</ref> is a program visualization system that generates a provenance graph to visualize a script of data wrangling. However, it relies on hand-crafted rules to parse code and infer transformation types. Hence, the backend of the system is limited in scalability. To augment SOMNUS, COMANTICS replaces its Program Adaptor module that parses code and infers the type of transformation. As a result, SOMNUS supports a larger number of functions, and more types of statements (e.g., non-functional assignments and non-assignment statements). Fig. <ref type="figure">6</ref> shows three examples that SOMNUS can support with the help of COMANTICS. In Fig. <ref type="figure">6</ref>(a), the extract function was not supported in SOMNUS, and establishing rules for new functions is time-consuming. Fig. <ref type="figure">6</ref>(b) shows that the non-assignment statement was not supported because the input and output table is not explicitly presented. Fig. <ref type="figure">6</ref>(c) depicts a non-functional assignment that can be hardly mapped to manually-crafted rules. Our corpus (see Sec. 3.1) shows that 507 out of 921 (55.05%) instances match the above three scenarios. By incorporating COMANTICS, SOMNUS extends its ability to deal with a wider range of functions and statements.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">TACO Re-visited</head><p>TACO <ref type="bibr" target="#b43">[47]</ref> is a visual analytics system that facilitates table comparison. It presented four types of changes between two tables including 1) structural changes where rows or columns are added or removed, 2) content changes where the values of cells are modified, 3) reorder changes where rows or columns are shifted to other positions, and 4) merge/split changes where multiple rows or columns are combined into a single one or vice versa. Though similar, our design space is the superset. That is, our space includes characteristics that are not supported in TACO, such as inclusion relationships between columns/rows (e.g., characteristics 50-53), ordering states (e.g., characteristics <ref type="bibr" target="#b39">[42]</ref><ref type="bibr" target="#b40">[43]</ref><ref type="bibr" target="#b41">[44]</ref>, and data types (e.g., characteristics 102 and 103). Therefore, COMANTICS can assist TACO to reveal more characteristics of table changes.</p><p>We express this idea using a simplified but extended version of TACO. In this version, we use additional visual channels to represent two relationships, i.e., green markers on the left side encode duplicate rows, and brown markers on top of the heatmap to display the superset relations between two columns. Fig. <ref type="figure" target="#fig_4">7</ref> shows an example. Based on the original visual encodings, we observe two red rows, which indicate that they are deleted. However, it is not clear why they are removed. With the help of COMANTICS, we can infer the reason with relation information between columns and rows. For example, we can observe that there are three green markers on the left side, meaning that there are identical rows in the input table. Combining with the two red rows, we may infer that a deduplicate transformation is performed to remove the two rows. Besides, two brown markers appear on the top side, which indicates the id between input and output tables have superset relation. A descending symbol is placed close to total, which indicates that the total column is sorted in descending order. By extending TACO, we can observe detailed relations between two tables. An exciting research direction is exploring visual encodings or novel designs to reveal richer characteristics of table changes effectively and intuitively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">DISCUSSION</head><p>In this section, we first discuss the limitations of our pipeline and the experiments. Then we present potential usage for future exploration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">Limitations</head><p>Evaluation. The evaluation of COMANTICS is limited in three aspects. To begin with, the quantitative experiments show that our pipeline could infer the transformation type with high Top-N accuracy. However, we did not assess the quality of the inferred parameters, which are critical in understanding semantics as well. In addition, we have not tried models other than the Siamese Convolutional Neural Network in Model-Based Inference. Lastly, the design space of table changes has not been explicitly evaluated in terms of descriptive, evaluative, and generative power. In future research, we plan to design comprehensive experiments to assess the quality of COMANTICS and the design space, and investigate how COMANTICS performs with different multi-class classification models.</p><p>Generalizability.  in different languages may vary while characteristics between tables are the same. We anticipate that the key factor to improve the generalizability is to align the semantics of function names and parameters among different languages. In addition, a large number of training and test samples are also critical for models to parse the semantics.</p><p>Scalability. Compared to prior work <ref type="bibr" target="#b46">[50,</ref><ref type="bibr" target="#b64">69]</ref>, COMANTICS scales well in terms of the number of functions and parameters. However, our pipeline does not scale well in the number of transformation types. The mapping between transformation types and characteristics (described in Sec. 3.3) and rules for parameter inference (see Sec. 4.3) are crafted manually for each transformation. Our pipeline currently supports 30 types of transformations that are derived from the collected dataset. However, the transformation space has not yet been fully explored. Crafting rules for the entire space could be tedious and error-prone. In future iterations, we plan to investigate automatic approaches to build rules for the pipeline.</p><p>Capability. The limitations of COMANTICS in capability are threefold. First, COMANTICS infers one transformation with its parameters for a line of wrangling code. It is unable to reveal the semantics of a line of code containing multiple transformations. Second, it is not applicable to scripts with some imperative programming constructs, such as conditional statements and loops, which are commonly used in data wrangling. Third, it does not support function chaining due to the difficulty of obtaining intermediate data tables. Temporarily, this issue could be addressed by automatically converting the chained functions into individual lines. The three capability issues are critical to production usage, and we plan to address them in our future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">Opportunities for New Usage</head><p>With the ability to infer the semantics of wrangling scripts, COMAN-TICS can introduce opportunities for practical applications in various domains. Apart from the three example applications described in Sec. 6, we anticipate that our work can be integrated into productivity spreadsheet software and interactive data wrangling systems, including Microsoft Excel [45] and OpenRefine <ref type="bibr" target="#b20">[23]</ref>, to automatically record the history of table operation. This is helpful for documenting and sharing the transformation process and the table changes, and the history can be presented to augment the "undo" operation and used for auditing transformations <ref type="bibr" target="#b25">[28]</ref>. In such a scenario, wrangling code is not explicitly generated. To adapt to these systems, feature engineering for function names and parameters should be transformed to the understanding of operation history in the interface.</p><p>Another possible usage of COMANTICS is to support a source-tosource compiler that converts code from one programming language to another <ref type="bibr" target="#b50">[54]</ref>. Numerous source-to-source compilers have been proposed <ref type="bibr" target="#b50">[54,</ref><ref type="bibr" target="#b55">59,</ref><ref type="bibr">63]</ref>, which usually require large amounts of samples for training and testing. These techniques, however, can hardly support code translation in the domain of data wrangling for two reasons. First, samples for data wrangling are usually not well-documented, and manual annotation is laborious and time-consuming. Hence, learning-based approaches may result in poor performance without enough training samples. Second, subtle differences in the wrangling code may lead to different transformations. Learning the mapping among numerous functions and parameters across different languages is infeasible. CO-MANTICS narrows the gulf by aligning wrangling code with semantics. To be specific, we first infer the semantics for individual wrangling functions and their parameters using COMANTICS. Then, we establish bi-directional mappings between functions/parameters and semantics for different programming languages. Finally, the semantics act as bonds connecting functions in two languages.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">CONCLUSION AND FUTURE WORK</head><p>In this paper, we have presented COMANTICS, a three-step pipeline that infers semantics for wrangling scripts. COMANTICS takes a piece of wrangling script and data tables as input, and outputs the semantics of each line of code consisting of the type of transformation and its parameters. Based on the observation that differences between input and output tables highly relate to the transformation type. We summarize a design space presenting characteristics of table changes, which further guides the design of COMANTICS. Experiments suggest that COMAN-TICS performs well in type inference. Further, three applications in different domains indicate that COMANTICS has good flexibility.</p><p>In the future, we plan to explore four promising research directions. First, we plan to improve the performance of COMANTICS by refining the Data Preprocessing step and Type Inference module. Second, we want to enhance its capability to meet the need for production usage. Third, we would like to incorporate COMANTICS in a broad range of applications, including spreadsheet software, data wrangling tool, and source-to-source compiler in the domain of data wrangling. Fourth, we plan to further evaluate COMANTICS with comprehensive experiments.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 .</head><label>1</label><figDesc>Fig. 1. COMANTICS is a pipeline that reveals the semantics of wrangling code. (a) shows the input of the pipeline, i.e., a data table and a piece of wrangling script. (b) is the first step of COMANTICS, aiming to generate intermediate tables for each code and detect changes between tables. (c) depicts the second step that identifies transformation type with characteristic-based and CNN-based components. (d) is the third step that infers parameters for the transformation. (e) shows the output of COMANTICS. (f) shows that our pipeline is applied to three applications in different domains.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 .</head><label>2</label><figDesc>Fig. 2. An example of unraveling (a) a chained syntax into (b) a sequence of statements in the R programming language.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>Fig.3. The design space describes characteristics of table changes that consist of two dimensions, i.e., data objects and properties of data changes. 103 characteristics are included in the space. The blue and orange square indicates data objects in the output and input table, respectively. A detailed description of each characteristic is provided in the supplemental material.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 5 .</head><label>5</label><figDesc>Fig. 5. An instance of generating annotations for data wrangling code in Jupyter Notebook. After wrangling code has been written in two code cells (a, b), the annotations (d) describing transformation semantics are appended to the original code by clicking the extension button (c).</figDesc><graphic url="image-4.png" coords="8,64.15,214.55,230.90,170.78" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>AFig. 7 .</head><label>7</label><figDesc>Fig. 6. Three examples that SOMNUS can support with the help of COMANTICS. Before integrating COMANTICS, SOMNUS does not support (a) the extract function, (b) non-assignment statements, and (c) non-functional assignments.</figDesc><graphic url="image-5.png" coords="9,64.37,86.48,148.22,75.45" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>and Y. Wu are with the State Key Lab of CAD&amp;CG, Zhejiang University, Hangzhou, China, and with the Zhejiang Lab, Hangzhou, China.</figDesc><table><row><cell>E-mail: {kaixiong, ycwu}@zju.edu.cn.</cell></row><row><cell>• Z. Luo is with Zhejiang University of Technology, Hangzhou, China, and</cell></row><row><cell>with the Zhejiang Lab, Hangzhou, China. E-mail: rickyluozs@gmail.com.</cell></row><row><cell>• S. Fu and Y. Wang are with the Zhejiang Lab, Hangzhou, China. E-mail:</cell></row><row><cell>fusiwei339@gmail.com, wangyh@zhejianglab.com.</cell></row><row><cell>• M. Xu is with the School of Computer and Artificial Intelligence, Zhengzhou</cell></row><row><cell>University, Zhengzhou, China. E-mail: iexumingliang@zzu.edu.cn.</cell></row></table><note>• Yongheng Wang and Siwei Fu are the co-corresponding authors. Manuscript received xx xxx. 201x; accepted xx xxx. 201x. Date of Publication xx xxx. 201x; date of current version xx xxx. 201x. For information on obtaining reprints of this article, please send e-mail to: reprints@ieee.org. Digital Object Identifier: xx.xxxx/TVCG.201x.xxxxxxx</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>. When performed</figDesc><table><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>Row</cell><cell>Cell</cell></row><row><cell>6.</cell><cell>=</cell><cell></cell><cell>23.</cell><cell>=</cell><cell></cell></row><row><cell>7.</cell><cell>&lt;</cell><cell></cell><cell>24.</cell><cell>&lt;</cell><cell></cell></row><row><cell>8.</cell><cell>&gt;</cell><cell></cell><cell>25.</cell><cell>&gt;</cell><cell></cell></row><row><cell></cell><cell></cell><cell>&amp; max (</cell><cell></cell><cell></cell><cell>&amp; max (</cell></row><row><cell cols="2">13.max (</cell><cell>&amp; sum (</cell><cell cols="2">30.max (</cell><cell>&amp; sum (</cell></row><row><cell cols="2">14.sum (</cell><cell></cell><cell cols="2">31.sum (</cell><cell></cell></row><row><cell cols="2">15.sum (</cell><cell></cell><cell cols="2">32.sum (</cell><cell></cell></row><row><cell>16.</cell><cell></cell><cell></cell><cell>33.</cell><cell></cell><cell></cell></row><row><cell>17.</cell><cell></cell><cell></cell><cell>34.</cell><cell></cell><cell></cell></row><row><cell>18.</cell><cell>&gt; min (</cell><cell></cell><cell>35.</cell><cell>&gt; min (</cell><cell></cell></row><row><cell>19.</cell><cell></cell><cell></cell><cell>36.</cell><cell></cell><cell></cell></row><row><cell>20.</cell><cell>&gt; max (</cell><cell></cell><cell>37.</cell><cell>&gt; max (</cell><cell></cell></row><row><cell>21.</cell><cell></cell><cell></cell><cell>38.</cell><cell></cell><cell></cell></row><row><cell>22.</cell><cell>&gt; sum (</cell><cell></cell><cell>39.</cell><cell>&gt; sum (</cell><cell></cell></row><row><cell>50.</cell><cell></cell><cell></cell><cell>58.</cell><cell></cell><cell>66.</cell></row><row><cell>51.</cell><cell></cell><cell></cell><cell>59.</cell><cell></cell><cell>67.</cell></row><row><cell>52.</cell><cell>=</cell><cell></cell><cell>60.</cell><cell>=</cell><cell>68.</cell><cell>=</cell></row><row><cell>53.</cell><cell></cell><cell></cell><cell>61.</cell><cell></cell><cell>69.</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>same colum</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>same row</cell></row><row><cell>specific val</cell><cell cols="2">specific val</cell><cell></cell><cell cols="2">specific val</cell><cell>= val1 &amp;</cell><cell>= val2</cell></row><row><cell>specific val</cell><cell cols="2">specific val</cell><cell></cell><cell cols="2">specific val</cell><cell>val1 &amp;</cell><cell>= val2</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table Outputs</head><label>Outputs</label><figDesc></figDesc><table><row><cell>:</cell><cell>Inputs :</cell></row><row><cell>5.</cell><cell></cell></row><row><cell>Number</cell><cell></cell></row><row><cell>Order</cell><cell></cell></row><row><cell>Relation</cell><cell></cell></row><row><cell>Value</cell><cell></cell></row><row><cell>Type</cell><cell></cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5"><head></head><label></label><figDesc>Fig. 4. Examples of the two ambiguities in characteristic-based inference. (a) The outputtable is identical to the input table, which can be caused by Remove Duplicate Rows, Remove Rows with Missing Values, Sort Age in Ascending Order, etc. (b) The second row has been deleted, which can be caused by performing Filter Rows Where Gender is Male, Remove Rows with Missing Values, etc.</figDesc><table><row><cell>A</cell><cell>B</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6"><head></head><label></label><figDesc>#Inst #Trans #Func Avg #Imps</figDesc><table><row><cell>Python</cell><cell>606</cell><cell>14.43</cell><cell>29</cell><cell>52</cell><cell>3.86</cell></row><row><cell>R</cell><cell>315</cell><cell>9.84</cell><cell>28</cell><cell>47</cell><cell>2.14</cell></row><row><cell>Sum</cell><cell>921</cell><cell></cell><cell>30</cell><cell>99</cell><cell></cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7"><head>Table 2 .</head><label>2</label><figDesc>The training time, Top-1, and Top-3 performances of COMANTICS and its CNN-based component in different experiment settings.</figDesc><table><row><cell></cell><cell cols="2">Setting</cell><cell cols="2">CNN</cell><cell cols="2">COMANTICS</cell><cell>Time</cell></row><row><cell></cell><cell>Train</cell><cell>Test</cell><cell cols="5">Top-1 Top-3 Top-1 Top-3 (minutes)</cell></row><row><cell cols="2">1st Python</cell><cell>R</cell><cell>19.1</cell><cell>30.3</cell><cell>53.8</cell><cell>76.1</cell><cell>19.5</cell></row><row><cell>2nd</cell><cell>R</cell><cell>Python</cell><cell>23.2</cell><cell>32.3</cell><cell>44.5</cell><cell>82.6</cell><cell>15.1</cell></row><row><cell cols="3">3rd Python Python</cell><cell>62.1</cell><cell>83.3</cell><cell>80.3</cell><cell>94.7</cell><cell>18.3</cell></row><row><cell>4th</cell><cell>All</cell><cell>Python</cell><cell>72.0</cell><cell>90.9</cell><cell>90.2</cell><cell>98.5</cell><cell>21.9</cell></row><row><cell>5th</cell><cell>All</cell><cell>All</cell><cell>78.0</cell><cell>92.2</cell><cell>92.2</cell><cell>99.0</cell><cell>19.6</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8"><head></head><label></label><figDesc>Generalization across Python and R is difficult, and the current prototype only achieves 53.8% accuracy for Python/training and R/test, and 44.5% for R/training and Python/test. When performing the same transformation, function names and parameters</figDesc><table /></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="1" xml:id="foot_0">https://github.com</note>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="2" xml:id="foot_1">https://www.kaggle.com</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>The work was supported by NSFC (62072400, 62002331) and the Collaborative Innovation Center of Artificial Intelligence by MOE and Zhejiang Provincial Government (ZJU). This work was also partially funded by the Zhejiang Lab (2021KE0AC02).</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">AQT -Advanced query tool -database query tool for DB2</title>
+		<author>
+			<persName><surname>Oracle</surname></persName>
+		</author>
+		<author>
+			<persName><surname>Sybase</surname></persName>
+		</author>
+		<author>
+			<persName><surname>Server</surname></persName>
+		</author>
+		<ptr target="https://querytool.com/" />
+		<imprint>
+			<date type="published" when="2022-02-12">Feb 12, 2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<title level="m" type="main">daff -data diffs in javascript, ruby, python, php</title>
+		<ptr target="http://paulfitz.github.io/daff/" />
+		<imprint>
+			<date type="published" when="2022-02-12">Feb 12, 2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<monogr>
+		<ptr target="http://www.diffkit.org/" />
+		<title level="m">DiffKit</title>
+				<imprint>
+			<date type="published" when="2022-02-12">Feb 12, 2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title/>
+		<author>
+			<persName><forename type="first">Ridom</forename><surname>Seqsphere+</surname></persName>
+		</author>
+		<ptr target="https://www.ridom.de/u/Comparison_Table.html" />
+		<imprint>
+			<date type="published" when="2022-02-12">Feb 12, 2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">DataXFormer: A robust transformation discovery system</title>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Abedjan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Morcos</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">I</forename><forename type="middle">F</forename><surname>Ilyas</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Ouzzani</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Papotti</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Stonebraker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE International Conference on Data Engineering</title>
+				<meeting>IEEE International Conference on Data Engineering</meeting>
+		<imprint>
+			<date type="published" when="2016">2016</date>
+			<biblScope unit="page" from="1134" to="1145" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<author>
+			<persName><forename type="first">A</forename><surname>Aditya</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Akshit</surname></persName>
+		</author>
+		<ptr target="https://github.com/ardiya/siamesenetwork-tensorflow" />
+		<title level="m">Siamese Network Tensorflow</title>
+				<imprint>
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Untidy Data: The unreasonable effectiveness of tables</title>
+		<author>
+			<persName><forename type="first">L</forename><surname>Bartram</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Correll</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Tory</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">01</biblScope>
+			<biblScope unit="page" from="686" to="696" />
+			<date type="published" when="2022">2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Origraph: Interactive network wrangling</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Bigelow</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Nobre</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Meyer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Lex</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Conference on Visual Analytics Science and Technology</title>
+				<meeting>IEEE Conference on Visual Analytics Science and Technology</meeting>
+		<imprint>
+			<date type="published" when="2019">2019</date>
+			<biblScope unit="page" from="81" to="92" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Enriching word vectors with subword information</title>
+		<author>
+			<persName><forename type="first">P</forename><surname>Bojanowski</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Grave</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Joulin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Rigel: Transforming tabular data by declarative mapping</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Weng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Shu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Sun</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<date type="published" when="2022">2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<monogr>
+		<title level="m" type="main">Exploratory data mining and data cleaning</title>
+		<author>
+			<persName><forename type="first">T</forename><surname>Dasu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Johnson</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003">2003</date>
+			<publisher>John Wiley &amp; Sons</publisher>
+			<biblScope unit="volume">479</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">LegalVis: Exploring and inferring precedent citations in legal documents</title>
+		<author>
+			<persName><forename type="first">L</forename><forename type="middle">E R</forename><surname>Domingues</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">R</forename><surname>Ponciano</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><forename type="middle">G</forename><surname>Nonato</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Poco</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<date type="published" when="2022">2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Wrex: A unified programming-by-example interaction for synthesizing readable code for data scientists</title>
+		<author>
+			<persName><forename type="first">I</forename><surname>Drosos</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Barik</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">J</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Deline</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Gulwani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM Conference on Human Factors in Computing Systems (CHI)</title>
+				<meeting>the ACM Conference on Human Factors in Computing Systems (CHI)</meeting>
+		<imprint>
+			<date type="published" when="2020">2020</date>
+			<biblScope unit="page" from="1" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Componentbased synthesis of table consolidation and transformation tasks from examples</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Feng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Martins</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Van Geffen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">I</forename><surname>Dillig</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Chaudhuri</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM SIGPLAN Notices</title>
+		<imprint>
+			<biblScope unit="volume">52</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="422" to="436" />
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Proactive wrangling: Mixed-initiative end-user programming of data transformation scripts</title>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">J</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Kandel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM Symposium on User Interface Software and Technology</title>
+				<meeting>the ACM Symposium on User Interface Software and Technology</meeting>
+		<imprint>
+			<date type="published" when="2011">2011</date>
+			<biblScope unit="page" from="65" to="74" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Dimensionality reduction by learning an invariant mapping</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Hadsell</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Chopra</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Lecun</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Computer Society Conference on Computer Vision and Pattern Recognition</title>
+				<meeting>IEEE Computer Society Conference on Computer Vision and Pattern Recognition</meeting>
+		<imprint>
+			<date type="published" when="2006">2006</date>
+			<biblScope unit="page" from="1735" to="1742" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Transform-data-by-example (TDE) extensible data transformation in excel</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Ganjam</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Narasayya</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Chaudhuri</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Chu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Zheng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM SIGMOD International Conference on Management of Data</title>
+				<meeting>the ACM SIGMOD International Conference on Management of Data</meeting>
+		<imprint>
+			<date type="published" when="2018">2018</date>
+			<biblScope unit="page" from="1785" to="1788" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Orion: A system for modeling, transformation and visualization of multidimensional heterogeneous networks</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Perer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Visualization</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="111" to="133" />
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Deep code comment generation</title>
+		<author>
+			<persName><forename type="first">X</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Xia</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Lo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Jin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE/ACM International Conference on Program Comprehension</title>
+				<meeting>IEEE/ACM International Conference on Program Comprehension</meeting>
+		<imprint>
+			<date type="published" when="2018">2018</date>
+			<biblScope unit="page" from="200" to="210" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Visualizing dynamic data with heat triangles</title>
+		<author>
+			<persName><forename type="first">Y</forename><forename type="middle">T</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Burch</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><forename type="middle">V D</forename><surname>Wetering</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Visualization</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="15" to="29" />
+			<date type="published" when="2022">2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title/>
+		<author>
+			<persName><forename type="first">D</forename><surname>Huynh</surname></persName>
+		</author>
+		<author>
+			<persName><surname>Openrefine</surname></persName>
+		</author>
+		<ptr target="https://openrefine.org" />
+		<imprint>
+			<date type="published" when="2022-01-29">Jan 29, 2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">WebRelate: integrating web data with spreadsheets using examples</title>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">P</forename><surname>Inala</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Singh</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Proceedings of the ACM on Programming Languages</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="1" to="28" />
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Compare: A powerful data comparison tool</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Integration</surname></persName>
+		</author>
+		<ptr target="https://dispatchintegration.com/data-integration-software/compare/" />
+		<imprint>
+			<date type="published" when="2022-02-12">Feb 12, 2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Foofah: Transforming data by example</title>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Jin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">R</forename><surname>Anderson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Cafarella</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Jagadish</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM SIGMOD International Conference on Management of Data</title>
+				<meeting>the ACM SIGMOD International Conference on Management of Data</meeting>
+		<imprint>
+			<date type="published" when="2017">2017</date>
+			<biblScope unit="page" from="683" to="698" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Lumina: an adaptive, automated and extensible prototype for exploring, enriching and visualizing data</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Kagkelidis</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">I</forename><surname>Dimitriadis</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Vakali</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Visualization</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="631" to="655" />
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Research directions in data wrangling: Visualizations and transformations for usable and credible data</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Kandel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Kennedy</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Van Ham</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><forename type="middle">H</forename><surname>Riche</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Weaver</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Brodbeck</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Buono</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Information Visualization</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="271" to="288" />
+			<date type="published" when="2011">2011</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Wrangler: Interactive visual specification of data transformation scripts</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Kandel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Paepcke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Hellerstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM Conference on Human Factors in Computing Systems (CHI)</title>
+				<meeting>the ACM Conference on Human Factors in Computing Systems (CHI)</meeting>
+		<imprint>
+			<date type="published" when="2011">2011</date>
+			<biblScope unit="page" from="3363" to="3372" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Table Scraps: An actionable framework for multi-table data wrangling from an artifact study of computational journalism</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Kasica</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Berret</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Munzner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="957" to="966" />
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Data tweening: incremental visualization of data transforms</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Khan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Nandi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the VLDB Endowment</title>
+				<meeting>the VLDB Endowment</meeting>
+		<imprint>
+			<date type="published" when="2017">2017</date>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="page" from="661" to="672" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Literate programming</title>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">E</forename><surname>Knuth</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Computer Journal</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="97" to="111" />
+			<date type="published" when="1984">1984</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Siamese neural networks for one-shot image recognition</title>
+		<author>
+			<persName><forename type="first">G</forename><surname>Koch</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Zemel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Salakhutdinov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of International Conference on Machine Learning</title>
+				<meeting>International Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="2015">2015</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">BoostClean: Automated error detection and repair for machine learning</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Krishnan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">J</forename><surname>Franklin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Goldberg</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Wu</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">TweakIt: Supporting end-user programmers who transmogrify code</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Lau</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">S</forename><surname>Srinivasa Ragavan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Milne</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Barik</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Sarkar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM Conference on Human Factors in Computing Systems (CHI)</title>
+				<meeting>the ACM Conference on Human Factors in Computing Systems (CHI)</meeting>
+		<imprint>
+			<date type="published" when="2021">2021</date>
+			<biblScope unit="page" from="1" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Can principles of cognition lower the barriers to programming?</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Lewis</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><forename type="middle">M</forename><surname>Olson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Empirical studies of programmers: second workshop</title>
+				<meeting>Empirical studies of programmers: second workshop</meeting>
+		<imprint>
+			<date type="published" when="1987">1987</date>
+			<biblScope unit="page" from="248" to="263" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">DeepCommenter: A deep code comment generation tool with hybrid lexical and syntactical information</title>
+		<author>
+			<persName><forename type="first">B</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Yan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Xia</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Lo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM Joint Meeting on European Software Engineering Conference and Symposium on the Foundations of Software Engineering</title>
+				<meeting>the ACM Joint Meeting on European Software Engineering Conference and Symposium on the Foundations of Software Engineering</meeting>
+		<imprint>
+			<date type="published" when="2020">2020</date>
+			<biblScope unit="page" from="1571" to="1575" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">HiTailor: Interactive transformation and visualization for hierarchical tabular data</title>
+		<author>
+			<persName><forename type="first">G</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><forename type="middle">C</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<date type="published" when="2022">2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">End-user programming of mashups with vegemite</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Wong</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Nichols</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Cypher</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">A</forename><surname>Lau</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference on Intelligent User Interfaces</title>
+				<meeting>the International Conference on Intelligent User Interfaces</meeting>
+		<imprint>
+			<date type="published" when="2009">2009</date>
+			<biblScope unit="page" from="97" to="106" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Understanding the role of alternatives in data analysis practices</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Boukhelifa</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">R</forename><surname>Eagan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="66" to="76" />
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Mu-lUBA: multi-level visual analytics of user behaviors for improving online shopping advertising</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Peng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Wen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Zhu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Visualization</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1287" to="1301" />
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Network-based visual analysis of tabular data</title>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">B</forename><surname>Navathe</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">T</forename><surname>Stasko</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Conference on Visual Analytics Science and Technology</title>
+				<meeting>IEEE Conference on Visual Analytics Science and Technology</meeting>
+		<imprint>
+			<date type="published" when="2011">2011</date>
+			<biblScope unit="page" from="41" to="50" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Natural language to visualization by neural machine translation</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Luo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Chai</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Qin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="217" to="226" />
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">DataV: Data Visualization on large high-resolution displays</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Mei</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Guan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Xin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Wen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Visual Informatics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="12" to="23" />
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">DataXFormer: An interactive data transformation tool</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Morcos</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Abedjan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">I</forename><forename type="middle">F</forename><surname>Ilyas</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Ouzzani</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Papotti</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Stonebraker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM SIGMOD International Conference on Management of Data</title>
+				<meeting>the ACM SIGMOD International Conference on Management of Data</meeting>
+		<imprint>
+			<date type="published" when="2015">2015</date>
+			<biblScope unit="page" from="883" to="888" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">TACO: visualizing changes in tables over time</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Niederer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Stitz</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Hourieh</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Grassinger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Aigner</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Streit</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="677" to="686" />
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<monogr>
+		<title level="m" type="main">A programming system for children that is designed for usability</title>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">F</forename><surname>Pane</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2002">2002</date>
+		</imprint>
+		<respStmt>
+			<orgName>Carnegie Mellon University</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<monogr>
+		<title level="m" type="main">Project Jupyter: Computational narratives as the engine of collaborative data science</title>
+		<author>
+			<persName><forename type="first">F</forename><surname>Perez</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><forename type="middle">E</forename><surname>Granger</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2015">September, 11(207. 2015</date>
+			<biblScope unit="page">108</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Datamations: Animated explanations of data analysis pipelines</title>
+		<author>
+			<persName><forename type="first">X</forename><surname>Pu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Kross</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hofman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">G</forename><surname>Goldstein</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM Conference on Human Factors in Computing Systems (CHI)</title>
+				<meeting>the ACM Conference on Human Factors in Computing Systems (CHI)</meeting>
+		<imprint>
+			<date type="published" when="2021">2021</date>
+			<biblScope unit="page" from="1" to="14" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Students&apos; misconceptions and other difficulties in introductory programming: A literature review</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Qian</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Lehman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Computing Education</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="24" />
+			<date type="published" when="2017">2017</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<monogr>
+		<title level="m" type="main">Principles of data wrangling: Practical techniques for data preparation</title>
+		<author>
+			<persName><forename type="first">T</forename><surname>Rattenbury</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">M</forename><surname>Hellerstein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Heer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Kandel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Carreras</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2017">2017</date>
+			<publisher>O&apos;Reilly Media, Inc</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<monogr>
+		<title/>
+		<author>
+			<persName><forename type="first">J</forename><surname>Reback</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Jbrockmendel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">V</forename><surname>Mckinney</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Den Bossche</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Augspurger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Cloud</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Hawkins</surname></persName>
+		</author>
+		<author>
+			<persName><surname>Roeschke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Sinhrks</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Hoefler</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Petersen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Tratner</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>She</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Ayd</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Naveh</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Garcia</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Darbyshire</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Schendel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Shadrach</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Hayden</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">E</forename><surname>Saxton</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Gorelli</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Zeitlin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Jancauskas</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Mcmaster</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Battiston</surname></persName>
+		</author>
+		<author>
+			<persName><surname>Seabold</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2022-01">Jan 2022</date>
+		</imprint>
+	</monogr>
+	<note>pandas-dev/pandas: Pandas 1.4.0</note>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Unsupervised translation of programming languages</title>
+		<author>
+			<persName><forename type="first">B</forename><surname>Roziere</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M.-A</forename><surname>Lachaux</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Chanussot</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Lample</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+				<imprint>
+			<date type="published" when="2020">2020</date>
+			<biblScope unit="page" from="20601" to="20611" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<analytic>
+		<title level="a" type="main">Evaluating machine accuracy on ImageNet</title>
+		<author>
+			<persName><forename type="first">V</forename><surname>Shankar</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Roelofs</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Mania</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Fang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Recht</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Schmidt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of International Conference on Machine Learning</title>
+				<meeting>International Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="2020">2020</date>
+			<biblScope unit="page" from="8634" to="8644" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<analytic>
+		<title level="a" type="main">A Sequence-to-sequence Approach for Numerical Slot-filling Dialog Systems</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Shi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Annual Meeting of the Special Interest Group on Discourse and Dialogue</title>
+				<meeting>the Annual Meeting of the Special Interest Group on Discourse and Dialogue</meeting>
+		<imprint>
+			<date type="published" when="2020">2020</date>
+			<biblScope unit="page" from="272" to="277" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<analytic>
+		<title level="a" type="main">Unravel: A fluent code explorer for data wrangling</title>
+		<author>
+			<persName><forename type="first">N</forename><surname>Shrestha</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Barik</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Parnin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM Symposium on User Interface Software and Technology</title>
+				<meeting>the ACM Symposium on User Interface Software and Technology</meeting>
+		<imprint>
+			<date type="published" when="2021">2021</date>
+			<biblScope unit="page" from="198" to="207" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<monogr>
+		<author>
+			<persName><forename type="first">T</forename><surname>Software</surname></persName>
+		</author>
+		<ptr target="https://www.tableau.com/products/prep" />
+		<title level="m">Tableau prep builder</title>
+				<imprint>
+			<date type="published" when="2022-01-29">Jan 29, 2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b55">
+	<monogr>
+		<title level="m" type="main">The Most Accurate and Reliable Source Code Converters</title>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">S</forename><surname>Solutions</surname></persName>
+		</author>
+		<ptr target="https://www.tangiblesoftwaresolutions.com/" />
+		<imprint>
+			<date type="published" when="2022-02-12">Feb 12, 2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b56">
+	<analytic>
+		<title level="a" type="main">A review of generic program visualization systems for introductory programming education</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Sorva</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Karavirta</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Malmi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Computing Education</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="1" to="64" />
+			<date type="published" when="2013">2013</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b57">
+	<analytic>
+		<title level="a" type="main">Data diff: Interpretable, executable summaries of changes in distributions for data wrangling</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Sutton</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Hobson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Geddes</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Caruana</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM SIGKDD International Conference on Knowledge Discovery &amp; Data Mining</title>
+				<meeting>the ACM SIGKDD International Conference on Knowledge Discovery &amp; Data Mining</meeting>
+		<imprint>
+			<date type="published" when="2018">2018</date>
+			<biblScope unit="page" from="2279" to="2288" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b58">
+	<analytic>
+		<title level="a" type="main">Toward flexible visual analytics augmented through smooth display transitions</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Tominski</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Andrienko</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Andrienko</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Bleisch</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">I</forename><surname>Fabrikant</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Mayr</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Miksch</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Pohl</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Skupin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Visual Informatics</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="28" to="38" />
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b59">
+	<monogr>
+		<author>
+			<persName><surname>Trifacta</surname></persName>
+		</author>
+		<ptr target="https://www.trifacta.com/" />
+		<title level="m">Data Wrangling Software and Tools -Trifacta</title>
+				<imprint>
+			<date type="published" when="2022-01-29">Jan 29, 2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b60">
+	<analytic>
+		<title level="a" type="main">VISPubComPAS: a comparative analytical system for visualization publication data</title>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Shan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Lu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Visualization</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="941" to="953" />
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b61">
+	<monogr>
+		<title level="m" type="main">tidyr: Tidy Messy Data</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Wickham</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+	<note>R package version 1.1.2</note>
+</biblStruct>
+
+<biblStruct xml:id="b62">
+	<analytic>
+		<title level="a" type="main">Welcome to the tidyverse</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Wickham</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Averick</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Bryan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Chang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Mcgowan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Franc ¸ois</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Grolemund</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Hayes</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Henry</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Hester</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Kuhn</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Pedersen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Bache</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Ooms</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Robinson</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Seidel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Spinu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Takahashi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Vaughan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Wilke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Woo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Yutani</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Open Source Software</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">43</biblScope>
+			<biblScope unit="page">1686</biblScope>
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b63">
+	<monogr>
+		<title level="m" type="main">dplyr: A Grammar of Data Manipulation</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Wickham</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Franc ¸ois</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Henry</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Müller</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2021">2021</date>
+		</imprint>
+	</monogr>
+	<note>R package version 1.0.4</note>
+</biblStruct>
+
+<biblStruct xml:id="b64">
+	<analytic>
+		<title level="a" type="main">Visualizing the scripts of data wrangling with SOMNUS</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Xiong</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Fu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Ding</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Luo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Yu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Bao</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<date type="published" when="2022">2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b65">
+	<analytic>
+		<title level="a" type="main">Subtle bugs everywhere: Generating documentation for data wrangling code</title>
+		<author>
+			<persName><forename type="first">C</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">L</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Kästner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the IEEE/ACM International Conference on Automated Software Engineering</title>
+				<meeting>the IEEE/ACM International Conference on Automated Software Engineering</meeting>
+		<imprint>
+			<date type="published" when="2021">2021</date>
+			<biblScope unit="page" from="304" to="316" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

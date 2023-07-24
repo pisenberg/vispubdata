@@ -1,0 +1,417 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Attribute Preserving Dataset Simplification</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Jason</forename><forename type="middle">D</forename><surname>Walter</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christopher</forename><forename type="middle">G</forename><surname>Healey</surname></persName>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="department">Department of Computer Science</orgName>
+								<orgName type="institution">North Carolina State University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff1">
+								<address>
+									<settlement>San Diego</settlement>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Attribute Preserving Dataset Simplification</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:46+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>I.3.6 [Computer Graphics]: Computational Geometry and Object Modeling-curve</term>
+					<term>surface</term>
+					<term>solid</term>
+					<term>and object representation; geometric algorithms</term>
+					<term>languages</term>
+					<term>and systems dataset management</term>
+					<term>mesh simplification</term>
+					<term>principal component analysis</term>
+					<term>scientific visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>This paper describes a novel application of feature preserving mesh simplification to the problem of managing large, multidimensional datasets during scientific visualization. To allow this, we view a scientific dataset as a triangulated mesh of data elements, where the attributes embedded in each element form a set of properties arrayed across the surface of the mesh. Existing simplification techniques were not designed to address the high dimensionality that exists in these types of datasets. As well, vertex operations that relocate, insert, or remove data elements may need to be modified or restricted. Principal component analysis provides an algorithm-independent method for compressing a dataset&apos;s dimensionality during simplification. Vertex locking forces certain data elements maintain their spatial locations; this technique is also used to guarantee a minimum density in the simplified dataset. The result is a visualization that significantly reduces the number of data elements to display, while at the same time ensuring that high-variance regions of potential interest remain intact. We apply our techniques to a number of well-known feature preserving algorithms, and demonstrate their applicability in a real-world context by simplifying a multidimensional weather dataset. Our results show a significant improvement in execution time with only a small reduction in accuracy; even when the dataset was simplified to 10% of its original size, average per attribute error was less than 1%.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Much of the work in scientific visualization deals with the intelligent management and display of large, complex collections of data. Datasets containing many millions of elements are not uncommon, moreover, each element may encode multiple attribute values (e.g., a weather dataset where each element represents weather station readings for Ò attributes: latitude, longitude, elevation, time, temperature, pressure, wind speed, humidity, and precipitation). Our goal during visualization is to convert some or all of these values into images that allow viewers to explore, analyze, verify, and discover.</p><p>The problems of dataset size and dimensionality were identified and discussed by the original NSF panel on scientific visualization <ref type="bibr" target="#b8">[9]</ref>. Although significant advances have been made in recent years (e.g., with methods like spot noise and line integral convolution, perceptual visualization, and feature extraction and data mining) <ref type="bibr" target="#b9">[10]</ref>, even the most sophisticated techniques are often unable to display a dataset in its entirety <ref type="bibr" target="#b11">[12]</ref>. A dramatic increase in our ability £ Department of Computer Science, 1010 Main Campus Drive, North Carolina State University, Raleigh, NC, 27695-7534; healey@csc.ncsu.edu to collect and archive enormous amounts of raw data have further emphasized the need to study the problem of dataset management.</p><p>Processing large sets of information for on-screen display is not unique to visualization. One area of particular interest is the control of geometry during rendering in computer graphics. Researchers are studying how to generate mesh representations of 3D objects that are highly detailed, yet small enough in their polygon count to render at interactive frame rates. Initial work in this area proposed a number of simplification techniques that characterize different parts of an object by their level of geometric detail. The resolution of the mesh is varied to be expressive in areas of high detail (i.e., highresolution, with many small triangles) and compact in areas of low detail (i.e., low-resolution, with only a few large triangles). Recent work has extended these techniques to consider surface properties together with the object's geometry. These feature preserving mesh simplification algorithms maintain a high-resolution mesh in locations with sharp variations in geometry or in surface details like color and texture. The result is a model with a significant reduction in polygon count, yet with a visual appearance that is often indistinguishable from the original, full-resolution mesh.</p><p>Our interest in feature preserving mesh simplification stems from the belief that a 3D object and a multidimensional dataset have a number of important parallels. The spatial coordinates used to position a data element during visualization form a set of vertices that can be triangulated to produce an underlying mesh. The individual attributes associated with each element can then be viewed as a set of properties arrayed across the surface of the mesh. Conceptualizing the dataset in this manner suggests we may be able to apply feature preserving simplification algorithms to reduce its size (i.e., the polygon and associated vertex count) based on attribute variability. Spatial regions with near-constant attribute values could be reduced to only a few elements; areas with high levels of variation would be densely populated. In addition to the absolute reduction in dataset size, knowing where simplification occurs would provide a viewer with valuable information about when attributes vary and how they interact with one another.</p><p>Unfortunately, most feature preserving simplification algorithms cannot be applied verbatim to a multidimensional dataset. These techniques were designed for a 3D modeling environment, and were not meant to be used for reducing the size of a high-dimensional data collection. This can result in unanticipated problems, for example:</p><p>Many feature preserving techniques were optimized to handle only a few surface properties (e.g.,´Ö µ color, or tex-ture´Ù Úµ coordinates); performance and accuracy can degrade significantly in the presence of the tens or hundreds of attributes that exist in many multidimensional datasets.</p><p>Algorithm-specific methods for error estimation, vertex elimination, and vertex relocation are employed; this necessitates "respecifying" a dataset (often in non-trivial ways) to fit each algorithm's mesh and surface property assumptions.</p><p>Certain vertex operations may not make sense in a multidimensional visualization context; since vertices represent data elements, it may not be allowable to arbitrarily add, remove, or relocate them. Our goal is a method that allows us to harness any of the current (or future) simplification techniques without the need for extensive modifications to fit the algorithm, and with the expectation of an accurate, high-quality result. In order to do this, we must address a number of relevant problems:</p><p>1. Design algorithm-independent methods for allowing rapid and accurate error estimation and vertex management for high-dimensional datasets.</p><p>2. Develop algorithm-independent techniques to protect specific data elements from certain types of modifications.</p><p>3. Ensure our extensions integrate seamlessly into existing feature preserving simplification algorithms.</p><p>The remainder of this paper describes our solutions to these problems. Section 2 provides an overview of related work in mesh simplification and dataset management in visualization. Section 3 begins with an introduction to principal component analysis, followed by a description of its use for rapid and robust error estimation and vertex management. Section 4 explains how our new techniques were applied to existing feature preserving simplification algorithms. Section 5 demonstrates their application to a real-world dataset of environmental weather readings. Section 6 concludes with a summary of our results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>We discuss briefly previous research in two areas most closely related to our own studies: (1) intelligent management of large, complex datasets in scientific visualization, and (2) feature preserving mesh simplification techniques from computer graphics.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Dataset Management</head><p>Although management of scientific datasets has been cited as an important area of current and future research <ref type="bibr" target="#b11">[12]</ref>, work to date in the visualization community has been limited. Initial studies centered around the use of a common data format that would feed through data filters and on to high-level visualization tools <ref type="bibr" target="#b13">[14]</ref>. Although this is an important consideration, it does not address how to design filters and visualization techniques to compress and display a dataset in an intelligent manner. Some recent systems were built on top of a relational database, thereby harnessing its power to perform data organization and SQL operations (e.g., in <ref type="bibr" target="#b12">[13]</ref>). Unfortunately, certain properties common to scientific datasets like errors, noise, duplicate records, and missing values make them difficult to integrate into a relational data model. Feature extraction has been applied in certain cases to automatically identify and isolate regions of interest in a large dataset (e.g., in <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b10">11]</ref>); only these extracted regions are shown in the final visualization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Mesh Simplification</head><p>Numerous techniques have been proposed to perform geometric simplification on an underlying 3D mesh. Less work has studied the problem of preserving geometry and surface properties together during simplification. We focus our discussion of related work on these feature preserving algorithms. In fact, many of these methods are extensions of previous techniques that considered geometric error alone. Bajaj and Schikore <ref type="bibr" target="#b0">[1]</ref> apply vertex removal and reprojection to simplify a 3D mesh with surface properties; the goal of this algorithm is closest to our own: the simplification of a surface representing multivariate data. Unfortunately, this technique does not address performance and accuracy issues that can occur during the unrestricted simplification of a high dimensional dataset. Hoppe <ref type="bibr" target="#b6">[7]</ref> defines a progressive mesh structure, a series of edge collapses that produce a monotonic reduction in mesh complexity; mesh geometry and scalar and discrete surface properties are preserved by minimizing an energy function that measures the deviation between the simplified and the original mesh. Garland and Heckbert <ref type="bibr" target="#b2">[3]</ref> contract pairs of vertices to simplify a model; the error introduced during each operation is estimated using quadrics. Surface properties are treated as extensions to each vertex definition <ref type="bibr" target="#b3">[4]</ref>, and to the error matrices used to process them. Hoppe <ref type="bibr" target="#b7">[8]</ref> proposed a redefinition of the quadric error matrix used in <ref type="bibr" target="#b3">[4]</ref> to reduce storage cost and improve accuracy; the new error metric separates geometric error (based on the distance a simplified vertex Ú ¼ strays from its projected position Ú on the original mesh face) and surface property error (based on the deviation between properties assigned to Ú ¼ and the actual property values stored on the mesh face at Ú ) to improve both efficiency and visual appearance. Cohen et al. <ref type="bibr" target="#b1">[2]</ref> separate a model into a geometric surface and one or more surface maps (e.g., a texture map and a normal map). Simplification envelopes are used to identify a sequence of operations to reduce the model's geometry; operations are ordered based on the the amount of deviation they produce in each surface map.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Error and Vertex Management</head><p>Existing simplification algorithms specify mesh geometry in a consistent fashion as a connected set of vertices in Ê ¿ . Because of this, it was not necessary to change how the basic geometry was maintained. Our focus is on managing the surface properties that sit on top of the underlying mesh. We seek a method to compress an Ò-dimensional dataset into Ô new dimensions, Ô Ò, while at the same time ensuring this reduction does not remove important details of interest to a viewer. We chose to use principal component analysis to address this problem. . We can use this result to rewrite Eq. 1 as:</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Principal Component Analysis</head><formula xml:id="formula_0">Ä Ä Ì (2)</formula><p>where Ä is the diagonal matrix of eigenvalues. </p><formula xml:id="formula_1">´ µ ´ µ ´ µ È Ò ½ Ò ½ È Ò ½ È Ò ½ Ò (3)</formula><p>The eigenvectors of form the principal component axes of . The eigenvalues measure the amount of variance each captures:</p><formula xml:id="formula_2">¾´ µ È Ò ½ (4) Thus, the first Ô axes that satisfy´ ½ • ¡ ¡ ¡ • Ô µ È Ò ½</formula><p>form a Ô-dimensional space that captures of the variance in .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Reconstruction to Attribute Space</head><p>Vertex operations made by the simplification algorithms in principal component space represent the relocation of data elements in attribute space. Appropriate attribute values for these relocated data elements must be selected during the transformation back to the original attribute space prior to visualization. </p><formula xml:id="formula_3">• Ù ½ • Ú ¾•Û ¿ (5)</formula><p>where is the -th eigenvector stored as the -th column in . Intuitively, the coefficients in are used to estimate the change for each attribute from its anchor point . This follows from Eq. 2, which states:</p><formula xml:id="formula_4">Ì ¼ Ì ¼<label>(6)</label></formula><p>This can be rewritten as:</p><formula xml:id="formula_5">¼ Ì´ ¼ µ<label>(7)</label></formula><p>If Ò Ô then Ì ½ (since is orthonormal), therefore:</p><formula xml:id="formula_6">´ ¼ µ • ¼<label>(8)</label></formula><p>exactly as shown in Eq. 5. If Ô Ò then Ì ½ , and results from Eq. 7 represent estimates based on the amount of variability captured by . Since we expect Ô Ò, a small amount of error is normally unavoidable. The Ô axes we select will not capture all of the variance contained in , so they cannot be used to perfectly reconstruct ¼ in attribute space.</p><p>Although reconstruction errors cannot be eliminated, they can be controlled through the use of . Large errors imply high spatial frequency features that were missed during reconstruction. However, such a feature should have been captured in one of the principal component axes for any reasonable value of . The dependence on provides an intuitive method for controlling the tradeoff between speed and accuracy during simplification. From a viewer's perspective, increasing produces the expected result: the amount of variance captured in principal component space increases, providing a corresponding increase in accuracy during simplification, but at a potential cost in speed from an increase in the number of principal component axes (or surface properties) that must be considered during simplification.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Vertex Locking</head><p>Each of the simplification algorithms apply some type of vertex relocation, insertion, and removal. This makes sense for a 3D object, since maintaining the starting position of a vertex is normally unimportant. This is not necessarily true in a visualization environment. We must ensure that vertex operations do not introduce certain types of artifacts in the simplified dataset, for example:</p><p>1. Relocation Errors: Consider a weather dataset where some elements represent weather stations, and others represent interpolated values used to fill locations with no actual readings. The highly accurate weather station elements could be locked to prevent their relocation or removal (while still allowing the interpolated elements to be modified during simplification).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Planing:</head><p>In the absence of any preference for particular elements, viewers should lock a structured subset of vertices to guarantee a minimum element density in the simplified dataset. This is important; without a minimum density large holes will appear in areas of near-constant variation, leaving no indication of the type of data that existed in the area prior to simplification.</p><p>Although most algorithms provide methods for addressing discontinuities or creases in a mesh, we wanted to build a simple, efficient locking scheme that is algorithm-independent. To this end, we attach a lock flag to each vertex. This flag is checked during each vertex operation; if the flag is set, certain modifications are constrained or disallowed entirely. We chose to monitor edge collapses; overseeing this single operation has proven sufficient to guarantee the protection of locked vertices for the algorithms we have extended (this choice was motivated by Hoppe <ref type="bibr" target="#b6">[7]</ref>, who suggested that edge collapses alone can produce effective mesh simplifications; the algorithms we considered used edge collapses directly <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b3">4]</ref>, or used vertex operations that can be easily respecified as an edge collapse <ref type="bibr" target="#b0">[1]</ref>). If one endpoint is locked, the edge must collapse to that endpoint. If both endpoints are locked, the edge collapse is not allowed (note that this situation is rare; in most cases locked vertices are located far from one another, so having both endpoints locked implies a very long edge is being considered for collapse).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Extended Simplification Algorithms</head><p>In order to study our extensions, we integrated them into three existing simplification algorithms: progressive meshes <ref type="bibr" target="#b6">[7]</ref>, quadrics with integrated geometry <ref type="bibr" target="#b3">[4]</ref>, and quadrics with separated geometry <ref type="bibr" target="#b7">[8]</ref>. The speed and accuracy of the original and extended versions of each algorithm were then tested in the context of a large, multidimensional weather dataset.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Progressive Meshes</head><p>The progressive mesh representation described by Hoppe <ref type="bibr" target="#b6">[7]</ref>  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Quadrics with Integrated Geometry</head><p>Garland and Heckbert <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b3">4]</ref>  </p><formula xml:id="formula_7">¡ È´Ô Ø Ì Ú ¼ µ ¾ Ú ¼ Ì´È ÔØÔØ Ì µÚ ¼ (10)</formula><p>where ÔØ Ì is a vector of coefficients for the Ø-th plane representing Ú . The quadric error matrix for Ú is defined as É È ÔØÔØ Ì . This error metric can be generalized to include scalar surface properties × by moving from Ê ¿ to Ê Ò ; each Ú now encodes´Ü Ý Þµ and´Ò ¿µ scalar values. In this domain the vertices´Ú Ú Ú µ of a triangle form a plane ÔØ ¾ Ê Ò . An´Ò • ½ µ ¢ Ò • ½ µ quadric error matrix can be constructed in a manner similar to Eq. 10 to measure the squared distance of a repositioned vertex Ú ¼ from the plane. This distance captures both geometric error and errors in estimated scalar surface properties.</p><p>During the collapse of edge´Ú Ú µ a new position Ú ¼ must be</p><p>selected. An optimal position that minimizes error can be found by solving É ¼ ½ , where É ¼ is the upper-left Ò ¢ Ò submatrix of É.</p><p>Since inverting the matrix is expensive (particularly as Ò grows), selection can be restricted to the endpoints and their midpoint; the position that produces the smallest error is used to locate Ú ¼ .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Using principal component space to represent scalar attributes</head><p>reduces the size of the quadric error matrices to Ò Ô • ¿ , where Ô is the number of principal component axes (based on a viewerchosen ), and the remaining three entries store the 3D geometry of the mesh. This produces a significant speed-up, particularly when computing the matrix inverses needed to find optimized vertex positions. Vertex locking forces a reposition vertex Ú ¼ to locate at Ú or Ú (depending on which endpoint is locked); an edge with both of its endpoints locked cannot be collapsed.</p><p>The quadric error algorithm begins by computing É for each Ú in the initial mesh Å Ñ . All possible edge collapses´Ú Ú µ are identified, a new position´Ú Ú µ Ú ¼ is selected, and the estimated error ¡ Ú ¼ Ì´É • É µÚ ¼ is calculated. As in Hoppe, valid edge collapses are placed on a priority queue ordered by increasing ¡ , and removed one by one (with appropriate updates to neighboring edges) to form an optimal sequence of edge collapses.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Quadrics with Separated Geometry</head><p>Hoppe proposed modifications to the quadric error metric introduced by Garland and Heckbert to improve storage cost, execution time, and accuracy <ref type="bibr" target="#b7">[8]</ref>. Rather than measuring the distance between Ú ¼ and its projected position on a hyperplane in Ê Ò , error is computed in two steps: (1) Ú ¼ is projected to the closest point Ô ¼ in Ê ¿ to measure geometric error, and <ref type="formula" target="#formula_8">2</ref>    Ú ¼ ¾ Å and the actual values at the projected position Ú ¾ Å Ñ ).</p><p>Tests were conducted both with and without principal component analysis (PCA) for each of the four algorithms: integrated quadrics with optimized vertex placement (O GQEM), integrated quadrics with midpoint-endpoint vertex placement (GQEM), separated quadrics with midpoint-endpoint vertex placement (HQEM), and progressive meshes (PM). Our results showed:</p><p>1. PCA improved execution time for each of the four algorithms ( <ref type="figure" target="#fig_1">Figs. 2a-b)</ref>; the relative improvement was largest for O GQEM, and smallest for PM.</p><p>2. Although average simplification error was slightly higher with PCA ( <ref type="figure" target="#fig_1">Figs. 2c-d</ref>), in most cases the difference was not significant.</p><p>3. Average attribute error was low, even with PCA ( <ref type="figure" target="#fig_1">Figs. 2e-f)</ref>; in no case did it exceed 0.9%.</p><p>Figs. 2a-b plot execution time Ø as a function of the level of simplification Ð. For each algorithm Ø decreased when PCA was applied; the improvement was largest for O GQEM (4.7 times faster, on average), and smallest for PM (1.06 times, on average); GQEM and HQEM showed improvements of 2.07 and 1.45 times, respectively. Although the absolute differences in Ø are small, they represent the simplification of a compact dataset with relatively few attributes (Ñ ½¼ ¼ elements, each with Ò ½ attributes).</p><p>For the entire dataset, the absolute improvement in Ø increases approximately twelve-fold. Even this level of detail is sparse; datasets with daily or hourly readings are not uncommon, and would require hundreds or thousands of simplifications. Increasing the number of attributes per element would cause an additional increase in complexity. These factors highlight the cumulative nature of any reduction in Ø.  <ref type="figure" target="#fig_1">Fig. 2d</ref>; other variations are smaller and more difficult to detect). Unlike execution time, increases in simplification error are not necessarily tied to dataset size and dimensionality. We have observed that accuracy remains stable as is held constant. A higher dimensionality Ò may increase the number of principal component axes Ô needed to capture of the variance, but it does not result in a significant change in accuracy (indeed, this is exactly the purpose was meant to serve). Similarly, increasing the size Ñ of the dataset will increase execution time, but has little or no effect on accuracy versus an algorithm that does not use PCA.</p><p>Figs. 2e-f plot average attribute error (the difference between estimated attribute values for element Ú ¼ ¾ Å and the actual values at its projected position on the original mesh Å Ñ ) as a function of Ð. Average error was less than 1% in all cases, moreover, the increase in error when using PCA was relatively low (between 1.05 and 1.61 times). This supports our hypothesis that improved execution times can be achieved with only a minor reduction in accuracy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Visualization</head><p>We concluded our investigations by visualizing our simplified results on-screen. Representing high-dimensional data in an effective manner is a separate, and equally important, problem in visualization. We used the color and texture techniques of Healey and Enns <ref type="bibr" target="#b5">[6]</ref> to display different parts of our weather dataset. In particular, we wanted to see if our simplified results captured faithfully the values stored in the original, full resolution dataset. We began by studying how accurately the simplified attribute fields characterize their original values. Results for two fields are shown in <ref type="figure" target="#fig_2">Fig. 3</ref>. The top row of visualizes the original mesh, along with full resolution versions of the precip and frost attributes. A luminance scale is used to encode the attributes: dark represents the smallest values, while bright represents the largest. The bottom row shows the same data for a mesh reduced to 10% of its original size using progressive meshes and principal component analysis. The estimated attribute values at the simplified element positions do an excellent job of capturing variations in the original data. Visually, it is difficult to identify differences between the full resolution and simplified fields. Some faceting can be seen along the high-to-low precip boundary in the Pacific Northwest, and in the frost patterns in the southern Rocky Mountains. The images in <ref type="figure" target="#fig_2">Fig. 3</ref>  We continue by visualizing temp, wind, pressure, and precip over the entire map of North America (shown both in <ref type="figure" target="#fig_5">Fig. 5 and Fig. 6</ref>). Small glyphs that look like painted brush strokes are used to represent each data element . Attribute values encoded within control its stroke's color and texture properties. Specifically, we mapped: temp color: a perceptually balanced color scale represents temperature (dark blue for cold to bright pink for hot), pressure density: the number of strokes packed into the spatial region belonging to represents vapor pressure (sparse for low pressure to dense for high pressure), wind coverage: the amount of 's spatial region covered by its strokes represents windspeed (low for weak winds to high for strong winds), and precip orientation: the amount of rotation represent rainfall (vertical for light to horizontal for heavy).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Results from psychophysical experiments conducted by Healey and</head><p>Enns <ref type="bibr" target="#b5">[6]</ref> showed that proper use of these visual features will produce perceptually salient visualizations. <ref type="figure" target="#fig_4">Fig. 4</ref> shows examples of the corresponding colors (represented by luminance for printing purposes), densities, coverages, and orientations each attribute can produce. <ref type="figure" target="#fig_5">Figs. 5 and 6</ref> show the same mappings applied to fullresolution and simplified versions of our dataset (although we are only visualizing four environmental conditions and three geometric properties, the dataset was simplified using all Ò ½ attributes). <ref type="figure" target="#fig_5">Fig. 5a</ref> visualizes the original dataset (at full resolution) for January. Although this image represents certain attributes well (e.g., temperature gradients are visible via luminance, and regions of low coverage with background showing through highlight areas of low wind), others are more difficult to identify. Variations in pressure (i.e., density) and precip (i.e., orientation) are often hard to distinguish because of strokes overlapping with one another over much of the map. A secondary concern is rendering speed: displaying Ñ ½ ¼ ¼ texture-mapped strokes can push refresh rates below the acceptable minimum for effective interactivity. <ref type="figure" target="#fig_5">Fig. 5b</ref> visualizes the same data simplified to 10% of its original size using HQEM and principal component analysis. This demonstrates our ability to simplify in regions with similar geometric and environmental values, while maintaining detail in regions where one or both properties vary sharply. For example, the high concentration of tilted strokes in the Pacific Northwest capture the heavy precipitation found in this part of the continent during January (see the center column of <ref type="figure" target="#fig_2">Fig. 3 for a view of precip in isolation)</ref>. Geographic features can also be seen as denser collections of strokes, for example, the Rocky Mountains in the west, the Appalachian Mountains in the east, and the Sierra Madre Occidental and Sierra Madre Del Sur in Mexico. The visualization also shows a higher overall density of data (i.e., less simplification) in the western half of the United States. This is due not only to variations in elevation, but also to attributes with high spatial frequency components in these regions. For example, wind values vary significantly as they pass over the mountains; this is shown as a change in stroke size (smaller to larger) running west to east from the California coast, and north to south from northern British Columbia along the Rocky Mountain range. <ref type="figure" target="#fig_5">Fig. 5b</ref> also highlights the problem of planing that can occur at high levels of simplification. When every data element is free to be relocated or removed, empty regions with very few elements can form in areas with near-constant geometry and attribute values (e.g., in Nunavut and the Northwest Territories of Canada, or in the central plains and southeastern coast of the United States). Although it is useful to see where these regions occur, viewers also need a way to determine which attribute values were present prior to simplification. <ref type="figure" target="#fig_6">Fig. 6a</ref> applies the same simplification techniques used in 5b, but adds vertex locking. A regular ¾ AE ¢ ¾ AE grid of data elements is locked to prohibit their relocation or removal. This underlying array is clearly visible as a sparse, regular, repeating pattern of data elements, particular in areas that previously caused planing. <ref type="figure" target="#fig_6">Fig. 6a</ref> demonstrates the final results of our work, a technique that: (1) uses feature preserving mesh simplification to significantly reduce the size of a large, multidimensional dataset in an efficient manner,</p><p>preserves high-variance areas of interest, (3) allows the protection of individual data elements as needed, and (4) guarantees a minimum density of data to visualize all parts of the dataset. A final example of these techniques is shown in <ref type="figure" target="#fig_6">Fig. 6b</ref>, which visualizes simplified temp, pressure, wind, and precip during January over Europe and Asia.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusions</head><p>This paper describes a method of applying feature preserving mesh simplification to the problem of managing large, multidimensional datasets in scientific visualization. Algorithm-independent methods were developed to allow existing simplification techniques to address properties unique to our problem environment. Principal component analysis is used to temporarily reduce the dimensionality of a dataset during simplification; this ensures the algorithms continued to produce accurate, high-quality results in a time efficient manner. Vertex locking is applied to protect "important" data elements from relocation or removal, and to guarantee a minimum density of information in the simplified dataset. We used our new techniques to simplify a large, multidimensional weather dataset. Our results confirmed that: (1) the algorithms continued to gener- ate accurate results, (2) principal component analysis allowed the algorithms to execute more efficiently, particularly in the presence of large amounts of high dimensional data, and (3) any increase in error relative to the original, unmodified algorithms was small. Our simplification techniques allow us to maintain efficient runtime performance without sacrificing the high level of accuracy demanded during visualization. We are confident the same methods will be applicable to future simplification algorithms with specific properties that make them attractive to a multidimensional visualization domain. </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>An example of converting a point ¼ translated´Ù Ú Ûµ in principal component space back to Ò-dimensional attribute space Consider a data element represented as in principal component space; its attribute values´ ½ Ò µ form an anchor from Ôdimensional principal component space back to Ò-dimensional at-tribute space. After being translated by´Ù Ú Ûµ, the modified data element ¼ is reconstructed as ¼ in attribute space via: ¼</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>(a) Execution time Ø versus level of simplification Ð for optimized and non-optimized integrated quadrics (O GQEM and GQEM, respectively), both with and without the principal component analysis (PCA) extensions; (b) Ø versus Ð for separated quadrics and progress meshes (HQEM and PM, respectively); (c, d) simplification error versus Ð; (e, f) average attribute error versus Ð 2. Reduces execution time, since the matrix is sparse.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>¼ . Figs. 2a-d plot execution time and average simplification error (the squared distance between the original mesh Å Ñ and the simplified mesh Å in Ê Ô•¿ ) as a function of the level of simplification. Figs. 2e-f plot average attribute error (the differencé È Ò ½ Ú ¼ Ú µ Ò between the estimated attribute values at mesh (full resolution) precip (full resolution) frost (full resolution) mesh (simplified) precip (simplified) frost (simplified) Visualizing the full resolution elevation height field and perceptual color scales (dark blue for small values to bright pink for large values) of precip and frost (top) versus the same data simplified 90% with progressive meshes and PCA (bottom)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Figs</head><label></label><figDesc>. 2c-d plot average simplification error (the squared distance between Å Ñ and Å ) as a function of Ð. Although the use of PCA increased error, a difference of more than ½¢½¼ occurred in only a few situations with large Ð. These include O GQEM at Ð ¼ % simplification, GQEM at 80 and 90%, HQEM at 90%, and PM at 50, 60, 70, and 80% (the PM differences appear as an obvious divergence in the error curves in</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 4 :</head><label>4</label><figDesc>reinforce the results found in the graphs in Figs. 2e-f: average attribute errors are small, even when simplification of the underlying dataset is high. temp: cold hot pressure: low high wind: weak strong precip: light heavy Examples of mapping temp color, pressure density, wind coverage, and precip orientation</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 5 :</head><label>5</label><figDesc>Visualizing temp, pressure, wind, and precip over North America: (a) full-resolution dataset; (b) dataset simplified 90% with HQEM and PCA, but no vertex locking</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 6 :</head><label>6</label><figDesc>Visualizing temp, pressure, wind, and precip: (a) North America dataset with Ñ ½ ¼ ¼ simplified 90% with HQEM, PCA, and vertex locking; (b) Eurasia dataset with Ñ ¿ ¼ ¼ simplified 80% with HQEM, PCA, and vertex locking</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>Principal component analysis (PCA) forms linear combinations of the original attributes ½ that span the Ò-dimensional space containing the data elements. The direction of each is chosen to maximize its capture of the variance ¾ contained in a dataset . The axes are ordered such that ¾´The non-zero and are the eigenvalues and eigenvectors of . The determinant Á is used to solve Á ¼ ; the Ò solutions of for this polynomial equation are normally ordered and assigned such that ½ Ò . The are then used in Eq. 1 to solve for the mutually orthogonal . Given</figDesc><table><row><cell cols="3">there exist scalars and vectors</cell><cell cols="2">such that:</cell></row><row><cell></cell><cell>´</cell><cell>Áµ</cell><cell>¼</cell><cell>½ Ò</cell><cell>(1)</cell></row><row><cell>each</cell><cell cols="3">normalized, it follows that Ì</cell><cell cols="2">½ ¡ ¡ ¡ Ò with Á, or Ì ½</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>½ µ</cell><cell>3</cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell><cell>¾´</cell><cell>½ µ • ¡ ¡ ¡ • 3</cell><cell>Ô µ</cell></row></table><note>Ò to construct a sequence of princi- pal component axes ½ÒÒ µ . In practice, it often takes only a very few axes Ô, Ô Ò, to ac- count for the majority of the variance that exists in a dataset. A viewer-specified cutoff is used to select the first Ô axes such that( i.e., the smallest set of axes that capture at least of the variance in ). Principal component analysis raises an interesting question: "Why not simply transform a dataset to the first Ô principal com- ponent axes (thereby reducing the dimensionality from Ò to Ô, yet capturing of the variance), then visualize it?" Unfortunately, vi- sualizing data in principal component space does not work well in practice. In most cases viewers are unable to mentally transform the data elements they see back to their original Ò attribute values. We can perform error estimation and vertex management in principal component space, however. This requires little or no change to the existing simplification techniques; from an algorithm's perspective, the only difference is a significant reduction in the number of sur- face properties to consider. Viewers select to guarantee that the Ô new dimensions capture an appropriate percentage of the vari- ance that exists in . Results in principal component space are transformed back to the Ò-dimensional attribute space prior to vi- sualization. This allows viewers to see the simplified dataset in its original, expected context. Principle component axes are constructed using eigenvalues and eigenvectors. Given an Ò ¢ Ò real, symmetric matrix of rank Ò,</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head></head><label></label><figDesc>To solve for principal component axes, a dataset is rewritten as an Ñ ¢ Ò matrix of Ñ data elements over Ò attributes. Individual attributes are normalized to allow for relative comparisons. The Ò ¢Ò covariance matrix of the dataset is then used to measure the variance between all pairs of attributes and ½</figDesc><table /><note>Ò.Specifically:</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head></head><label></label><figDesc>The geometry of the mesh is stored as a tuple´Ã Îµ, where Ã is a simplicial complex defining connectivity in the mesh, and Î is the set of mesh vertices positioned in Ê ¿ . A topological realization Ã Ê Ñ is built by associating vertices in Ã with basis vectors in Ê Ñ . The function Î´ Ã µ Ê Ñ Ê ¿ maps the mesh back to 3D space. Discrete surface properties ¾ Ã , while scalar properties ×´Ú µ ¾Ëare associated with the corners´Ú µ¾Ã. measures the squared distance of vertices in Å Ñ to the simplified mesh Å , × Ð Ö measures the difference between scalar values at each vertex in Å Ñ and the estimated values at the closest position on Å , and × penalizes any edge collapse in Å that modifies a discontinuity edge with different discrete attributes on its adjacent faces.The principal component and locking extensions are integrated directly into the progressive mesh algorithm. Scalar attribute space is reduced to Ô dimensions based on a viewer-specified . All× Ð Ö minimization occurs within this space (note that ÓÑ and × are unaffected by this change). The selection of a new vertex position during an edge collapse´Ú Ú µ Ú ¼ is restrictedby vertex locks; if either Ú or Ú is locked, Ú ¼ snaps to that endpoint; if both Ú and Ú are locked, the edge collapse is not allowed.</figDesc><table><row><cell>¾ are</cell></row><row><cell>associated with a face</cell></row></table><note>sim- plifies a full-resolution mesh Å Ñ with Ñ vertices into progres- sively coarser meshes Å Ñ ½ Å ½ Å ¼ via a sequence of edge collapses.ÐAn edge collapse transforms two vertices´Ú Ú µ into a single vertex Ú ¼ . Vertex Ú and its two adjacent faces are removed from the mesh. The order of edge collapses is carefully chosen to minimize the geometric and surface property errors they introduce. This goal is redefined as an energy minimization problem: ´Å µÓÑ´Å µ • × Ð Ö´Å µ • × ´Å µ (9) whereÓÑThe progressive mesh algorithm begins by computing ¡ (and an associated optimal position for the surviving Ú ¼ ) for every valid edge collapse in Å Ñ . The edge collapses are placed on a pri- ority queue ordered by increasing ¡ . The frontmost edge col- lapse (with lowest ¡ ) is applied, and the priorities of edges in the neighborhood of the collapse are updated. The next collapse can then be selected from the front of the queue.</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head></head><label></label><figDesc>use quadric error matrices to define a sequence of edge collapses that minimize error during simplification. A vertex Ú is characterized by the planes ÔØ that contain the triangles incident at Ú . The error associated with moving Ú to a new position Ú ¼ is defined as the sum of the squared distances of Ú ¼ from each of the planes, that is:</figDesc><table /><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head></head><label></label><figDesc>interpolated scalar values × ¼ at position Ô ¼ are compared to Ú ¼ to measure surface property errors. Locating Ô ¼ is identical to Garland and Heckbert's original algo-</figDesc><table><row><cell></cell><cell>500</cell><cell></cell><cell></cell><cell>500</cell><cell></cell></row><row><cell></cell><cell></cell><cell>O_GQEM</cell><cell></cell><cell></cell><cell></cell><cell>HQEM</cell></row><row><cell></cell><cell>400</cell><cell>GQEM O_GQEM w/PCA</cell><cell></cell><cell>400</cell><cell></cell><cell>PM HQEM w/PCA</cell></row><row><cell>Time (sec)</cell><cell>200 300</cell><cell>GQEM w/PCA</cell><cell>Time (sec)</cell><cell>200 300</cell><cell></cell><cell>PM w/PCA</cell></row><row><cell></cell><cell>100</cell><cell></cell><cell></cell><cell>100</cell><cell></cell></row><row><cell></cell><cell>0</cell><cell></cell><cell></cell><cell>0</cell><cell></cell></row><row><cell></cell><cell cols="2">90% 80% 70% 60% 50% 40% 30% 20% 10%</cell><cell></cell><cell cols="3">90% 80% 70% 60% 50% 40% 30% 20% 10%</cell></row><row><cell></cell><cell>Simplification</cell><cell></cell><cell></cell><cell></cell><cell>Simplification</cell></row><row><cell></cell><cell>(a)</cell><cell></cell><cell></cell><cell></cell><cell>(b)</cell></row><row><cell></cell><cell>.007</cell><cell></cell><cell></cell><cell>.007</cell><cell></cell></row><row><cell>Simplification Error</cell><cell>.002 .003 .004 .005 .006</cell><cell>O_GQEM GQEM O_GQEM w/PCA GQEM w/PCA</cell><cell>Simplification Error</cell><cell>.002 .003 .004 .005 .006</cell><cell></cell><cell>HQEM PM HQEM w/PCA PM w/PCA</cell></row><row><cell></cell><cell>.001</cell><cell></cell><cell></cell><cell>.001</cell><cell></cell></row><row><cell></cell><cell>0</cell><cell></cell><cell></cell><cell>0</cell><cell></cell></row><row><cell></cell><cell cols="2">90% 80% 70% 60% 50% 40% 30% 20% 10%</cell><cell></cell><cell cols="3">90% 80% 70% 60% 50% 40% 30% 20% 10%</cell></row><row><cell></cell><cell>Simplification</cell><cell></cell><cell></cell><cell></cell><cell>Simplification</cell></row><row><cell></cell><cell>(c)</cell><cell></cell><cell></cell><cell></cell><cell>(d)</cell></row><row><cell></cell><cell>.009</cell><cell></cell><cell></cell><cell>.009</cell><cell></cell></row><row><cell>Average Attribute Error</cell><cell>.001 .002 .003 .004 .005 .006 .007 .008</cell><cell>O_GQEM GQEM O_GQEM w/PCA GQEM w/PCA</cell><cell>Average Attribute Error</cell><cell>.001 .002 .003 .004 .005 .006 .007 .008</cell><cell></cell><cell>HQEM PM HQEM w/PCA PM w/PCA</cell></row><row><cell></cell><cell>0</cell><cell></cell><cell></cell><cell>0</cell><cell></cell></row><row><cell></cell><cell cols="2">90% 80% 70% 60% 50% 40% 30% 20% 10%</cell><cell></cell><cell cols="3">90% 80% 70% 60% 50% 40% 30% 20% 10%</cell></row><row><cell></cell><cell>Simplification</cell><cell></cell><cell></cell><cell></cell><cell>Simplification</cell></row><row><cell></cell><cell>(e)</cell><cell></cell><cell></cell><cell></cell><cell>(f)</cell></row><row><cell></cell><cell></cell><cell></cell><cell cols="2">rithm [4]. A new function:</cell><cell></cell></row><row><cell></cell><cell></cell><cell></cell><cell></cell><cell>× ´Ôµ</cell><cell>Ì Ô •</cell><cell>½ Ò ¿</cell><cell>(11)</cell></row><row><cell></cell><cell></cell><cell></cell><cell cols="4">is defined at each mesh face for every surface property ; × ´Ôµ interpolates the scalar values stored at 's vertices, and ensures that</cell></row></table><note>× ´Ôµ × Ố ¼ µ Ô ¾ Ê ¿ (that is, any Ô returns the scalar value at its closest projected point Ô ¼ on the underlying face). The resulting quadric error matrix: 1. Reduces storage cost, since the number of coefficients for each matrix is linear in Ò (previously, it was quadric in Ò).</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5"><head></head><label></label><figDesc>similar to the original quadric technique. The use of Ô principal component axes reduces the number of × to Ô and the size of the quadric matrix to Ò Ô • ¿ . As before, each edge collapses is monitored to ensure it does not attempt to reposition a locked vertex. Each data element contains Ò ½ values: the eleven attributes listed above, plus latitude, longitude, and elevation (a month was also associated with each , but it was ignored during simplification).We initially chose to visualize environmental conditions over North America. This produced a starting mesh Å Ñ with Ñ ½¼ ¼ elements for each of the twelve months. We built separate principal component axes for each month. Although it is possible to build a single set of axes for the entire dataset, our method avoids inter-month variation, producing smaller Ô. ). Results for the other months were similar (in all cases, Ô ¿ or Ô for ¼ ). If the entire dataset is analyzed in a single computation, Ô</figDesc><table><row><cell>3. Improves accuracy, since the new error metric explicitly se-</cell><cell></cell></row><row><cell>lects the geometrically nearest position on the mesh (previ-</cell><cell></cell></row><row><cell>ously, a geometrically farther point with closer attribute val-</cell><cell></cell></row><row><cell>ues might have been selected).</cell><cell></cell></row><row><cell>Principal component analysis is integrated into Hoppe's algorithm</cell><cell></cell></row><row><cell>in a manner 5 Real-World Results In order to test our extended simplification algorithms in a real-world context, we turned to a collection of monthly environmen-surface climate readings in ½ tal and weather conditions. This dataset contains mean monthly</cell><cell>For example, principal ¼ reduced the attribute ¼ , ¾ ¼ ¾¼ , ¿ ¼ ½¼ , component analysis for January with space to Ô axes ( ½ and ¼ ¼ axes are needed to satisfy</cell></row></table><note>¾ AE latitude and longitude steps for the years 1961 to 1990 (e.g., readings for January averaged over the years 1961-1990, readings for February averaged over 1961- 1990, and so on). We selected eleven attributes for visualization: mean temperature (temp), vapor pressure (pressure), wind speed (wind), wet day frequency (wet day), radiation (radiate), precipita- tion (precip), minimum temperature (min temp), maximum temper- ature (max temp), ground frost frequency (frost), diurnal tempera- ture range (diurnal), and cloud cover (cloud).</note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>The authors gratefully acknowledge the support of the National Science Foundation through research grants NSF-ACI-0083421 and NSF-IIS-9988507.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Error-bounded reduction of triangle meshes with multivariate data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">L</forename><surname>Bajaj</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">R</forename><surname>Schikore</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Visual Data Exploration and Analysis III</title>
+		<meeting>Visual Data Exploration and Analysis III</meeting>
+		<imprint>
+			<publisher>SPIE</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="volume">2656</biblScope>
+			<biblScope unit="page" from="34" to="45" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Appearancepreserving simplification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cohen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Olano</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Manocha</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH 98 Conference Proceedings</title>
+		<editor>M. Cohen</editor>
+		<meeting><address><addrLine>Orlando, Florida</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="115" to="122" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Surface simplification using quadric error metrics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Garland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">S</forename><surname>Heckbert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH 97 Conference Proceedings</title>
+		<editor>Whitted</editor>
+		<meeting><address><addrLine>Los Angeles, California</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="209" to="216" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Simplifying surfaces with color and texture using quadric error metrics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Garland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">S</forename><surname>Heckbert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Visualization &apos;98</title>
+		<meeting>Visualization &apos;98<address><addrLine>Research Triangle Park, North Carolina</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="263" to="269" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">One the use of perceptual cues and data mining for effective visualization of scientific datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">G</forename><surname>Healey</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Graphics Interface &apos;98</title>
+		<meeting>Graphics Interface &apos;98<address><addrLine>Vancouver, Canada</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="177" to="184" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Large datasets at a glance: Combining textures and colors in scientific visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">G</forename><surname>Healey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">T</forename><surname>Enns</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">5</biblScope>
+			<biblScope unit="page" from="145" to="167" />
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Progressive meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH 96 Conference Proceedings</title>
+		<editor>H. Rushmeier</editor>
+		<meeting><address><addrLine>New Orleans, Louisiana</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="99" to="108" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">New quadric metric for simplifying meshes with appearance attributes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Hoppe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Visualization &apos;99</title>
+		<meeting>Visualization &apos;99<address><addrLine>San Francisco, California</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="59" to="66" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Visualization in scientific computing-a synopsis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">H</forename><surname>Mccormick</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">A</forename><surname>Defanti</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">D</forename><surname>Brown</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="page" from="61" to="70" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Research issues in scientific visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">J</forename><surname>Rosenblum</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="page" from="61" to="85" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A higher-order method for finding vortex core lines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Roth</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Peikert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Visualization &apos;98</title>
+		<meeting>Visualization &apos;98<address><addrLine>Research Triangle Park, North Carolina</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="143" to="150" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Data and visualization corridors report on the 1998 CVD workshop series (sponsored by DOE and NSF)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">H</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Rosendale</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Center for Advanced Computing Research</title>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+		<respStmt>
+			<orgName>California Institute of Technology</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Tech. Rep. CACR-164</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">A database-oriented visualization tool</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Stonebraker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Nathan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Paxson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Su</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Tioga</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings Visualization &apos;93</title>
+		<meeting>Visualization &apos;93<address><addrLine>San Jose</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="86" to="93" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Correlative visualization techniques for multidimensional data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">A</forename><surname>Treinish</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Goettsche</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IBM Journal of Research and Development</title>
+		<imprint>
+			<biblScope unit="volume">35</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="184" to="204" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

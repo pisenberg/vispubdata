@@ -1,0 +1,602 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Triangular NURBS Surface Modeling of Scattered Data</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Song</forename><surname>Han</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="department">Institute for Robotics and Intelligent Systems</orgName>
+								<orgName type="institution">University of Southern California</orgName>
+								<address>
+									<postCode>90089 han</postCode>
+									<settlement>Los Angeles</settlement>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gérard</forename><surname>Medioni</surname></persName>
+							<email>medioni@iris.usc.edu</email>
+							<affiliation key="aff0">
+								<orgName type="department">Institute for Robotics and Intelligent Systems</orgName>
+								<orgName type="institution">University of Southern California</orgName>
+								<address>
+									<postCode>90089 han</postCode>
+									<settlement>Los Angeles</settlement>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Triangular NURBS Surface Modeling of Scattered Data</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:33+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<abstract>
+				<p>We propose to fit triangular NURBS surfaces to noisy, sparse, scattered 3D data while simultaneously localizing and preserving sharp edges. We use a vector voting method to interpolate, from sparse data, three dense potential fields for surfaces, edges, and junctions. The global voting interpolants encode several human perceptual grouping principles such as co-surfacity, proximity, and constancy of curvature. The inferred potential fields are stored in three volumetric grids, giving each voxel the probability of being a surface point, an edge point, and a junction point. Then we use a new model called &quot;winged B-snakes&quot;, which are deformable triangular NURBS surfaces embedded with active curves, to fit the surfaces and align the edges and junctions. Finally, a smooth C 1 surface which preserves discontinuity edges and junctions is constructed. Fine-tuning and surface fairing is done by adjusting the weights. 2 Triangular NURBS Surfaces TriNURBS are defined over 2D domain triangulations, and C k-1 continuity can be achieved by k-th degree polynomials</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>Most research papers and software packages on scattered data modeling deal with smooth surfaces only <ref type="bibr" target="#b0">[1]</ref><ref type="bibr" target="#b1">[2]</ref><ref type="bibr" target="#b2">[3]</ref>; however, discontinuities abound: steep cliffs, seafloor faults, electric shocks, seismic velocity fields, creases and corners on shapes, etc. Marking discontinuities manually is very tedious and may become infeasible for multidimensional data. Guy and Medioni <ref type="bibr" target="#b3">[4]</ref> have implemented an automatic algorithm for discontinuity detection and surface fitting, which produces dense triangular meshes and discontinuity curves automatically from scattered data. In this paper, we follow the same approach, but upgrade the triangular meshes to triangular NURBS surfaces.</p><p>Triangular NURBS (TriNURBS) are rational generalizations of the triangular B-splines <ref type="bibr" target="#b4">[5]</ref><ref type="bibr" target="#b5">[6]</ref><ref type="bibr" target="#b6">[7]</ref><ref type="bibr" target="#b7">[8]</ref><ref type="bibr" target="#b8">[9]</ref>, and overcome the shortcomings of tensor-product NURBS (TP-NURBS) <ref type="bibr" target="#b9">[10]</ref><ref type="bibr" target="#b10">[11]</ref><ref type="bibr" target="#b11">[12]</ref> but retain the good properties of local control, automatic continuity, convex hull, affine and projective invariance, completeness, etc. TP-NURBS have a rectangular topology and thus require tedious trimming techniques to handle pole artifacts and arbitrary boundaries; also, to obtain C 1 continuity, the TP-NURBS should be quadratic in terms of both parameters, so the total degree is four (quartic), whereas TriNURBS can model arbitrary topology, and a total degree of as low as two (quadratic) can maintain the C 1 continuity; duplicate knots in TP-NURBS will produce a discontinuity curve across the whole surface, while triangular NURBS can produce discontinuity edges between any desired adjacent knots inside the surface.</p><p>Our approach starts with a grouping stage to infer dense potential information from the sparse data. In the second stage, a deformable triangular NURBS surface coupled with active edges is dropped into the potential fields. We call the model "winged B-snakes". After adjusting the control points by a few iterations of energy minimization, the surface (wings) flap to fit the data, and the edges (snakes) slide to align with the actual edges in the data. Then in the third stage, values and derivatives along each edge are checked, so that discontinuities can be detected and preserved in constructing the surface. Finally the surface are fine-tuned and faired by adjusting the weights. An introduction to triangular NURBS is given in Section 2. In Section 3, we explain the principles of our surface reconstruction, with some experimental results given in Section 4. In the last section, we summarize the work and discuss our future research. defined over the domain triangles. In our work, we consider C 1 surfaces using quadratic polynomials (k=2). Given an arbitrary triangulation of the 2D domain, two additional points are added near each vertex of the triangle [v i , v j , v k ] to provide nine knots for each triangle (two adjacent triangles share six knots). Then from the nine knots, five knots (including the original vertices v i , v j , v k , plus two additional knots) are chosen to form a knot set. Six different knot sets are chosen; and over each set, a basis function is defined.</p><p>A basis function B over the 5-knot set K can be defined recursively as follows:</p><p>where u is any point in the 2-D domain, a 0 , a 1 , a 2 are related to the barycentric coordinates of u w.r.t. any three knots v 0 ,v 1 ,v 2 ; K\v i is the 5-knot set K minus v i , i.e., a 4knot set. As the K\v i reduces to only 3 knots, a zerothdegree B-spline basis function is obtained, which is a flat unit-height triangle:</p><p>It can be shown that three collinear knots will result in a crease edge while four collinear knots will produce a step edge. If the nine knots are pulled apart and no collinear knots exist at all, each B-spline basis function automatically becomes C 1 . Linear combination of the six basis functions give rise to a local patch, and over the whole domain triangulation (T triangles) a surface is obtained:</p><p>where X is a point (x,y,z) in 3D space, c t, b 's are the scaling factors to the basis functions acting as control points (adjacent triangles may share 3D control points to guarantee C 0 , or share their xy components but not z component to allow a step edge). If a weight w t, b is associated to each control point, the above triangular B-spline surface is extended to triangular NURBS surface:</p><p>Note that if all the weights are equal, the triangular NURBS specialize to triangular B-splines; furthermore, if the three pulled-apart knots collapse to be duplicate at each vertex, then the overlap/blend effect among adjacent basis functions disappear, and thus triangular B-splines</p><formula xml:id="formula_0">B u K ( ) a 0 B u K\v 0 ( ) a 1 B u K\v 1 ( ) a 2 B u K\v 2 ( ) + + = B u v 0 v 1 v 2 , , ( ) 1 if u v 0 v 1 v 2 ) , , [ ∈ 0 otherwise { = X c t b , B t b , u ( ) ⋅ b 0 = 5 ∑ t 0 = T 1 - ∑ = X c t b , w t b , B t b , u ( ) ⋅ b 0 = 5 ∑ t 0 = T 1 - ∑ w t b , B t b , u ( ) ⋅ b 0 = 5 ∑ t 0 = T 1 - ∑ ----------------------------------------------------------------- =</formula><p>degenerate to triangular Bezier-splines, and the automatic continuity property is lost.</p><p>If the above domain is a triangulation of the surface of a unit sphere, a closed TriNURBS surface is defined. The only difference is that the summation of three spherical barycentric coordinates are not 1 anymore (it is usually greater than 1), and that three or four knots on a same great circle will produce a discontinuity. Such a spherical representation is very useful in geographical and other applications <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b18">19,</ref><ref type="bibr" target="#b19">20]</ref>. Since the TriNURBS are defined over arbitrary triangulations of the sphere, there are no pole artifact as in the TP-NURBS, and the continuity is automatically guaranteed. The simplest case is the tetrahedron tessellation of the unit sphere, in which as few as four triangles suffice to exactly model a sphere. By contrast, to cover a sphere with rectangles, at least six rectangles (the faces of a cube) are required to obtain the continuity, and a set of constraint equations have to be maintained.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Surface Inference</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Grouping Stage</head><p>The goal of the first stage is to infer dense probability measures from the scattered data, as described in the flow chart in <ref type="figure" target="#fig_0">Fig. 1</ref>. The input can be points, segments, or patches. In our work, we only use points. The details about the grouping method can be found in <ref type="bibr" target="#b3">[4]</ref>.</p><p>The idea is to locally enforce the general constraints, which are co-surfacity, proximity, and constancy of curvature. These constraints are encoded into a 3D vector mask. Such a mask, when aligned with an input data site, associates a preferred direction and strength to every voxel in a large volume of space around the input site. By aligning the field with each input site, we produce, at each voxel location, a collection of vector votes. This voting information is then compressed into the second order moments by the covariance matrix, graphically represented by an ellipsoid, or equivalently, by three eigen-vectors. The eigen-values l max , l mid , l min are interpreted as three saliency measures for surfaces, edges and junctions, and the eigen-vectors are used to estimate the surface normals.</p><p>In more details, l max -l mid is used as the saliency of a surface passing through a location, since if l max -l mid is large, l max will be large and l mid is small, also l min is small (since l min &lt; l mid ). Thus, there is only one strong vote group here, i.e., the consistency of votes at this location is high. In other words, the probability of a real surface passing through this location is high. Similarly, l mid -l min is used as an edge saliency measure, and l min is used as junction saliency measure.</p><p>Note that this grouping methodology imposes no restriction on the number of objects, genus (topology), number of discontinuities, and the algorithm is non-iterative and efficient. By negating the above three saliency measures, we obtain the potential fields for surfaces, edges and junctions. The minimum potential locations of the three potential fields indicate the existence of surfaces, edges and junctions, respectively.</p><p>The above voting procedures are performed for each voxel in a 3D grid, and they can work for any number of surfaces of arbitrary topology. They even work for non-manifolds. The voting complexity is O(n 3 k) in general, where n is the side size of the volume grid, and k is the number of data points.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Patch Deformation and Edge Alignment</head><p>From the surface potential field, a triangular mesh can be traced out by the "marching cube" algorithm <ref type="bibr" target="#b26">[27]</ref>. Different from the standard marching cube algorithm, the surface to be traced out is now the minimum-potential surface or zero-derivative surface of the potential field, instead of the iso-surface of the potential values. Similarly, the discontinuity curves and junctions can be traced out by marching methods also. However, the mesh is quite dense with each facet being a triangle; the edges and junctions are traced out from separate fields and are not integrated into the sur-  Our goal is to obtain a sparse curved surface representation, with the discontinuity edges and junctions preserved in the surfaces. We drop a triangular NURBS surface into the potential fields, and deform the surface to reach minimum energy. Different from previous work, we couple the deformable surface model with the active edge model, so that a fitted surface together with aligned edges will be obtained, and the result gives a compact integrated representation from the three potential fields. Since each surface patch can deform and its edges can slide, we call our model "winged B-snakes".</p><p>We define the energy E for the winged B-snakes as follows:</p><p>where w 1 , w 2 , and w 3 are coefficients to balance the effects of the three types of energy, and are chosen by normalizing the above four terms to be 1 : 20 : 5 : 5 before the start of minimization. They bring the four terms to comparable orders of magnitude, and the minimization results are stable with their variations. We adjust the control points to minimize the total energy.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>(1) Surface Smoothness Energy</head><p>Although each triangular patch is a quadratic polynomial which is always continuous, we still need the smoothness energy to minimize the mesh roughness. The smoothness energy is defined in terms of the first-order right-hand derivatives:</p><p>where the summation is over all triangles and (x,y,z), and the integration is over the barycentric coordinates (u,v) within a triangle. Since the goal of this stage is mainly surface fitting, we simply use the above membrane energy. The more costly thin-plate energy based on curvature or second-order derivatives is used in the final subtle modification and fairing stage.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>(2) Surface Fitting Energy</head><p>Inside the surface potential field, the surface patches (wings) flap to reach the local minimum. If the triangle edges cross-over the actual discontinuity edges, the surface energy becomes large; when the edges move to align with the actual edges, the surface energy is reduced. However, we found that the surface energy makes the edges move a little bit, but is not strong enough to pull them to exactly E E surface E edges</p><formula xml:id="formula_1">+ = E junctions + E s s -mooth w 1 E ⋅ s fit - w 2 E ⋅ e align - w 3 E ⋅ j align - + + + = E s smooth - u ∂ ∂X 2 v ∂ ∂X 2 +     v ∫ u d v d u ∫ t X , ∑ =</formula><p>align with the actual discontinuity edges. This is why we shall introduce an explicit edge alignment energy to make the edges become "active" by themselves.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>(3) Edge and Junction Alignment Energy</head><p>Inside the edge potential field, the triangle edges (snakes) can slide to the local minimum so that the triangle edges may align with the actual discontinuity edges, instead of crossing over them. Also, the triangle vertices can move to the local minimum in the junction potential field, making the vertices align with the inferred junctions. Such alignment significantly reduces the total energy or cooperatively improves the surface fitting precision, and we thus do not have to subdivide the triangles into many tiny ones to obtain a good fitting due to the misaligned edges and junctions as in most previous methods.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Building C 1 Surfaces with Edges/Junctions</head><p>After the surface patches have been fitted to the data, and the edges and junctions have aligned with actual ones, the detection of discontinuity edges and junctions from the surface is straightforward. We simply need to check the value/derivative differences along the boundary between every pair of adjacent triangles. We normalize the differences by the total area of the pair of triangles. Such locally adaptive thresholding works well. We then check the change of angles between adjacent edge segments along the detected edges, and those vertices with sharp changes are marked as corners, and those with more than two neighbors are marked as junctions. To build the C 1 smooth surface while preserving the edges and junctions, we pull apart the knots in the continuous regions, and allow knots to be duplicate or collinear/co-circular to respect edges/ junctions (at first all three knots are duplicate at each vertex). With the new knot configuration, we adjust the control points once more.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Fine-tuning/Fairing by Adjusting the Weights</head><p>In the above fitting and alignment procedures, we never adjust the weights. The reasons are that we want to exploit the descriptive power of control points as much as possible; there exist much redundancy in the weights (scaling of weights does not change the shape at all), so leaking information to the weights is not desired. Also, adjusting too many parameters is difficult for the minimization routines. We tested adjusting the weights at the same time as moving the control points, the deformation and alignment slow down from 10 minutes to 30 minutes; more memory is also needed for the Hessian matrix in the minimization routine. Due to the c t, b .w t, b multiplication terms, the minimization becomes non-linear. After some experimental tests, we found that if the initial guess is very good, simultaneous adjustment results in a little improvement (about 1~5% further reduction of the total energy), and that if the initial guess is not good, the residual energy may even be larger! Including knots in the minimization makes the situation even worse, since the knots are buried in the quadratic basis functions. In summary, it seems that adjusting control points and weights simultaneously is not always better, or is not worth the cost, even if it can bring slight improvement.</p><p>We use the thin-plate energy as the surface fairness measure <ref type="bibr" target="#b12">[13]</ref><ref type="bibr" target="#b13">[14]</ref><ref type="bibr" target="#b14">[15]</ref><ref type="bibr" target="#b15">[16]</ref><ref type="bibr" target="#b16">[17]</ref><ref type="bibr" target="#b17">[18]</ref><ref type="bibr" target="#b18">[19]</ref><ref type="bibr" target="#b19">[20]</ref><ref type="bibr" target="#b20">[21]</ref><ref type="bibr" target="#b21">[22]</ref><ref type="bibr" target="#b22">[23]</ref><ref type="bibr" target="#b23">[24]</ref><ref type="bibr" target="#b24">[25]</ref><ref type="bibr" target="#b25">[26]</ref>, which is based on the second-order derivatives. The energy for fine-tuning and fairing is defined as where the coefficient c is chosen such that the two terms are normalized to 1 : 5 before the minimization starts.</p><p>Since the surface-fitting has been done in stage 3 where the smoothness/fitting ratio is 1 : 20, we can now use smaller ratio (1 : 5). To minimize this energy, only small changes of weights are necessary, and we did not observe negative weights occur in our experiments. Initially all weights are 1's, then later they stay between 0.5 ~ 10. We did not use a negative weight penalty term, such as {min(0, w t, b )} 2 . <ref type="figure" target="#fig_1">Figure 2</ref>(a) is the shaded display of a dense range image of a pyramid, (b) is the randomly sampled data (400 points) for use in our experiment. (c), (d), (e) display the three volumetric potential fields for surfaces, edges and junctions, respectively (only voxels with potentials below a threshold are displayed). This stage runs for about 10 minutes on a SUN Sparc 10, using three 50x50x50 arrays.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Results</head><p>To obtain an initial surface, we regularly split the bounding box of the data points into rectangles and then split each rectangle into two triangles along a diagonal. Which diagonal is chosen depends on which one yields smaller surface fitting energy within this rectangle. Such an initial surface is shown in <ref type="figure" target="#fig_1">Figure 2</ref>(f) with misaligned edges and junctions.</p><p>Due to the model's local control property, a control point only affects a triangle and its surrounding triangles, so it is reasonable to justify that a local minimization may not sacrifice the global optimality. In our implementation, we adjust only a triangle and all its neighboring triangles at a time, and then move to the next triangle. We use the Levenberg-Marquardt algorithm with numerically estimated gradients. fairing by adjusting the weights. We can see that the edges in (i) are sharper than (h), which indicates the effectiveness of adjusting the weights for final-stage subtle improvement. The three stages for reconstruction from the potential fields run for about 10 minutes on an SGI/Indigo.</p><p>To test the triangular NURBS defined over a unit sphere, we add some samples at the bottom of the pyramid to make it a closed surface, as shown in <ref type="figure" target="#fig_2">Figure 3(a)</ref>. A triangular tessellation of the unit sphere is given in (b) by subdividing and flipping the diagonals on the faces of a unit cube. The initial surface is specified by a sphere enclosing the data set. After the surface fitting and edge alignment, the C 1 result with preserved edges and junctions is shown in (c). Then, (d) gives the final result after fine-tuning and fairing by adjusting the weights. Every triangle is treated equally, and no pole artifact regions exist at all. This demonstrates the major advantage of TriNURBS over TP-NURBS for modeling spherical data. Previous work using TP-NURBS had to tolerate the pole degeneracy, or use two or more pieces of surfaces and then glue them together.  <ref type="figure">Figure 4(a)</ref> is the shaded display of the range image of an airplane, and (b) shows 900 scattered samples. We apply a Delaunay triangulation algorithm <ref type="bibr" target="#b27">[28]</ref> to the scattered data and produce the initial triangular mesh (c), in which some triangle edges severely misalign at the boundary between the wing and the body as seen from the zoomed display in (e). After surface fitting and edge alignment, the edges of the spline triangles align with discontinuity curves in the data and can be detected as shown in (f).  <ref type="figure">Figure 5</ref>(a) shows 650 points measured on a tooth (a closed shape). The domain unit sphere tessellation is shown in (b), and the initial surface is specified by a sphere enclosing the data set. A top view of the final C 1 surface with detected and preserved edges is given in (c). Another view is given in (d). In dental CAD/CAM, preserving the sharp edges on a tooth is very important, otherwise an upper tooth cannot bite tightly with the lower tooth; on the other hand, the (c) result (view 1) (a) scattered data over a tooth sides of the tooth must be smooth, or else the machined crown cannot be put on a specific patient's tooth. Our winged B-snakes represented with TriNURBS seem very promising for smooth surfaces with embedded discontinuities. We are to merge the triangles in smooth areas for model simplification; also we are to work on more complicated objects, such as mechanical parts and medical CT/ MRI data of human brains and organs. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Conclusions</head><p>In this paper we have proposed a new scheme for modeling and visualizing sparse noisy scattered data that may contain unspecified discontinuity edges and junctions. At first, we use a vector voting technique to infer dense surface/edge/junction potential information. Then we drop a quadratic triangular NURBS deformable surface coupled with active edges in the inferred potential fields. After some energy minimization iterations by adjusting the control points, the discontinuity edges and junctions are automatically aligned and detected, and then preserved by setting the knot configurations in constructing the final C 1 smooth surface. For tasks with high precision requirements, fine-tuning and fairing the surface by further adjusting the weights are also necessary.</p><p>In this paper we only describe open surface and spherical surface modeling from scattered data. We are in the process of extending TriNURBS to arbitrary topology: first trace out the topology information (a dense triangular mesh) from the potential volume fields using the Marching-cube algorithm <ref type="bibr" target="#b26">[27]</ref>, then perform mesh reduction and surface-fitting/edge-alignment, finally construct a G 1 overlap/blend TriNURBS surface with preserved discontinuities <ref type="bibr" target="#b28">[29]</ref>, which is an adaptive and multiresolution representation.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 .</head><label>1</label><figDesc>Flowchart of the grouping stage faces.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 (</head><label>2</label><figDesc>g) shows aligned/detected edges and junctions after adjusting the control points. (h) is the C 1 surface with edges and junctions preserved by pulling apart or setting collinear knots then adjusting the control points again. Finally, (i) gives the result after the fine-tuning and</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 3 .</head><label>3</label><figDesc>Closed pyramid</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head></head><label></label><figDesc>(a) shaded display of noisy range image (c) initial triangular mesh (e) zoomed display of initial mesh Finally, fine-tuning and fairing is performed to give the result in (d). Note that the whole surface is a single quadratic TriNURBS mesh. By contrast, if TP-NURBS were used, we would have to trim a rectangular bi-quadratic (quartic) surface into the airplane shape, or stitch-up several surface pieces; both methods are tedious.(b) noisy scattered data (d) final surface (f) zoomed display of final mesh</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head></head><label></label><figDesc>(b) triangulation over domain sphere (d) result (view 2)</figDesc></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgment</head><p>We thank Dr. R. Pfeifle and Prof. H.-P. Seidel for giving us their source codes for the triangular B-spline evaluation. The 3D displays use the geomview package by Univ. of Minnesota.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">CAGD Top 10: What to Watch</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Nielson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE CG&amp;A</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="35" to="37" />
+			<date type="published" when="1993-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Scattered Data Modeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Nielson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE CG&amp;A</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="60" to="70" />
+			<date type="published" when="1993-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Smooth Interpolation of Scattered Data by Local Thin-Plate Splines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Franke</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comp. Math. Appls</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="page" from="273" to="281" />
+			<date type="published" when="1982" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Inference of Surfaces, Edges and Junctions from Sparse 3D Points</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Guy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Medioni</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Int&apos;l Symposium on Computer Vision, Florida</title>
+		<imprint>
+			<date type="published" when="1995-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Dahmen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Micchelli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Seidel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Blossoming Begets B-Spline Bases Built Better by B-Patches</title>
+		<imprint>
+			<date type="published" when="1992-07" />
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="page" from="97" to="115" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">An Implementation of Triangular B-Spline Surfaces over Arbitrary Triangulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Fong</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Seidel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">CAGD</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="page" from="267" to="275" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Fitting Triangular B-Splines to Functional Scattered Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pfeifle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Seidel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="26" to="33" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Pfeifle</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Seidel</surname></persName>
+		</author>
+		<title level="m">Spherical Triangular B-Splines with Applications to Data Fitting, Eurographics</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="89" to="96" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Approximation and Geometric Modeling with Simplex B-Splines Associated with Irregular Triangles</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Auverbach</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">CAGD</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="page" from="67" to="87" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">From Conics to NURBS: A Tutorial and Survey</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Farin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE CG&amp;A</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="78" to="86" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">On NURBS: A Survey</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE CG&amp;A</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="page" from="55" to="71" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<monogr>
+		<title level="m" type="main">The NURBS Book</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Piegl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Tiller</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995" />
+			<publisher>Springer-Verlag</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<monogr>
+		<title level="m" type="main">Triangular NURBS and their Dynamic Generalizations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Qin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Terzopoulos</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>personal communications</note>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">3-Dimensional Computer Vision</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Shirai</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1987" />
+			<publisher>Springer-Verlag</publisher>
+			<biblScope unit="volume">3</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">The local structure of image discontinuities in one dimension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Leclerc</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Zucker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. on PAMI</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="341" to="355" />
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Capturing the Local Structure of Image Discontinuities in Two Dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Leclerc</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE CVPR</title>
+		<imprint>
+			<date type="published" when="1985-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Blake</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Zisserman</surname></persName>
+		</author>
+		<title level="m">Visual Reconstruction</title>
+		<meeting><address><addrLine>Cambridge</addrLine></address></meeting>
+		<imprint>
+			<publisher>MIT Press</publisher>
+			<date type="published" when="1987" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Regularization of inverse visual problems involving discontinuities</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Terzopoulos</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1986" />
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="page" from="413" to="424" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Alfeld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Neamtu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Schumaker</surname></persName>
+		</author>
+		<title level="m">Bernstein-Bezier Polynomials on Spheres and Sphere-like Surfaces, CAGD</title>
+		<imprint/>
+	</monogr>
+	<note>to appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Fitting Scattered Data on Sphere-like Surfaces using Spherical Splines, CAGD</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Alfeld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Neamtu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Schumaker</surname></persName>
+		</author>
+		<imprint/>
+	</monogr>
+	<note>to appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<monogr>
+		<title level="m" type="main">Smoothing Rational Bspline Curves Using the Weights in an Optimization Procedure, CAGD</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hohenberger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Reuding</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995-12" />
+			<biblScope unit="page" from="837" to="848" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Dobson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Waggenspack</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Lamousin</surname></persName>
+		</author>
+		<title level="m">Feature Based Models for Anatomical Data Fitting, CAD</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="page" from="139" to="146" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Qin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Terzopoulos</surname></persName>
+		</author>
+		<title level="m">Dynamic NURBS Swung Surfaces for Physics-based Shape Design, CAD</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="page" from="111" to="127" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Laurentgengoux</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Mekhilef</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Optimization of a NURBS Representation, CAD</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="page" from="699" to="710" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">A 3-D Vision System Model for Automatic Object Surface Sensing, (using NURBS), Int&apos;l</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Theodoracatos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Calkins</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. of Comp. Vision</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="75" to="99" />
+			<date type="published" when="1993-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Mathematical Modeling of the Heart using MRI, (using NURBS)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Creswell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Medical Imaging</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="581" to="589" />
+			<date type="published" when="1992-12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Lorensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Cline</surname></persName>
+		</author>
+		<title level="m">Marching Cubes: A High Resolution 3D Surface Reconstruction Algorithm, Siggraph</title>
+		<imprint>
+			<date type="published" when="1987-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Fast Approximation of Range Images by Triangular Meshes Generated through Adaptive Randomized Sampling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Garcia</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Conf. Robotics and Automation</title>
+		<meeting><address><addrLine>Nagoya, Japan</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="2043" to="2048" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Grimm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hughes</surname></persName>
+		</author>
+		<title level="m">Modeling Surfaces of Arbitrary Topology using Manifolds, SIGGRAPH</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="359" to="368" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

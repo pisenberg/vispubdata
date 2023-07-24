@@ -1,0 +1,330 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">FEL: The Field Encapsulation Library</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Bryson</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">David</forename><surname>Kenwright</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Michael</forename><surname>Gerald-Yamasaki</surname></persName>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="institution">MRJ, Inc./ NASA Ames Research Center</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff1">
+								<orgName type="department">NASA Ames Research Center</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">FEL: The Field Encapsulation Library</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:33+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<abstract>
+				<p>This paper describes the Field Encapsulation Library (FEL), which provides a grid-independent application programmer&apos;s interface to gridded three-dimensional field data. The C++ implementation of FEL is described, stressing the way in which the class hierarchy hides the underlying grid structure in a way that allows visualization algorithms to be written in a completely grid-independent manner. Appropriately defined coordinate classes play an important role in providing this grid independence. High-performance point location routines for data access are described and performance times are provided.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Simulations in computational science are performed on numerical grids which discretize the spatial domain of the simulation. Grid types are characterized by how the points are defined and organized. The simplest example is a regular cartesian grid specified by a spatial volume and grid density. More advanced types of grids include structured curvilinear grids and unstructured grids of various cell types. Though these latter types are more difficult to work with, they are often required to model complex geometries.</p><p>This wide variety of available grid types has complicated the development of general-purpose visualization systems. This complication is unavoidable at some level: differently defined grids must be loaded and accessed differently. But this complication also appears at the level of the visualization algorithm, since the visualization algorithm must access the data using some type of coordinate system. The only coordinate system which is a priori common to all grid types is the physical space (sometimes called global) coordinate system. Thus visualization algorithms often attain grid independence by being written entirely in physical coordinates. Data access is then implemented by converting from physical to grid coordinates. This conversion can be very time consuming for grid types such as structured curvilinear and unstructured grids. These time-consuming coordinate conversions often result in slow visualization systems.</p><p>Computational simulations have been increasing in complexity and size to capture more complex phenomena. One approach to providing users with the ability to understand these complex phenomena is interactive visualization, where the results of the user control of a visualization is returned in near real time (less than about 0.5 seconds). These systems require high-performance visualization algorithms, which imply fast access to the data being visualized. Such high-performance access has typically been accomplished by tailoring the visualization algorithm to a particular grid type, for example using "computational coordinates" for curvilinear structured grids <ref type="bibr" target="#b0">[1]</ref> <ref type="bibr" target="#b1">[2]</ref>[3] <ref type="bibr" target="#b3">[4]</ref>. If the visualization algorithm is dedicated to a particular grid type, extending the visualization system to a new grid type requires reimplementing that algorithm.</p><p>This paper describes the Field Encapsulation Library (FEL), which takes an object-oriented approach, implementing both data fields and coordinate types in a way which allows high-performance visualization algorithms to be written in a grid-independent manner. FEL provides the following advantages:</p><p>• Extensibility with respect to grid type: new grid types can be implemented by following a standard object template. Then all data field access routines will automatically work with the new grid. No knowledge of the currently implemented grid types is required.</p><p>• A structure which allows the development of visualization routines which are completely independent of grid type, including grid types which are implemented in the future.</p><p>• Very high performance data access both in terms of physical coordinates and grid-relative coordinates.</p><p>There are four approaches which FEL uses to allow both high performance and grid-independence:</p><p>• A class hierarchy is defined which has object member functions defined at a high level of the hierarchy. Each grid type is implemented as a derived class. When visualization algorithms are written in terms of the high level functions, the correct functions will be called for any particular grid type.</p><p>• A clear distinction is made between a data field and its grid: the grid object encodes the memory layout of the data field. Thus the grid type only affects the grid object, so the grid type only needs to be set at grid object creation time.</p><p>• A collection of coordinate classes are defined which allow for high-performance data access.</p><p>• Carefully written and optimized search routines are implemented providing fast data access given a physical position.</p><formula xml:id="formula_0">1 Mail Stop T27A-1, 2 Mail Stop T27A-2 NASA Ames Research Center, Moffett Field, CA 94035</formula><p>The structures described in this paper have been fully implemented for structured multi-zone curvilinear grids, and partially implemented for unstructured tetrahedral grids.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Many visualization systems have been written for specific grid types. Most of these systems implement their visualization algorithms through physical coordinate-based data access, and are therefore somewhat slow.</p><p>Systems which have used grid coordinate-based visualization algorithms such as computational coordinates for high performance include Flora <ref type="bibr" target="#b0">[1]</ref> and the early prototype of the Virtual Windtunnel <ref type="bibr" target="#b3">[4]</ref>.</p><p>Routines which optimize the conversion from physical coordinates to grid coordinates via lookup-type operations such as octrees have been implemented by several authors <ref type="bibr" target="#b4">[5]</ref>[6] <ref type="bibr" target="#b6">[7]</ref>. While efficient, these methods are memory intensive, which is a serious drawback for unsteady visualization environments.</p><p>Local searches have also been implemented by several authors. For structured grids local search is straightforward <ref type="bibr" target="#b0">[1]</ref>. For unstructured grids, several techniques have been developed <ref type="bibr" target="#b5">[6]</ref> <ref type="bibr" target="#b7">[8]</ref>, all of which are based on pre-processing the grid to generate neighbor relations.</p><p>The use of barycentric coordinates has been developed by one of the present authors <ref type="bibr" target="#b8">[9]</ref> and applied to various visualization techniques.</p><p>The implementation of grid-type independence using other than physical coordinates is found in the PV3 system <ref type="bibr" target="#b7">[8]</ref>. This system attains grid independence by defining a new grid format which includes all supported grid formats. While effective, the addition of a new grid format requires an understanding of existing formats, so such additions are not as easy as in the FEL library.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">FIELDS AND GRIDS</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">The FEL Class Hierarchy</head><p>In FEL, data fields are implemented as separate classes. There are scalar_field and vector_field classes, and each individual data field is a single object. For example, if a particular visualization session required a velocity vector field and an energy scalar field, an FEL vector field object would be created for the velocity field, and an FEL scalar field object would be created for the energy field. These data field classes contain a pointer to the actual data in memory. The memory layout of this data is encoded in the grid class. Each data field is assigned a grid object upon creation. The same grid object is used for all data fields defined on that grid.</p><p>The vector field is subclassed into a vector field subclass for the two types of vector field optimizations described in section 3.3. There is also a subclass of vector field for grid geometry data (which contains the positions of the grid vertices in physical space). It also has two types of vector field optimization.</p><p>The FEL classes are organized into the hierarchy shown in figure 1.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">How Fields Relate to Grids</head><p>As mentioned in section 3.1, data field objects contain the actual data values while the grid objects contain the information specifying how that data is organized in memory. The reason for doing this is that only one data field object needs to be defined, and it will work for all grid types. Thus the implementation of a new grid type only necessitates the implementation of a new grid subclass.</p><p>When data at a particular location is requested from a data field, that data field must ask its grid object where in memory that data is to be found. This is done via the offset grid member functions, which are overloaded by argument type. Offset returns an offset into memory, which the data field adds to the base address of its data in memory (figure 2). In the case of a vector field with three components, that offset is multiplied by 3 before being added. The result is the address in memory of the desired data.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Vector Field Optimization</head><p>When vector field data is accessed at a particular location, all components of that vector are typically loaded and returned. In many data file formats the components of the vector are not near each other in file, so if the file were simply loaded into memory the components would not be near each other in memory. Modern CPU architectures are based on memory caches, where a sizable section of memory is copied into a cache located on (or near) the processor. If subsequent memory accesses access data which is currently in the cache, then those accesses are significantly faster than if they were not in the cache. Thus when loading the components of a vector there is a significant performance advantage to having those components next to each other in memory. For this reason many visualization systems rearrange their vector data if the original file did not have the vectors near each other. We call a vector field organized in this way access-time optimal (ato).</p><p>There may, however, be a requirement that the data be loaded from disk and accessed as quickly as possible. Examples include an unsteady visualization environment which may require that each timestep of the data be loaded sequentially. In this case it is preferable to use the data in the order that it appears in the file, avoiding the reordering step upon load. We call a vector field in memory which is organized in the same way that it is organized in the file load-time optimal (lto).</p><p>While it is possible that the access-time optimal and loadtime optimal memory organizations may be the same, this is typically not the case. For this reason we allow the specification of access-time optimal or load-time optimal layout when the vector field object is created.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">THE POINT LOCATION INTERFACE</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Coordinate Classes</head><p>There are three coordinate classes which are provided in FEL:</p><p>• phys_pos which is the physical location of a point in space and time.</p><p>• vert_pos which is a vertex in grid coordinates specific to the grid type.</p><p>• bary_pos which is a barycentric position relative to a cell. FEL currently defines barycentric positions relative to a tetrahedron. The tetrahedron is contained in the bary_pos object, with its four nodes each specified as a vert_pos.</p><p>The vert_pos is essentially the address of a grid vertex, while the bary_pos coordinate provides the ability to interpolate values between grid vertices.</p><p>The vert_pos coordinate class is the key coordinate type which allows grid independence. The vert_pos is an object which contains the appropriate coordinate representation of a grid vertex for all supported grid types. Here is an example for a vert_pos which supports both multi-zone structured and unstructured grids: The grid processing functions for each grid type acts on the relevant fields of the vert_pos, so a visualization algorithm which is written entirely in terms of the vert_pos object will operate in a grid-independent way.</p><formula xml:id="formula_1">class vert_pos { int i, j, k // i, j,</formula><p>To interpolate data between grid vertices, FEL uses the bary_pos coordinate class. In FEL, the barycentric coordinate is currently defined for a tetrahedral cell. Each vertex of the tetrahe-dron is specified via the vert_pos coordinate class. Because every cell type can be decomposed into tetrahedra and the tetrahedron is specified by the vert_pos class, the bary_pos class is independent of the grid type. Of course the determination of the bary_pos tetrahedron and subsequent interpolation values p, q, and r is grid dependent, so the routine that sets the bary_pos coordinate is a member function of the specific grid type. The FEL bary_pos class is defined as:  The meaning of the p, q, and r interpolation values are illustrated in <ref type="figure" target="#fig_3">figure 3</ref>.</p><p>The volume of the tetrahedron is computed during the computation of the p, q, and r values, and is useful when estimating the physical space density of the grid vertices. This is important for adaptive visualization algorithms such as those described in the next section.</p><p>The grid subclass for each type of grid contains member functions which convert the phys_pos coordinate to a bary_pos coordinate in a way specific to each grid type. Each grid subclass also contains member functions which return the nearest vertex to a given phys_pos.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Accessing Data via the Coordinate Classes</head><p>Data is accessed via the coordinate classes through member functions of the data field objects. These member functions all have the same name, get_value, and are overloaded by argument. Thus there is a get_value(bary_pos, return_value), get_value(phys_pos, return_value), and a get_value(vert_pos, return_value). The phys_pos based get_value function convert the phys_pos coordinate to a bary_pos coordinate (because the phys_pos location will in general be between vertices).</p><p>As described in section 5 below, there is a great difference between global searches, which have no "nearby previous point" information, and local searches, which start from a nearby previous point in grid coordinates. Thus there is another set of get_value functions which provide this nearby point: get_value(bary_pos, last_bary_pos, return_value), get_value(phys_pos, last_bary_pos, return_value), and get_value(vert_pos, last_vert_pos, return_value). The bary_pos data type is used for the last value in the phys_pos based last_value because the phys_pos coordinate is converted to a bary_pos coordinate for the actual data access.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Use Examples</head><p>As an example of the use of FEL, consider the following simple grid-independent streamline algorithm using Euler integration: This algorithm first performs a global search to find the bary_pos corresponding to the initial phys_pos, and sets last_bary_pos to this value. Then it goes into a loop, sampling the velocity value at the current physical position using the last_bary_pos as a nearby start for the grid search.</p><p>This algorithm is meant for illustration purposes only and is not intended to be used in a real visualization system. A more sophisticated adaptive streamline algorithm has been implemented using barycentric coordinates and has been integrated into the virtual windtunnel <ref type="bibr" target="#b9">[10]</ref> for performance testing. This algorithm uses Runge-Kutta integration and is based on barycentric coordinates. Adaptation is based in part on using the cube root of the tetrahedron volume in the barycentric coordinate to estimate the physical distance that the streamline should advance at any step.</p><p>The availability of high-performance physical position-based data access provides opportunities to solve several outstanding problems in visualization. An example of this is cutting planes. Once a plane is specified in physical space, there are two conventional approaches to the computation of a cutting plane: either regularly sample data on the plane in physical space ignoring local variations in vertex density, or define a scalar field in all of space where the value at a point is the distance from the plane. Then an isosurface of the value zero computed by, for example, a marching cubes algorithm <ref type="bibr" target="#b10">[11]</ref> will generate the cutting plane as a collection of disconnected triangles <ref type="bibr" target="#b11">[12]</ref>. The regular sampling approach results in a collection of connected rectangles which may be efficiently rendered but does not respect variations in vertex density. The isosurface approach reflects the vertex density but results in disconnected triangles which are inefficient to render. Further, when there are multiple overlapping grids or grid zones, the isosurface approach can result in inconsistent isosurfaces at the overlaps. Using FEL, the high-performance physical-space data accesses allow a plane to be sampled in physical space with a spatial density which depends on the grid vertex density. This allows the advantages of both the spatial sampling and isosurface algorithms to be realized while avoiding their disadvantages. The following algorithm is an example of such a cutting plane implementation (see also <ref type="figure" target="#fig_4">figure 4</ref></p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>):</head><p>We assume for simplicity that the plane lies entirely within the grid. Starting at a point in space, which may be a corner of the plane, sample the cell volume at that point (by computing the barycentric coordinate at that point). Then use the cube root of the cell volume to determine the initial spatial increment for the construction of the plane. Begin a rectangle strip. Iterate over: 1) Define a rectangle in the plane with sides of length = the current spatial increment. 2) Sample the data at each corner of that rectangle, for example, color mapping the cutting plane. This results in a barycentric coordinate at each corner. 3) Examine the tetrahedron volume at each corner. If the ratio of the current spatial increment to the cube root of any of the volumes is less than a certain threshold, divide the spatial increment by two. Continue dividing until the ratio is less than the threshold. Similarly, if the ratio is above another threshold, double the spatial increment. 4) If the spatial increment has been changed, end the current rectangle strip and start a new one. If the spatial increment has decreased, store the current location and new resolution as start points for additional, higher resolution meshes. 5) Add a new rectangle.</p><p>The spatial increment is halved and doubled (rather than directly scaled by the cube root of the volume) because of the desire that the various adjacent rectangle strips match vertices as much as possible for reasons of graphical quality.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">POINT LOCATION ALGORITHMS</head><p>The key to the high performance of FEL is the implementation of high-performance algorithms which provide a grid cell when given a physical position. This cell is then used to perform an interpolation providing the data value at the specified physical location. This problem is addressed in two ways, depending on whether we have some idea of a nearby cell (local search) or not (global search). Once the cell is found, either the values at the cell vertices may be returned, or the cell may be decomposed into tetrahedra for the computation of a barycentric coordinate. An example of how hexahedral cells are decomposed into tetrahedra for this purpose is given in <ref type="bibr" target="#b8">[9]</ref>.</p><p>While none of the algorithms described in this section are new, the carefully chosen combination we describe provides a new level of performance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Local Searches</head><p>Local searches are relatively straightforward. Given a physical position and a nearby starting vertex, all vertices connected to the start vertex are tested to see if they are closer to the physical position. The closest vertex is chosen, and the process is repeated until no closer vertex is found. Then each cell containing that vertex is then tested to see if the point is contained in the cell. If the cell containing the physical point is found, either the nearest vertex or the cell index is returned, depending on the type of information requested.</p><p>If no cell is found which contains the physical point, there are two possibilities: either the physical point is off the grid entirely or the point is on the grid but, due to grid topology, the local search has walked to a boundary as, for example, in the case of C-grids. To determine which of these cases occurred, a global search is initiated.</p><p>When the initial starting point is close to the desired physical location, as is the case in correctly adapting streamlines, for example, local searches can be extremely fast.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Global Searches</head><p>The naive method of global searching is to examine every vertex of the grid, computing that vertex's distance from the desired physical point, and choosing the closest one. Once the closest vertex is found, the procedure described in the last section is used to determine the enclosing cell. While robust, this method is very slow, particularly in grids which contain several million vertices. Refinements of this method which perform multiple passes, initially testing every nth vertex, then at a higher resolution search around the resulting nearest vertex can fail in various common types of grid topologies such as C-and O-grids.</p><p>FEL provides a high-performance global search through a series of adaptive local searches from a limited number of starting points. We describe the case for structured grids in detail. The algorithm appropriate for other grid types will depend on those grid types. When performing a global search in a structured grid (or a grid zone in the case of multi-zone grids), six candidate starting points for a local search are identified at the centers of the six boundaries of the computational grid (in computational space). The global search then proceeds in several steps:</p><p>1) The distances from these six candidates to the desired physical point are computed, and the closest candidate point is chosen. A local search from this candidate is initiated as described in section 5.1, but rather than testing vertices directly connected to the current vertex, vertices which are stride n vertices away (in computational space) are tested. n is actually a vector, with different values in the i, j, and k directions. We have found that a good starting value for n is one quarter the grid size (in a particular direction). The vertex closest to the physical point is selected and is set as the current vertex. This process is iterated until no closer vertex is found. Then the value of n is halved and the process started again as a local search from the current vertex. This process is iterated until n is 1 in each of the i, j, and k directions. Then the enclosing cell is sought as in the local search described above.</p><p>2) If no enclosing cell is found on the first pass, then local searches with variable stride are initiated from the other 5 candidate starting vertices. The first starting point returning an enclosing cell is considered a success.</p><p>3) This step is optional, as it is can be quite slow: If none of the candidate points returns an enclosing cell, a ray is cast from the physical point along the z axis. Then all external faces of the grid are tested for intersection with this ray. If the number of intersections is even, then the physical point is not on this grid. If the number of intersections is odd, then a point by point search of all vertices in the grid is performed, resulting in a robust determination of the closest vertex from which the enclosing cell may be identified.</p><p>Our experience has been that an enclosing cell is found in the first stage about 92% of the time, while the other 8% are found during the second stage. We have yet to encounter a situation when stage 2 fails while the physical point is in fact on the grid. We allow step 3, however, because we expect that there may still be grid topologies and geometries which will cause stage 1 and 2 to fail. Stage 3 is optional, however, because it makes the search proceed extremely slowly in some cases when the physical point is off the grid, which can be very disconcerting in near-real-time interactive visualization environments. In these types of environments it is preferable to have a system which is fast all the time and right almost all the time.</p><p>Global search performance was measured on two classic curvilinear grids: the NASA Ames blunt fin and space shuttle data sets (both of these are publicly available on the NASA Ames web site -http://www.nas.nasa.gov/NAS/DataSets). The blunt fin grid has 40,960 nodes or 37,479 cells and the shuttle grid has 226,800 nodes or 215,512 cells.</p><p>For each cell, a global search was initiated with the target physical position being the centroid of the cell. The 37,479 global searches in the blunt fin grid took in 5.4 seconds while the 215,512 global searches in the shuttle grid took 105 seconds. This gave an average global search time of 0.00014 seconds, or 6940 searches/ second for the blunt fin, and 0.00049 seconds, or 2052 searches/ second for the shuttle. The search times were slower in the latter because the shuttle has a complex C-grid which caused 6% of the first stage searches to fail. In contrast, all of the first stage searches succeeded in the blunt fin grid. Computations were performed on an SGI Onyx with an R8000 processor.</p><p>The search algorithm described above is for curvilinear structured grids. High-performance search algorithms for unstructured grids are currently under development.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">OTHER FEL UTILITIES</head><p>Not all visualization algorithms can be cast in physical coordinates: an example is the marching cube isosurface algorithm, which examines every cell in a data set. Other algorithms are local in nature, but use nearby vertices. FEL provides two utilities which allow these types of algorithms to be implemented in a grid-independent manner.</p><p>• Vertex Iterator, which is a function called by an application which returns the "next" vertex described by a vert_pos until all vertices have been returned.</p><p>• Cell Iterator, which is a function called by an application which returns the "next" cell described by a vert_pos until all cells have been returned.</p><p>• Nearest Neighbor Vertices, which returns a list of the vertices connected to the current vertex.</p><p>• Nearest Neighbor Cells, which returns a list of the cells connected to the current cell.</p><p>An example of the use of these utilities is a marching cubes algorithm, which would call the cell iterator, and then compute the isosurface polygon appropriate to that cell using an algorithm appropriate to that cell type.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION</head><p>This paper presents a library which allows for the implementation of high performance grid-type independent visualization algorithms. Both structured and unstructured grids have been implemented, testing the grid independence claims. The measured performance of the point location algorithms is extremely high. FEL has been integrated into the virtual windtunnel, an application which demands very high performance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">ACKNOWLEDGMENTS</head><p>The authors wish to thank their colleagues in the Data Analysis Group of the Numerical Aerodynamic Simulation (NAS) Division of NASA Ames Research Center, particularly Eric Barszcz, John West and Sandy Johan. John West gave FEL its name.  volume is below a specified threshold.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 3 Fig. 1</head><label>231</label><figDesc>The grid offset function is used to determine the location in memory of desired data in a data field. The FEL class hierarchy.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>/</head><label></label><figDesc>/ create grid and velocity vector field objects, and // initialize position in physical coordinates grid-&gt;phys_to_bary(phys_pos, last_bary_pos) length = 0; streamline[0] = phys_pos while (length &lt; MAX) { velocity-&gt;get_value(phys_pos, last_bary_pos, vector) streamline[length+1] = streamline[length] + ∆t*vector length += 1; }</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 3</head><label>3</label><figDesc>Barycentric coordinates (p, q, r) are used to interpolate scalar and vector fields. They permit visualization techniques to be written in a grid-independent way.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 4</head><label>4</label><figDesc>Cutting plane algorithm using FEL point location and tetrahedron volume.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head></head><label></label><figDesc>Construct a rectangle strip by incrementingEnd the rectangle strip when the tetrahedron Decrease the spatial increment and start new rectangle strips.Constructed cutting plane with several resolutions. spatially using point location.</figDesc></figure>
+		</body>
+		<back>
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title level="m" type="main">Interactive Numerical Flow Visualization Using Steam Surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">P M</forename><surname>Hultquist</surname></persName>
+		</author>
+		<idno>TR95-014</idno>
+		<imprint>
+			<date type="published" when="1995" />
+		</imprint>
+		<respStmt>
+			<orgName>Department of Computer Science, University of North Carolina at Chapel Hill</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Ph.D. Thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">SuperGlue: A Programming Environment for Scientific Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hultquist</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Raible</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization &apos;92</title>
+		<meeting>IEEE Visualization &apos;92<address><addrLine>Boston, Ma</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1992-10" />
+			<biblScope unit="page" from="243" to="250" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">STREAM 3-D, A Computer Graphics Program for Streamline Visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Eliasson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Oppelstrup</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Rizzi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Engineering Software</title>
+		<imprint>
+			<date type="published" when="1989" />
+			<biblScope unit="volume">11</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">The Virtual Wind Tunnel: An Environment for the Exploration of Three Dimensional Unsteady Flows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Bryson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Levit</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics and Applications</title>
+		<meeting><address><addrLine>San Diego, Ca</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1991-10" />
+		</imprint>
+	</monogr>
+	<note>Proceedings of Visualization &apos;91</note>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Octrees for faster isosurface generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="57" to="62" />
+			<date type="published" when="1990-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">The Visualization Toolkit</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Schroeder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Martin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Lorensen</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996" />
+			<publisher>Prentice Hall</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Octree optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Globus</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of SPIE Conf. on Extracting Meaning From Complex Data: Processing, Display, Interaction II</title>
+		<meeting>of SPIE Conf. on Extracting Meaning From Complex Data: essing, Display, Interaction II<address><addrLine>San Jose, CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="2" to="10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Haimes</surname></persName>
+		</author>
+		<title level="m">pV3: A Distributed System for Large-Scale Unsteady CFD Visualization</title>
+		<meeting><address><addrLine>Reno, NV</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1994-01" />
+		</imprint>
+	</monogr>
+	<note>AIAA Paper 94-0321, 32nd AIAA Aerospace Sciences Meeting and Exhibit</note>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Optimization of Time-Dependent Particle Tracing Using Tetrahedral Decomposition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Kenwright</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Lane</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;95</title>
+		<meeting>Visualization &apos;95</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1995-10" />
+			<biblScope unit="page" from="321" to="328" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Initial User Reaction to the Virtual Windtunnel</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Bryson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Johan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Globus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Meyer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Mcewen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">AIAA 95-0114, 33rd AIAA Aerospace Sciences Meeting and Exhibit</title>
+		<meeting><address><addrLine>Reno, Nevada</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1995-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Marching cubes: a high resolution 3d surface construction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorenson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="page" from="163" to="169" />
+			<date type="published" when="1987-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Isolev: a level surface cutting plane program for cfd data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">D</forename><surname>Kerlick</surname></persName>
+		</author>
+		<idno>RNR-89-006</idno>
+	</analytic>
+	<monogr>
+		<title level="j">NAS Applied Research</title>
+		<imprint>
+			<date type="published" when="1989-06" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

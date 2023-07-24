@@ -1,0 +1,1402 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 https://raw.githubusercontent.com/kermitt2/grobid/master/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">VDL-Surrogate: A View-Dependent Latent-based Model for Parameter Space Exploration of Ensemble Simulations</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName><forename type="first">Neng</forename><surname>Shi</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Jiayi</forename><surname>Xu</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Haoyu</forename><surname>Li</surname></persName>
+						</author>
+						<author>
+							<persName><roleName>Member, IEEE</roleName><forename type="first">Hanqi</forename><surname>Guo</surname></persName>
+						</author>
+						<author>
+							<persName><forename type="first">Jonathan</forename><surname>Woodring</surname></persName>
+						</author>
+						<author>
+							<persName><roleName>Member, IEEE</roleName><forename type="first">Han-Wei</forename><surname>Shen</surname></persName>
+						</author>
+						<title level="a" type="main">VDL-Surrogate: A View-Dependent Latent-based Model for Parameter Space Exploration of Ensemble Simulations</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.7.2" ident="GROBID" when="2023-03-27T09:10+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Parameter space exploration</term>
+					<term>ensemble visualization</term>
+					<term>surrogate modeling</term>
+					<term>view-dependent visualization</term>
+				</keywords>
+			</textClass>
+			<abstract>
+<div xmlns="http://www.tei-c.org/ns/1.0"><p>We propose VDL-Surrogate, a view-dependent neural-network-latent-based surrogate model for parameter space exploration of ensemble simulations that allows high-resolution visualizations and user-specified visual mappings. Surrogate-enabled parameter space exploration allows domain scientists to preview simulation results without having to run a large number of computationally costly simulations. Limited by computational resources, however, existing surrogate models may not produce previews with sufficient resolution for visualization and analysis. To improve the efficient use of computational resources and support high-resolution exploration, we perform ray casting from different viewpoints to collect samples and produce compact latent representations. This latent encoding process reduces the cost of surrogate model training while maintaining the output quality. In the model training stage, we select viewpoints to cover the whole viewing sphere and train corresponding VDL-Surrogate models for the selected viewpoints. In the model inference stage, we predict the latent representations at previously selected viewpoints and decode the latent representations to data space. For any given viewpoint, we make interpolations over decoded data at selected viewpoints and generate visualizations with user-specified visual mappings. We show the effectiveness and efficiency of VDL-Surrogate in cosmological and ocean simulations with quantitative and qualitative evaluations. Source code is publicly available at https://github.com/trainsn/VDL-Surrogate.</p></div>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>In many scientific disciplines such as cosmology and oceanography, scientists perform ensemble simulations to analyze and explore simulation parameters. For example, Nyx <ref type="bibr" target="#b3">[4]</ref> and Model for Prediction Across Scales-Ocean (MPAS-Ocean) <ref type="bibr" target="#b33">[34]</ref>, respectively, are models used for ensemble simulations to simulate large-scale cosmological and ocean phenomena. By feeding different multi-dimensional input parameters, cosmologists and oceanographers can perform many simulations to observe phenomena under different conditions. Scientific visualization techniques help scientists efficiently and intuitively analyze the similarities and differences between ensemble runs and find how different parameter settings influence the simulation outcomes. However, running ensemble simulations with a large number of settings in the simulation parameters is prohibitively expensive and hence impractical under current computing conditions. For example, a model-year of climate simulation may take hours on a supercomputer <ref type="bibr" target="#b31">[32]</ref>.</p><p>One solution to make the simulation parameter space exploration efficient is to train a visualization surrogate to preview simulation outputs. Existing surrogate-model-based parameter space analyses are either data-space (e.g., NNVA <ref type="bibr" target="#b18">[19,</ref><ref type="bibr" target="#b34">35]</ref>) or image-space (e.g., InSituNet <ref type="bibr" target="#b19">[20]</ref>). Neither method can produce satisfactory high-quality preview images, however, for the following reasons. First, existing data-space models predict the simulation output and then visualize the predicted data. Limited by computing resources (e.g., GPU memory) and model efficiency, it is difficult for these surrogate models to produce high-resolution simulation output. Second, the image-space methods directly produce 2D images from the simulation output and use them as the training data for given viewpoints to train the visualization surrogate. After the surrogate models are trained, only images can be generated, and scientists cannot adjust the visual mappings, limiting the opportunity to discover and analyze previously unseen phenomena.</p><p>To address the aforementioned limitations, we propose a novel viewdependent approach to create a visualization surrogate that allows a high-quality preview of simulation output for the purpose of parameter space exploration. The key of our surrogate approach is to exploit viewdependent latent representations encoded from the raw data for training and prediction. First, we explain why a view-dependent strategy is necessary. When an appropriate resolution of visualization images is decided a priori, the visualization surrogate can be trained to produce output with the same image resolution but focus on maintaining the quality of the simulation output along the view direction. This strategy is similar to performing ray casting to visualize very large-scale data sets where the complexity of the underlying algorithm is transformed from O(N 3 ) to O(M 2 × N), where N is the size of data along each dimension, and M is that of the image. When N &gt;&gt; M, there can be significant saving in the visualization algorithm. It is to be noted that the GPU memory constraint still does not allow us to train the surrogate model successfully if we use the view-dependent approach alone based on raw data. Therefore, second, we use latent representations instead of the raw data along the view direction for training and prediction to further improve the model efficiency. Specifically, we train an autoencoder to generate view-dependent latent representations. The latent representation helps reduce the data along the view direction, which in turn allows us to train the surrogate models successfully given limited GPU memory. The latent representation is finally decoded to data space, making the visualization surrogate not constrained by certain visual mappings, i.e., scientists can specify any visual mappings of choice to perform parameter space exploration.</p><p>With the view-dependent latent representation solutions, we propose VDL-Surrogate, a view-dependent neural-network-latent-based surrogate model for parameter space exploration of ensemble simulations. Our workflow consists of three components. The first component is view-dependent latent generation. To ensure good coverage of the domain given the predetermined image resolution, we select three view directions parallel to the three main axes. For a simulation output and a selected viewpoint, we perform ray casting and use a neural-network-based autoencoder called Ray AutoEncoder (RAE) to encode samples along each ray with a latent representation by a new information-driven weighted L 1 loss. We train three corresponding RAEs for the three selected viewpoints, and an RAE is trained given the stored simulation outputs from a few selected simulation runs. For other simulation runs, we use the trained RAE encoder and generate the view-dependent latent representation from the ray samples in situ. The second component is offline training of our simulation surrogate. For a selected viewpoint, given the simulation parameters and viewdependent latent representation pairs, we train a convolutional model called View-Dependent Latent Predictor (VDL-Predictor). The same as RAE, three VDL-Predictors are trained for three selected viewpoints. The third part is post-hoc visualization and exploration. Scientists can use the trained VDL-Predictor to predict the view-dependent latent representations, decode the latent representations by RAE decoder, and perform visualization using user-specified visual mappings.</p><p>In summary, the main contributions of this paper are:</p><p>• We propose a view-dependent latent representation approach to support parameter space exploration of ensemble simulations with high-resolution visualization results and user-specified visual mappings. • We provide a comprehensive study showing the benefits of using view-dependent and latent-based methods on Nyx and MPAS-Ocean ensemble simulations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>In this section, we review related work in parameter space exploration and view-dependent visualization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Parameter Space Exploration</head><p>The existing parameter space exploration work can be divided into two categories. The first category contains traditional methods without surrogate models, and the second is composed of surrogate-modelbased methods.</p><p>Traditional parameter space exploration methods mainly focus on the collected ensemble simulation inputs and output pairs. Visualization researchers usually regard simulation parameters as multidimensional vectors and use techniques designed for high-dimensional data to analyze the parameter space. These techniques contains radial plots <ref type="bibr" target="#b8">[9,</ref><ref type="bibr" target="#b10">11,</ref><ref type="bibr" target="#b11">12]</ref>, glyphs <ref type="bibr" target="#b7">[8]</ref>, scatter plots <ref type="bibr" target="#b22">[23,</ref><ref type="bibr" target="#b28">29,</ref><ref type="bibr" target="#b35">36]</ref>, parallel plots <ref type="bibr" target="#b27">[28,</ref><ref type="bibr" target="#b41">42]</ref>, matrices <ref type="bibr" target="#b32">[33]</ref>, and line charts <ref type="bibr" target="#b6">[7]</ref>. One significant constraint of these techniques is that they cannot explore the input parameters that have not been simulated.</p><p>Surrogate models, including our VDL-Surrogate, are designed for parameter space exploration by predicting simulation outputs from new input parameters. We divide these surrogate models into (1) data-space and (2) image-space methods. First, a data-space method predicts simulation output from unseen input parameters. Different techniques such as machine learning <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b18">19,</ref><ref type="bibr" target="#b34">35]</ref> and Gaussian process <ref type="bibr" target="#b12">[13,</ref><ref type="bibr" target="#b40">41]</ref> are applied for designing surrogate models. For approximating the yeast cell polarization simulation model, Hazarika et al. <ref type="bibr" target="#b18">[19]</ref> designed a multi-layer perceptron as a surrogate model in the NNVA system. For better studying biological systems, Alden et al. <ref type="bibr" target="#b2">[3]</ref> applied different machine learning approaches as surrogate models to avoid exhausting the simulation space and executing repeatedly. When analyzing environmental models, Erdal et al. <ref type="bibr" target="#b12">[13]</ref> employed Gaussian process emulators as surrogate models in a sampling scheme to avoid generating a large number of ensemble members. Due to the computing resource limitation, these works do not focus on large-scale high-resolution simulation data. Shi et al. <ref type="bibr" target="#b34">[35]</ref> proposed GNN-Surrogate as a surrogate model for parameter space exploration of ocean simulations on unstructured grids and used an adaptive network to train the surrogate model for a simulation output with size 10 7 . However, the adaptive-resolution strategy is not generalizable to all the datasets.</p><p>Second, a previous image-space method called InSituNet <ref type="bibr" target="#b19">[20]</ref> visualized the simulation output in situ and generated images from different viewpoints. These images are rendered with several pre-defined visual mappings, which means that after they train the surrogate model, visual mappings cannot be adjusted for finding features of interest. Our surrogate model exploits view-dependent latent representations but is not dependent on pre-defined visual mappings to support high-resolution visualizations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">View-Dependent Visualization</head><p>View-dependent methods reorganize the data samples along the rays. We organize existing related works into two paragraphs: techniques (1) not relevant and (2) relevant to simulation parameter exploration.</p><p>Traditional view-dependent techniques focus on speeding up volume rendering and reducing data size. Mueller et al. <ref type="bibr" target="#b25">[26]</ref> approximated the volume rendering process by slab pre-computing at every sampled viewpoint. Volumetric depth images are pre-computed from selected viewpoints and can be rendered with arbitrary camera configurations with low overhead <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b14">15]</ref>. An image database called "Cinema" was created on a large-scale ocean simulation dataset, and photos were taken from different viewpoints so that oceanographers could visualize the dataset from the images stored <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b1">2,</ref><ref type="bibr" target="#b29">30]</ref>. However, these approaches do not support transfer function exploration, limiting the user's analysis flexibility. Tikhonova et al. <ref type="bibr" target="#b36">[37]</ref><ref type="bibr" target="#b37">[38]</ref><ref type="bibr" target="#b38">[39]</ref> save image slices that can be used when users want to explore new transfer functions. Wang et al. <ref type="bibr" target="#b42">[43,</ref><ref type="bibr" target="#b43">44]</ref> summarized data by exploiting per-ray distributions to enable transfer function exploration.</p><p>To explore the parameter space of ensemble simulations, InSi-tuNet <ref type="bibr" target="#b19">[20]</ref> is an image-based view-dependent method visualizing the simulation outputs from different viewpoints in situ. The major limitation of InSituNet is the inability to control visual mappings after training because their training data depend on pre-defined visual mappings. In our surrogate model, the view-dependent latent representation is visual-mapping-independent, enabling scientists to specify visual mappings for the simulation output preview in post-hoc analysis.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">OVERVIEW</head><p>Our goal is to support parameter space exploration and visualization of ensemble simulations. The parameter space exploration and visualization tasks are achieved with a visualization surrogate model that takes simulation parameters as input. To support simulation output visualization with high-resolution previews and user-specified visual mappings, the surrogate undergoes training and makes predictions based on view-dependent latent representations.</p><p>Figure <ref type="figure">1</ref> shows the workflow to construct VDL-Surrogate. Note that VDL-Surrogate is composed of two major networks: Ray AutoEncoder (RAE) and View-Dependent Latent Predictor (VDL-Predictor), and Figure <ref type="figure">1</ref>(a) shows the training process of these two networks. Before training, we first randomly choose a small number of parameter settings to run the simulations and store the full-resolution simulation outputs to the disk. Considering the GPU memory constraint, in our model training stage, it is challenging to hold the intermediate feature maps of high-resolution data in the GPU memory if we use the raw data for training. Therefore, as illustrated in Figure <ref type="figure">1</ref>(a1), for a saved full-resolution simulation output with size W 0 × H 0 × L 0 , given a viewing direction, we sample the simulation output across the image plane to obtain viewdependent data with size W × H × L 0 according to the desired image resolution chosen for the visualization surrogate via interpolation. Next, with the view-dependent data, starting from each pixel location on the image plane, along the view direction, we cast rays parallel to the view axis, collect samples, and train an RAE (Section 4) to encode a ray to a compact latent representation. Note that we maintain the quality of the simulation output along the view direction, i.e., we keep the length of ray samples at the original resolution L 0 . As shown in Figure <ref type="figure">1</ref>(a2), for other full-resolution simulation outputs, given the selected viewpoint, we sample the simulation output according to the desired image resolution and encode the sampled simulation outputs in situ, in order to generate the view-dependent latent representations that are used for supervising the downstream training. With the pair of simulation parameters and view-dependent latent representations, for the selected viewpoint, we train a convolutional model VDL-Predictor to learn the mapping from the input simulation parameters to view-dependent latent representations (Section 5). As illustrated in Figure <ref type="figure">2</ref>(a), we select three view directions parallel to three main axes and train an RAE and VDL-Predictor for each viewing direction.</p><p>In the inference stage, as illustrated in Figure <ref type="figure">1</ref>(b), for a selected viewpoint, a new simulation parameter is first fed into the corresponding trained VDL-Predictor, which will generate a predicted view-dependent latent representation. Then this output latent representation is decoded by the RAE decoder to produce the view-dependent data for visualization. As shown in Figure <ref type="figure">2</ref>(b), given any viewpoint, the predicted simulation output is obtained from the interpolation of predicted outputs at selected viewpoints by inverse viewpoint distance weighting (Section 6). In summary, VDL-Surrogate neural network consists of two subnetworks: (1) RAE (illustrated in Figure <ref type="figure" target="#fig_1">3</ref>) and ( <ref type="formula">2</ref>) VDL-Predictor (illustrated in Figure <ref type="figure" target="#fig_3">5</ref>), which will be explained in detail as follows.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">VIEW-DEPENDENT LATENT GENERATION</head><p>This section describes how to generate view-dependent latent representations that are later used for the downstream predictor training. This step helps reduce the computation and memory cost of the predictor training. Figure <ref type="figure">1</ref>(a1) illustrates the view-dependent latent representation generation process. Given a selected viewpoint, we sample the simulation output by casting rays parallel to the axis (black line segment) from the image plane perpendicular to the view direction to collect ray samples. Then we train a 1D convolutional autoencoder called Ray AutoEncoder (RAE) to encode and reconstruct the ray samples. We choose 1D convolution instead of simpler design choices such as MLPs because 1D convolutional layers help retain the input ray's sequential (spatial) structure. Therefore, in the following VDL-Predictor, the image-wise ray latent representation also contains the "depth" dimension and is a good prediction target for the 3D convolutional VDL-Predictor.  Figure <ref type="figure" target="#fig_1">3</ref> shows the architecture of RAE, which takes ray samples as input and performs reconstruction. A forward pass in RAE is composed of encoding and decoding. In the encoding stage, a ray with L samples is fed through the encoder residual blocks and a tanh activation to generate a ray latent representation of the size L 0 /16 × t in the range [−1, 1], where t is a hyper-parameter controlling the channel size of the latent representation. The ray latent representation captures the information of samples along the ray, which can be used for supervising the downstream predictor training. In the decoding stage, five decoder residual blocks perform super-resolution and transform the ray latent representation into reconstructed ray samples. We use a constant channel multiplier k r in the RAE structure to control the number of network parameters in the intermediate layers. We apply rectified linear unit (ReLU) <ref type="bibr" target="#b26">[27]</ref> as the activation function in all layers.</p><p>In the encoder residual block, we first feed the feature map into two 1D convolution layers with kernel size 3. Next, we perform average pooling to down-sample the feature map. Finally, the original feature map is added to the output, and the result is sent to the next residual block. The decoder residual blocks are similar to the encoder residual blocks, except we replace average pooling with nearest neighbor upsampling. In RAE, Instance Normalization <ref type="bibr" target="#b39">[40]</ref> is used for improving network convergence speed.</p><p>Inspired by previous information-driven sampling <ref type="bibr" target="#b5">[6]</ref>, we train RAE   We use two additional techniques to improve the training efficiency and stability. First, we train the RAE with mixed precision <ref type="bibr" target="#b23">[24]</ref> which reduces the training time and memory cost with minimal impact. Second, spectral normalization <ref type="bibr" target="#b24">[25]</ref> is applied to stabilize the RAE training.</p><p>After the RAE training finishes, for other simulation runs, for the same viewpoint, after sampling the simulation output according to the desired image resolution, we encode the view-dependent simulation output with the trained RAE encoder in situ to generate compact view-dependent latent representations. The view-dependent latent representations are used for downstream VDL-Predictor training.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">VDL-PREDICTOR</head><p>Given an input simulation parameter setting, we predict the corresponding view-dependent latent representations for different viewpoints. We design a convolutional model called View-Dependent Latent Predictor (VDL-Predictor) for each viewpoint to accomplish this goal.</p><p>Figure <ref type="figure" target="#fig_3">5</ref> shows the architecture of VDL-Predictor, which takes a simulation parameter setting as input and outputs a view-dependent latent representation. There are three steps in a VDL-Predictor forward pass. Our generated view-dependent latent representation is a tensor of the size W × H × L 0 /16 × t, where W × H indicates the visualization image resolution and L 0 /16 × t is the latent representation shape for a single ray. First, we feed the input parameter setting into a fully connected layer to generate a 1D vector of size W /64 × H/64 × L 0 /128 × 16k v , where the hyper-parameter k v is used to control the size of the network and generated vectors, similar to previously introduced k r in RAE. Second, we reshape the vector to a tensor of the size W /64 × H/64 × L 0 /128 × 16k v . Third, we use the subsequent residual blocks to perform super-resolution until reaching the desired resolution. Rectified linear unit (ReLU) is applied as the activation function in all layers except the last output layer. In the last layer, we use the tanh activation function instead to normalize the output values into [−1, 1]. The residual block in VDL-Predictor is similar to the one in the RAE decoder. The difference is that we replace 1D convolution kernels with 3D convolution kernels.</p><p>In the training process, we iteratively update the parameters in VDL-Predictor using gradient descent to minimize the L 1 Loss. The same as RAE training, we apply spectrum normalization <ref type="bibr" target="#b24">[25]</ref> and mixed precision <ref type="bibr" target="#b23">[24]</ref> to improve the VDL-Predictor training stability and efficiency, respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">INFERENCE PROCESS AND SENSITIVITY ANALYSIS</head><p>In the inference stage, we first predict the view-dependent latent representations and decode the latent representations to the data space at the three selected viewpoints. As illustrated in Figure <ref type="figure">2</ref>(b), for a selected viewpoint, we first feed the input parameters into the trained VDL-Predictor and generate the predicted view-dependent latent representation. Second, the predicted view-dependent latent representation is sent to the trained RAE decoder and then decoded back to the data space. The inference process is the same for the other two selected viewpoints.</p><p>Next, to visualize the predicted simulation output for a given parameter setting, our goal is to perform ray casting from any viewpoint to generate the visualization. For an arbitrary viewpoint v, we cast rays to sample the predicted viewpoint-dependent data generated from previously selected viewpoints. In order to make the final visualization more realistic (size varies inversely with distance), we cast rays in the perspective mode. At one ray sample location, we average all the sampled values in different predicted viewpoint-dependent data by inverse viewpoint distance weighting such that the viewpoint-dependent sampled value from a closer viewpoint should contribute more than that from a more distant viewpoint:</p><formula xml:id="formula_0">ŝ = ∑ 3 i=0 ŝi • q i ∑ 3 i=0 q i , (<label>1</label></formula><formula xml:id="formula_1">)</formula><p>where ŝi is a sampled value via trilinear interpolation in the viewpointdependent predicted data at selected viewpoint v i , ŝ is the weighted average of N v sampled values,</p><formula xml:id="formula_2">q i = 1 min(d(v, v i ), d(v, sym(v i ))</formula><p>,</p><formula xml:id="formula_3">and d(v, v i ) is the great-circle distance between viewpoint v and view- point v i , sym(v i ) is the symmetrical viewpoint of v i .</formula><p>Inspired by previous works <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b19">20,</ref><ref type="bibr" target="#b34">35]</ref>, we perform sensitivity analysis on simulation parameters by utilizing the differentiability of both the RAE and VDL-Predictor. Specifically, for one selected viewpoint, we aggregate the predicted view-dependent data to a scalar value by L 1 norm and calculate the derivative of that scalar value to the selected parameter. Three derivatives are calculated from three selected viewpoints. We used the average of three derivatives' absolute values as the indicator for one parameter's sensitivity because it illustrates how the predicted simulation output changes as the input parameter changes. We fix other input simulation parameters during one selected parameter analysis, and a uniform sampling is performed in the selected parameter's value range. For one sampled parameter, we first perform a VDL-Predictor forward pass and RAE decoding, and then a backward propagation is conducted for the sensitivity value. We repeat the process for three trained RAE and VDL-Predictors from three selected viewpoints and compute the average of three absolute derivatives as the final sensitivity value. A line chart is applied for visualizing the list of sensitivity values.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">RESULTS</head><p>VDL-Surrogate is evaluated using two ensemble simulation datasets on cosmology and ocean (Section 7.1) from four perspectives. First, we give implementation details and analyze the performance (Section 7.2). Second, we list the metrics used to evaluate our VDL-Surrogate (Section 7.3). Third, we show the motivation for using view-dependent representations from three viewing directions and give the supporting experiment (Section 7.4). Fourth, we compare VDL-Surrogate with baseline methods (Section 7.5). Fifth, we perform case studies of parameter space exploration and analysis (Section 7.6). Moreover, The ablation studies we perform to show the necessity of different components in our model can be found in the supplementary material.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.1">Ensemble Simulations</head><p>Our proposed method is evaluated on two ensemble simulation datasets: Nyx <ref type="bibr" target="#b3">[4]</ref> and MPAS-Ocean <ref type="bibr" target="#b33">[34]</ref>. The details are shown in Table <ref type="table" target="#tab_3">1</ref> (top) and detailed below. Nyx Nyx is designed for cosmological simulations by Lawrence Berkeley National Laboratory. Following scientists' suggestions, we study three parameters: the total matter density (OmM ∈ [0.12, 0.55]), the total density of baryons (OmB ∈ [0.0215, 0.0235]), and the Hubble constant (h ∈ [0.55, 0.85]). We randomly sampled 130 parameter settings from the parameter space and randomly picked 100 for training and 30 for testing. A 200-timestep cosmological simulation was conducted with each parameter setting, and a volume representing dark matter log density was generated. The volume size is 512 × 512 × 512, which means W 0 = H 0 = L 0 = 512. The three axes of the volume are X-axis, Y -axis, and Z-axis.</p><p>MPAS-Ocean MPAS-Ocean is a simulation of the global ocean system developed by Los Alamos National Laboratory. Following scientists' suggestion, we studied four parameters: the amplitude of the ocean surface wind stress (BwsA ∈ [0.0, 5.0]), the critical bulk Richardson number (used to determine the strength of vertical mixing) (CbrN ∈ [0.25, 1.00]), the magnitude of the Gent McWilliams mesoscale eddy parameterization (GM ∈ [600.0, 1500.0]), and horizontal viscosity (HV ∈ [100.0, 300.0]). One hundred parameter settings were randomly sampled from the parameter space, among which we randomly picked 70 for training and 30 for testing. A 15-model-day ocean simulation was conducted with each parameter setting. Focusing on the eastern equatorial Pacific cold tongue, we extracted a region of interest (ROI) within 160 • W to 80 • E, 26 • S to 26 • N, and sea level to a depth of 200 meters, and generated volumes of size 1536 × 768 × 768. The three axes of the volume are longitude (Θ-axis), latitude (Φ-axis), and depth (D-axis).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.2">Implementation and Performance</head><p>Our proposed method comprises two major components: (1) simulation runs and (2) VDL-Surrogate training and inference. The implementation details and performance analysis are reported below.</p><p>Simulation runs We conducted our simulations on a supercomputer with 648 computation nodes. An Intel Xeon E5-2680 CPU with 28 cores and 128 GB memory is contained in a node. We used 28 and 128 processes for Nyx and MPAS-Ocean simulations, respectively. The simulation running time and output data size are reported in Table <ref type="table" target="#tab_3">1</ref>. Among the 100 and 70 ensemble members in the Nyx and MPAS-Ocean datasets, 16 were selected for the RAE training.</p><p>VDL-Surrogate training and inference As explained in Section 3, VDL-Surrogate is composed of three RAEs and three VDL-Predictors, each pair for one axis. For the Nyx dataset, the three axes are X, Y , Z, and after the view-dependent sampling, a volume with size 384 × 384 × 512 is generated, i.e., W = H = 384. For the MPAS-Ocean dataset, the three axes are Θ, Φ, D, and Table <ref type="table" target="#tab_4">2</ref> provides the size of view-dependent data after performing view-dependent sampling from the three viewing directions. VDL-Surrogate was implemented in PyTorch <ref type="bibr" target="#b30">[31]</ref> The network sizes of RAE and VDL-Predictor can be found in Table <ref type="table" target="#tab_3">1</ref> (top, two rightmost columns). We can see that RAE and VDL-Predictor's size sum is less than 4% of the raw simulation data. The training and inference time of VDL-Surrogate is reported in Table <ref type="table" target="#tab_3">1</ref> (bottom). After RAEs are trained, the RAE encoding process takes around 10s and 26s for the Nyx and MPAS-Ocean datasets, respectively, so it would not significantly impact the simulations. During inference, given a new simulation parameter setting, a VDL-Predictor forward pass and RAE decoding process take around 9s and 21s for the Nyx and MPAS-Ocean datasets, respectively. After the final visualization, the image resolution for Nyx and MPAS-Ocean datasets is 600 × 600 and 800 × 800, respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.3">Evaluation Metrics</head><p>This section shows the data-level and image-level metrics used in our model evaluation.</p><p>Data-level metrics VDL-Surrogate predicts the simulation output so scientists can freely run visualization algorithms of their choice on the output data with desired algorithm parameters. Therefore, the quality of predicted simulation outputs is evaluated at the data level. Peak signal-to-noise ratio (PSNR) and normalized maximum difference (MD) are applied for measuring the grid-level difference and the error bound, respectively. Note that in the following sections, for comparison between VDL-Surrogate and view-independent baseline methods, to perform a fair comparison, we first upsample the predicted view-dependent data back to full resolution via trilinear interpolation.</p><p>Image-level metrics We perform volume rendering from 110 viewpoints with two different transfer functions for Nyx and two for the MPAS-Ocean dataset. We use Hierarchical Equal Area isoLatitude Pixelization (HEALPix) <ref type="bibr" target="#b15">[16]</ref> to uniformly sample 110 viewpoints on the viewing sphere, and the transfer functions used in our experiments are provided in Figure <ref type="figure" target="#fig_4">6(a,b</ref>). Moreover, inspired by previous works <ref type="bibr" target="#b16">[17,</ref><ref type="bibr" target="#b17">18]</ref>, we give difference images to highlight the noticeable pixel differences with ≥ 6.0 in the CIELUV color space). The color map for the difference images is shown in Figure <ref type="figure" target="#fig_4">6(c</ref>). Quantitatively, we apply structural similarity index measure (SSIM) and earth mover's distance (EMD) between color histograms <ref type="bibr" target="#b4">[5]</ref> to evaluate the structural and distributional similarity between two volume rendered images.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.4">Motivation for Multiple View-Dependent Representations</head><p>This section clarifies the motivation for using view-dependent representations from three viewing directions. As mentioned in our workflow,  one VDL-Predictor is trained to predict a view-dependent latent representation reduced in a selected viewing direction. In the inference stage, given the same viewing direction, we first predict the reduced view-dependent latent representation and decode the latent representations to the data space. Because VDL-Predictor is trained based on the latent representations reduced at this selected viewing direction and we need an extra decoding process to predict the samples on the ray along the viewing direction, we do not recommend tiling these ray samples onto the screen. As illustrated in Figure <ref type="figure" target="#fig_6">7</ref>, for the view-dependent data of size W × H × L 0 , where the selected viewing direction is vertical, we prefer rendering from viewpoints close to the previous selected one (like (a)) rather than viewpoints far away (like (b)). We validate our method by evaluations on the MPAS-Ocean dataset. In Table <ref type="table" target="#tab_5">3</ref>, we compare images generated with view-based interpolation and predicted view-dependent data from three viewing directions. The result shows that view-based interpolation increases SSIM under both TF1 and TF2 and decreases EMD under TF2 than using any single view-dependent data. Moreover, since our proposed surrogate utilizes view-dependent representations, it is vital to evaluate the performance of the surrogate with varying viewpoints. Figure <ref type="figure" target="#fig_7">8</ref> and Figure <ref type="figure" target="#fig_8">9</ref> provide predicted final visualization images for the Nyx and MPAS-Ocean datasets with different transfer functions and varying viewpoints, respectively. More results can be found in our accompanying video.</p><formula xml:id="formula_4">W H L 0 W H L 0 (a)<label>(b)</label></formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.5">Comparison with Baseline Approaches</head><p>Comparison with Interpolations First, we compared our surrogate method with two alternative interpolation methods, including inverse distance weighting (IDW) interpolation and radial basis function (RBF) interpolation, to generate ensemble simulation data on MPAS-Ocean. IDW interpolation is one of the most widely used interpolation techniques for scientific data analysis <ref type="bibr" target="#b9">[10]</ref>. It is straightforward to interpret and has low computational cost <ref type="bibr" target="#b21">[22]</ref>. In our experiment, We sampled a number of simulation outputs, denoted as g, from the training dataset with the minimum Manhattan distance to the target test simulation output. We evaluated the number of samples g from 1 to 5 at the data level, and the results are listed in Table <ref type="table" target="#tab_6">4</ref>. We present the results for g = 3 since it obtained interpolation results with the highest PNSR and lowest MD. RBF interpolation is also widely used for scientific applications and is more complicated <ref type="bibr" target="#b44">[45]</ref>. In the experiment, Gaussian distribution is applied as the radial basis function, and backward propagation is used for optimization.</p><p>In Table <ref type="table" target="#tab_7">5</ref>, we quantitatively compared VDL-Surrogate results against IDW and RBF interpolations at the data level (PSNR and MD). We found that our VDL-Surrogate produces higher PSNR than interpolations. VDL-Surrogate does not have a lower normalized maximum difference than interpolations, which can be explained because the loss function used in VDL-Surrogate training does not have a constraint on the error bound. To compare the PSNR variance of predicted simulations from different input simulation parameters, we render box plots, as shown in Figure <ref type="figure" target="#fig_9">10</ref>. Although IDW and RBF interpolation      performed better for some input parameters, they have worse lower quartiles and medians, meaning they are less trustworthy. Table <ref type="table" target="#tab_8">6</ref> gives quantitative comparisons between the visualization images generated by VDL-Surrogate and IDW and RBF interpolations. Overall, VDL-Surrogate does not have higher SSIMs and lower EMDs compared with the simple IDW interpolation. However, from Figure <ref type="figure" target="#fig_10">11</ref>, we found that VDL-Surrogate has lower SSIM and EMD variance of final visualization images from different input simulation parameters than interpolations, which means the predictions from VDL-Surrogate are more stable among different ensemble members. For TF2, from the low minimum SSIM and high maximum EMD, we found that the IDW interpolation does not perform well for some ensemble members. For TF1, the IDW interpolation has extremely high SSIM and low EMD, maybe because TF1 is a high-opacity transfer function and IDW interpolation performs well on the volume surface. Another benefit of using surrogate models is that the prediction only requires trained models smaller than 1GB rather than the 65GB raw simulation outputs.</p><p>Comparison with InSituNet We compared our approach with the state-of-the-art image-based method InSituNet <ref type="bibr" target="#b19">[20]</ref>  method, InSituNet does not support data-level comparison, so it is only used for the comparison of image-based analyses. Note that we need to train multiple InSituNets if we want to apply different visual mappings.</p><p>Table <ref type="table" target="#tab_9">7</ref> shows the image-level quantitative results on both Nyx and MPAS-Ocean datasets. Compared with InSituNet, VDL-Surrogate produces images with higher SSIM For the Nyx data, the images generated by VDL-Surrogate are with higher EMD. We think it is because VDL-Surrogate does not directly predict images, which causes the image color distribution similarity not to be as good as InSituNet. The qualitative comparison between images generated by VDL-Surrogate and InSituNet for the Nyx dataset with ground truth images can be found in Figure <ref type="figure" target="#fig_0">12</ref>. VDL-Surrogate generated predicted images with more accurate details, while InSituNet failed to recover these important details. For example, as shown in the zoom-in patch, VDL-Surrogate correctly predicted the red spot with a high dark matter density, while InSituNet provided a wrong spot (left) or missed it (right). In Figure <ref type="figure" target="#fig_12">13</ref>, we compared the images generated by VDL-Surrogate and InSituNet for the MPAS-Ocean dataset with ground truth images. The first column shows images rendered with a high-opacity transfer function, which helps us analyze the sea level and vertical cross-section ocean temperature. The most important phenomenon in this ocean region is the equatorial cold tongue reflected by the blue stripe on the sea level. Our VDL-Surrogate accurately reflects the temperature, while the image provided by InSituNet is blurry, which cannot give enough details for oceanographers to have an effective preview and a meaningful analysis of the cold tongue. Images in the second column show the effect of blending three different isothermal surfaces. Our VDL-Surrogate gives a high-quality prediction, while the prediction by InSituNet is blurry, and oceanographers cannot know the relationship between the three isothermal surfaces in this region.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.6">Case Study: Parameter Space Exploration</head><p>This section provides two case studies on the Nyx and MPAS-Ocean ensemble simulations, showing that scientists can use our proposed VDL-Surrogate to have an efficient parameter space exploration. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.6.1">Case Study with the Nyx Simulation</head><p>In the first case study, the three simulation parameters (i.e., OmM, OmB, and h) on the Nyx dataset are analyzed. First, we calculate the gradients of the three parameters to the predicted simulation output as the parameters' sensitivity. The results are illustrated in Figure <ref type="figure" target="#fig_14">15</ref>. Considering the four plots' scale, We found that h is the most sensitive among the three simulation parameters, OmM is the second most sensitive, and OmB is the least sensitive. Second, we focused on the most sensitive parameter, h, and analyzed how it influences the density field. We fixed OmM = 0.1375, OmB = 0.0225, and sampled h from the set {0.55, 0.65, 0.75, 0.85}. We provided volume-rendered images with two different functions, as shown in Figure <ref type="figure" target="#fig_13">14</ref>. Scientists can visualize the high-density and low-density regions together with the first transfer function or only look at the high-density region with the second transfer function. From the images, we found that the high-density region becomes smaller as the Hubble Constant h increases. More explorations can be found in our   accompanying video.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7.6.2">Case Study with the MPAS-Ocean Simulation</head><p>Our second case study focuses on the impact of different simulation parameters (i.e., BwsA, CbrN, GM, and HV ) on the MPAS-Ocean simulation. First, to probe the sensitivity of the four parameters, as illustrated in the line graphs in Figure <ref type="figure" target="#fig_4">16</ref>, we calculate the gradients of the parameters to the predicted simulation output. The rank of the variable sensitivity is BwsA &gt; CbrN &gt; GM &gt; HV . Second, we display how the most sensitive simulation parameter, BwsA, influences the ocean temperature. We fixed GM = 900.0, CbrN = 0.625, HV = 200.0, and chose 3 different BwsA values: 0.0, 3.0, and 5.0. To begin with, we picked the first transfer function designed for MPAS-Ocean shown in Figure <ref type="figure" target="#fig_4">6</ref> and selected the top viewpoint to visualize the sea level temperature map. As shown by the top row in Figure <ref type="figure" target="#fig_6">17</ref>, when the amplitude wind stress increases, the blue stripe in the image becomes more evident, meaning there is a stronger equatorial cold tongue in the eastern Pacific. One reason causing the phenomenon is the up-welling of cold subsurface water along the equator. To illustrate that, we used the second transfer function designed for MPAS-Ocean shown in Figure <ref type="figure" target="#fig_4">6</ref> and picked one side viewpoint to visualize three isothermal surfaces. From the bottom row in Figure <ref type="figure" target="#fig_6">17</ref>, we can see that the surfaces have a higher curvature when BwsA increases, which means the colder water up-welling effect is more significant. Please see accompanying video for additional results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">DISCUSSION AND LIMITATIONS</head><p>This section discusses the benefit of our proposed approach compared with another view-dependent surrogate model InSituNet <ref type="bibr" target="#b19">[20]</ref> and discusses the limitations of our approach.</p><p>We demonstrate that our work handles the three limitations mentioned in the InSituNet paper: (1) low resolution of output images;</p><p>(2) low accuracy of output images; (3) poor flexibility when exploring different visual mapping parameters. The key to our success is that VDL-Surrogate only takes simulation parameters as input and outputs the corresponding representation without encoding visual mapping and viewpoint parameters. First, VDL-Surrogate supports resolutions of predicted images to 600 × 600 and 800 × 800, respectively, for the Nyx and MPAS-Ocean datasets, while InSituNet limits the resolutions to only 256 × 256. Moreover, our GPU memory usage is smaller than InSituNet (48GB vs. 320GB). Without encoding viewpoint parameters, the number of training instances is only proportional to the number of ensemble members, not the number of ensemble members times the number of selected viewpoints. Therefore, we do not need to use low resolutions to support large batch sizes when only a limited amount of GPU memory is available. Second, VDL-Surrogate produces results with much higher accuracy than InSituNet, which is validated by our experiments. The key is not letting networks encode viewpoint parameters so as to drastically reduces the variance of the training instances and significantly mitigate the training difficulty. Last, scientists can use their desired visual mappings to perform parameter space exploration, as illustrated in our experiment. We do not try to cover the large joint space of all possible simulation and visualization parameters. Instead, our training goal is to produce representations in the data space, allowing us to apply different visual mappings.</p><p>One limitation of our work is that we only select view directions parallel to the three main axes. Theoretically, we can choose arbitrary viewpoints to perform ray casting and encode samples along the ray. However, if the view direction is not parallel to the main axes, the encoded representation is not in a cuboid. CNNs can not directly handle the representation unless we consider its bounding box, which leads to unnecessary memory waste. In the future, we would like to treat the representation as a graph and use graph neural networks to process it directly.</p><p>Like many other machine learning works, another limitation of our approach is the long offline training time, which is around 50 hours for RAE and VDL-Predictor. In the future, we plan to take advantage of high-performance machine learning techniques and speed up the network training with more GPUs by using the data-parallel technique provided by PyTorch <ref type="bibr" target="#b30">[31]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="9">CONCLUSIONS</head><p>In conclusion, we propose VDL-Surrogate, a view-dependent neuralnetwork-latent-based surrogate model for parameter space exploration of ensemble simulations that allows high-resolution visualizations and user-specified visual mappings. We use view-dependent latent representations to replace the raw data as the input and output of the visualization surrogate to train the surrogate with limited GPU memory. In the inference stage, given a new input simulation parameter, we first predict the latent representation and then decode the representation to data space. Scientists can apply different user-specified visual mappings to obtain different visualization results. We demonstrate the effectiveness and efficiency of VDL-surrogate by comprehensive quantitative and qualitative evaluations on cosmological and ocean ensemble simulation datasets.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 .Fig. 2 .</head><label>12</label><figDesc>Fig. 1. Workflow of our approach. (a) The model training stage. (a1) View-Dependent Latent Generation. Given a selected viewpoint, we sample a simulation output according to the desired image resolution and collect ray samples by ray casting. Next, we train a Ray AntoEncoder (RAE), which takes the ray samples as input, encodes them to compact ray latent representations, and then reconstructs them. (a2) VDL-Predictor Training. For other simulation outputs, given the same selected viewpoint, we perform view-dependent sampling and encode the sampled simulation outputs with the trained RAE encoder in situ. Next, we train a VDL-Predictor, which takes the simulation parameters as input and output predicted view-dependent latent representations. (b) The model inference stage. Given the same selected viewpoint, we feed a new simulation parameter into the corresponding trained VDL-Predictor for a predicted view-dependent latent presentation and decode the latent representation by the trained RAE decoder to data space for visualization.</figDesc><graphic url="image-4.png" coords="3,470.91,73.00,66.38,111.28" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 .</head><label>3</label><figDesc>Fig. 3. The architecture of RAE, whose encoder encodes ray samples to latent representation and decoder decodes the latent representation to reconstructed ray samples. The network is comprised of a series of residual blocks, and a hyper-parameter k r controls the number of network parameters.</figDesc><graphic url="image-18.png" coords="3,431.98,341.70,109.29,70.91" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 4 .</head><label>4</label><figDesc>Fig. 4. Illustration for the design of our information-driven weighted L 1 loss. (a) Histogram showing the frequency of data values. (b) Histogram showing the weights for different data values, which is the inverse of the frequency.</figDesc><graphic url="image-70.png" coords="4,64.12,72.80,231.05,64.05" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 5 .</head><label>5</label><figDesc>Fig. 5. The architecture of VDL-Predictor, which generates a 1D vector given input simulation parameters and maps the vector to an output predicted viewpoint-dependent latent representation. One hyper-parameter k v is used to control the network size. by an information-driven weighted L 1 loss to handle the imbalanced samples in rays. For example, as shown in Figure 4(a), in a Nyx cosmological simulation output, samples with high-density values are few but important. Simply applying L 1 loss would make RAE ignore those samples. To avoid that, we calculate the distribution of samples by a histogram in a training batch and use the inverse of frequency as the weight in the loss function, illustrated in Figure 4(b).We use two additional techniques to improve the training efficiency and stability. First, we train the RAE with mixed precision<ref type="bibr" target="#b23">[24]</ref> which reduces the training time and memory cost with minimal impact. Second, spectral normalization<ref type="bibr" target="#b24">[25]</ref> is applied to stabilize the RAE training.After the RAE training finishes, for other simulation runs, for the same viewpoint, after sampling the simulation output according to the desired image resolution, we encode the view-dependent simulation output with the trained RAE encoder in situ to generate compact view-dependent latent representations. The view-dependent latent representations are used for downstream VDL-Predictor training.</figDesc><graphic url="image-87.png" coords="4,187.10,279.83,104.97,61.62" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 6 .</head><label>6</label><figDesc>Fig. 6. Transfer functions and color map. (a) Transfer functions designed for Nyx. (b) Transfer functions designed for MPAS-Ocean. (c) Color map used for difference images.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head></head><label></label><figDesc>. The training and inferencing of an RAE or a VDL-Predictor were done on an NVIDIA Volta V100 GPU 16GB. Three RAEs or three VDL-Predictors are trained in parallel with three GPUs. During RAE training, we fixed the hyper-parameter k r = 64 and set the batch size to fully utilize the 16GB GPU memory, where k r is the hyper-parameter used for controlling RAE's network size. The hyperparameter t controlling the latent representation's channel size was set to 3. During VDL-Predictor training, we set the batch size to 1 and set different k v for Nyx and MPAS-Ocean to fully use the 16GB GPU memory, where k v is the hyper-parameter used for controlling VDL-Predictor's network size. For both RAE and VDL-Predictor training, Adam is used as the optimizer with β 1 = 0.0 and β 2 = 0.999 [21]. The learning rate of RAE and VDL-Predictor was set to 5 × 10 −5 .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 7 .</head><label>7</label><figDesc>Fig. 7. The motivation for using view-dependent representations from three viewing directions. For the view-dependent data of size W × H × L 0 , where the selected viewing direction is vertical, we prefer rendering from viewpoints close to the previous selected one (like (a)) rather than viewpoints far away (like (b)).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 8 .</head><label>8</label><figDesc>Fig. 8. Predicted final visualization images of the Nyx dataset for different transfer functions and varying viewpoints.</figDesc><graphic url="image-131.png" coords="7,107.76,149.85,63.95,63.83" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 9 .</head><label>9</label><figDesc>Fig. 9. Predicted final visualization images of the MPAS-Ocean dataset for different transfer functions and varying viewpoints.</figDesc><graphic url="image-143.png" coords="7,107.64,318.72,63.95,63.72" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 10 .</head><label>10</label><figDesc>Fig. 10. Box plot comparing PSNR variants of VDL-Surrogate for three view directions, IDW interpolation, and RBF interpolation from different input simulation parameters forf the MPAS-Ocean dataset.</figDesc><graphic url="image-149.png" coords="7,109.98,423.01,139.04,61.95" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 11 .</head><label>11</label><figDesc>Fig. 11. Box plot comparing SSIM and EMD variants of VDL-Surrogate, IDW interpolation, and RBF interpolation from different input simulation parameters for the MPAS-Ocean dataset.</figDesc><graphic url="image-150.png" coords="7,63.97,554.50,132.18,115.48" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Fig. 12 .</head><label>12</label><figDesc>Fig. 12. Comparison of the images generated using VDL-Surrogate and InSituNet for the Nyx dataset with the ground truth images.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Fig. 13 .</head><label>13</label><figDesc>Fig. 13. Comparison of the images generated using VDL-Surrogate and InSituNet for the MPAS-Ocean dataset with the ground truth images.</figDesc><graphic url="image-180.png" coords="8,360.44,264.62,79.25,77.30" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head>Fig. 14 .</head><label>14</label><figDesc>Fig. 14. Case study for the predicted images rendered with two different transfer functions using four different h values.</figDesc><graphic url="image-190.png" coords="8,314.38,618.48,54.21,54.21" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_14"><head>Fig. 15 .</head><label>15</label><figDesc>Fig. 15. The line graph visualization of different simulation parameters' sensitivity for the Nyx dataset.</figDesc><graphic url="image-198.png" coords="9,63.90,158.93,231.27,75.34" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_15"><head>Fig. 16 .Fig. 17 .</head><label>1617</label><figDesc>Fig. 16. The line graph visualization of different simulation parameters' sensitivity for the MPAS-Ocean dataset.</figDesc><graphic url="image-201.png" coords="9,243.28,310.77,51.78,51.34" type="bitmap" /></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 1 .</head><label>1</label><figDesc>Datasets and Performance. k r and k v , respectively, control the size of RAE and VDL-Predictor for datasets with different complexities. t s im, t RAE tr , and t V DLP tr , are timings for running ensemble simulations, training RAE, and training VDL-Predictor, respectively; t RAE ec and t V DLP f p + t RAE dc , respectively, are the timings for an encoding of RAE and a forward pass of VDL-Predictor together with a decoding of RAE.</figDesc><table><row><cell>Simulation</cell><cell>Resolution</cell><cell>Name</cell><cell>P sim</cell><cell>Number</cell><cell>k r</cell><cell>k v</cell><cell>Raw</cell><cell cols="2">Size (GB) RAE VDL-Predictor</cell></row><row><cell>Nyx</cell><cell>512 × 512 × 512</cell><cell cols="2">OmM, OmB, h</cell><cell>130</cell><cell>64</cell><cell>64</cell><cell>65.0</cell><cell>3 × 0.013</cell><cell>3 × 0.66</cell></row><row><cell>MPAS-Ocean</cell><cell>1536 × 768 × 768</cell><cell cols="2">BwsA,CbrN, GM, HV</cell><cell>100</cell><cell>64</cell><cell>24</cell><cell>337.5</cell><cell>3 × 0.013</cell><cell>3 × 0.21</cell></row><row><cell>Simulation</cell><cell>t sim (hr)</cell><cell cols="3">Performance t RAE tr (hr) t V DLP tr (hr)</cell><cell cols="2">t RAE ec (s)</cell><cell></cell><cell cols="2">t V DLP f p + t RAE dc (s)</cell></row><row><cell>Nyx</cell><cell>139.8</cell><cell>24.0</cell><cell></cell><cell>28.7</cell><cell></cell><cell>10.1</cell><cell></cell><cell>9.2</cell></row><row><cell>MPAS-Ocean</cell><cell>82.7</cell><cell>15.9</cell><cell></cell><cell>24.5</cell><cell></cell><cell>26.3</cell><cell></cell><cell>21.0</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 2 .</head><label>2</label><figDesc>The size of view-dependent data after view-dependent sampling from three viewing directions for the MPAS-Ocean dataset.</figDesc><table><row><cell></cell><cell>W</cell><cell>H</cell><cell>L 0</cell></row><row><cell>Θ</cell><cell>384</cell><cell>384</cell><cell>1536</cell></row><row><cell>Φ</cell><cell>384</cell><cell>768</cell><cell>768</cell></row><row><cell>D</cell><cell>768</cell><cell>384</cell><cell>768</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5"><head>Table 3 .</head><label>3</label><figDesc>Quantitative comparison of images generated with view-based interpolation (Interp) and predicted view-dependent data from three viewing directions (VDLΘ, VDLΦ and VDLD) for the MPAS-Ocean dataset.</figDesc><table><row><cell></cell><cell></cell><cell>Interp</cell><cell>VDLΘ</cell><cell>VDLΦ</cell><cell>VDLD</cell></row><row><cell>TF1</cell><cell>SSIM EMD</cell><cell>0.9888 0.0021</cell><cell>0.9853 0.0031</cell><cell>0.9878 0.0030</cell><cell>0.9848 0.0014</cell></row><row><cell>TF2</cell><cell>SSIM EMD</cell><cell>0.9126 0.0012</cell><cell>0.8855 0.0015</cell><cell>0.8917 0.0013</cell><cell>0.9079 0.0013</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6"><head>Table 4 .</head><label>4</label><figDesc>MPAS: quantitative evaluation of the inverse distance weighting interpolation with different number of sampled data instances g.</figDesc><table><row><cell># g</cell><cell>1</cell><cell>2</cell><cell>3</cell><cell>4</cell><cell>5</cell></row><row><cell>PSNR (dB)</cell><cell>38.18</cell><cell>37.87</cell><cell>39.08</cell><cell>38.58</cell><cell>38.63</cell></row><row><cell>MD</cell><cell>0.1847</cell><cell>0.1715</cell><cell>0.1573</cell><cell>0.1626</cell><cell>0.1607</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7"><head>Table 5 .</head><label>5</label><figDesc>Quantitative comparison of the output predicted with VDL-Predictor, IDW interpolation, and RBF interpolation for the MPAS-Ocean dataset.</figDesc><table><row><cell></cell><cell>VDLΘ</cell><cell>VDLΦ</cell><cell>VDLD</cell><cell>IDW</cell><cell>RBF</cell></row><row><cell>PSNR (dB)</cell><cell>42.14</cell><cell>43.20</cell><cell>41.04</cell><cell>39.08</cell><cell>33.49</cell></row><row><cell>MD</cell><cell>0.5044</cell><cell>0.5008</cell><cell>0.6288</cell><cell>0.1573</cell><cell>0.1348</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8"><head>Table 6 .</head><label>6</label><figDesc>Quantitative comparison of images generated with VDL-Surrogate, IDW interpolation, and RBF interpolation for the MPAS-Ocean dataset.</figDesc><table><row><cell></cell><cell></cell><cell>VDLSurro</cell><cell>IDW</cell><cell>RBF</cell></row><row><cell>TF1</cell><cell>SSIM EMD</cell><cell>0.9888 0.0021</cell><cell>0.9959 0.0008</cell><cell>0.9892 0.0037</cell></row><row><cell>TF2</cell><cell>SSIM EMD</cell><cell>0.9126 0.0012</cell><cell>0.9393 0.0012</cell><cell>0.9066 0.0035</cell></row></table></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_9"><head>Table 7 .</head><label>7</label><figDesc>Quantitative comparison of images generated with VDL-Surrogate and InSituNet.</figDesc><table><row><cell>VDLSurro</cell><cell>InSituNet</cell></row></table></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>This work is supported in part by the US Department of Energy SciDAC program DE-SC0021360, National Science Foundation Division of Information and Intelligent Systems IIS-1955764, and National Science Foundation Office of Advanced Cyberinfrastructure OAC-2112606.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">An Image-Based Approach to Extreme Scale in Situ Visualization and Analysis</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Jourdain</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Oleary</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Patchett</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">H</forename><surname>Rogers</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Petersen</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/SC.2014.40</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis</title>
+				<meeting>the International Conference for High Performance Computing, Networking, Storage and Analysis</meeting>
+		<imprint>
+			<date type="published" when="2014-11">Nov 2014</date>
+			<biblScope unit="page" from="424" to="434" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<monogr>
+		<author>
+			<persName><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Jourdain</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>O'leary</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Patchett</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">H</forename><surname>Rogers</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><surname>Fasel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Petersen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Samsel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Boeckel</surname></persName>
+		</author>
+		<title level="m">Proceedings of the International Conference for High Performance Computing, Networking, Storage and Analysis, Visualization &amp; Data Analytics Showcase</title>
+				<meeting>the International Conference for High Performance Computing, Networking, Storage and Analysis, Visualization &amp; Data Analytics Showcase</meeting>
+		<imprint>
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+	<note>Situ MPAS-Ocean Image-Based Visualization</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Using Emulation to Engineer and Understand Simulations of Biological Systems</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Alden</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Cosgrove</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Coles</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Timmis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE/ACM transactions on Computational Biology and Bioinformatics</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="302" to="315" />
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">S</forename><surname>Almgren</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">B</forename><surname>Bell</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">J</forename><surname>Lijewski</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Lukić</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Van Andel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Nyx: A Massively Parallel AMR Code for Computational Cosmology</title>
+				<imprint>
+			<date type="published" when="2013">2013</date>
+			<biblScope unit="volume">765</biblScope>
+			<biblScope unit="page">39</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">A Generative Model for Volume Rendering</title>
+		<author>
+			<persName><forename type="first">M</forename><surname>Berger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><forename type="middle">A</forename><surname>Levine</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="1636" to="1650" />
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">In Situ Data-Driven Adaptive Sampling for Large-Scale Simulation Data Summarization</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Biswas</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Dutta</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Pulido</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Workshop on In Situ Infrastructures for Enabling Extreme-Scale Analysis and Visualization</title>
+				<meeting>the Workshop on In Situ Infrastructures for Enabling Extreme-Scale Analysis and Visualization</meeting>
+		<imprint>
+			<date type="published" when="2018">2018</date>
+			<biblScope unit="page" from="13" to="18" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Visualization of Time-Varying Weather Ensembles across Multiple Resolutions</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Biswas</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="841" to="850" />
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Visual Verification of Space Weather Ensemble Simulations</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Bock</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Pembroke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">L</forename><surname>Mays</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Rastaetter</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Ropinski</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Ynnerman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Scientific Visualization Conference (SciVis)</title>
+				<meeting>IEEE Scientific Visualization Conference (SciVis)</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2015">2015</date>
+			<biblScope unit="page" from="17" to="24" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Result-Driven Exploration of Simulation Parameter Spaces for Visual Effects Design</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Bruckner</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Möller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1468" to="1476" />
+			<date type="published" when="2010">2010</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Estimation of the Spatial Rainfall Distribution Using Inverse Distance Weighting (IDW) in the Middle of Taiwan</title>
+		<author>
+			<persName><forename type="first">F.-W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C.-W</forename><surname>Liu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Paddy and Water Environment</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="209" to="222" />
+			<date type="published" when="2012">2012</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Uncertainty-Aware Multidimensional Ensemble Data Visualization and Exploration</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Mei</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Mercer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Liang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Qu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="1072" to="1086" />
+			<date type="published" when="2015">2015</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Design by Dragging: An Interface for Creative Forward and Inverse Design with Simulation Ensembles</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Coffey</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C.-L</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">G</forename><surname>Erdman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">F</forename><surname>Keefe</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2783" to="2791" />
+			<date type="published" when="2013">2013</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Sampling Behavioral Model Parameters for Ensemble-Based Sensitivity Analysis Using Gaussian Process Emulation and Active Subspaces</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Erdal</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Xiao</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Nowak</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">O</forename><forename type="middle">A</forename><surname>Cirpka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Stochastic Environmental Research and Risk Assessment</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="1813" to="1830" />
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Space-Time Volumetric Depth Images for In-Situ Visualization</title>
+		<author>
+			<persName><forename type="first">O</forename><surname>Fernandes</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Frey</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">2014 IEEE 4th Symposium on Large Data Analysis and Visualization (LDAV)</title>
+				<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2014">2014</date>
+			<biblScope unit="page" from="59" to="65" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Explorable Volumetric Depth Images from Raycasting</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Frey</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Sadlo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">2013 XXVI Conference on Graphics, Patterns and Images</title>
+				<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2013">2013</date>
+			<biblScope unit="page" from="123" to="130" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">HEALPix: A Framework for High-Resolution Discretization and Fast Analysis of Data Distributed on the Sphere</title>
+		<author>
+			<persName><forename type="first">K</forename><forename type="middle">M</forename><surname>Gorski</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Hivon</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">J</forename><surname>Banday</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><forename type="middle">D</forename><surname>Wandelt</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><forename type="middle">K</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Reinecke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Bartelmann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Astrophysical Journal</title>
+		<imprint>
+			<biblScope unit="volume">622</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page">759</biblScope>
+			<date type="published" when="2005">2005</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">TSR-TVD: Temporal Super-Resolution for Time-Varying Data Analysis and Visualization</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Visualization and Computer Graphics</title>
+				<imprint>
+			<date type="published" when="2019">2019</date>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="page" from="205" to="215" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">V2V: A Deep Learning Approach to Variable-to-Variable Selection and Translation for Multivariate Time-Varying Data</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Han</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Zheng</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Xing</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">Z</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><surname>Wang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="1290" to="1300" />
+			<date type="published" when="2020">2020</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">NNVA: Neural Network Assisted Visual Analysis of Yeast Cell Polarization Simulation</title>
+		<author>
+			<persName><forename type="first">S</forename><surname>Hazarika</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Li</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K.-C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C.-S</forename><surname>Chou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="34" to="44" />
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">InSituNet: Deep Image Synthesis for Parameter Space Exploration of Ensemble Simulations</title>
+		<author>
+			<persName><forename type="first">W</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K.-C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Raj</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><forename type="middle">S</forename><surname>Nashed</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Peterka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="23" to="33" />
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Adam: A Method for Stochastic Optimization</title>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">P</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Ba</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. International Conference on Learning Representations</title>
+				<meeting>International Conference on Learning Representations</meeting>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">An Adaptive Inverse-Distance Weighting Spatial Interpolation Technique</title>
+		<author>
+			<persName><forename type="first">G</forename><forename type="middle">Y</forename><surname>Lu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">W</forename><surname>Wong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Geosciences</title>
+		<imprint>
+			<biblScope unit="volume">34</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="1044" to="1055" />
+			<date type="published" when="2008">2008</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Interactive Visual Analysis of Complex Scientific Data as Families of Data Surfaces</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Matkovic</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Gracanin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Klarin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1351" to="1358" />
+			<date type="published" when="2009">2009</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Mixed Precision Training</title>
+		<author>
+			<persName><forename type="first">P</forename><surname>Micikevicius</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Narang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Alben</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Diamos</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Elsen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Garcia</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">B</forename><surname>Ginsburg</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Houston</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">O</forename><surname>Kuchaiev</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Venkatesh</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. International Conference on Learning Representations</title>
+				<meeting>International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Spectral Normalization for Generative Adversarial Networks</title>
+		<author>
+			<persName><forename type="first">T</forename><surname>Miyato</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Kataoka</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Koyama</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Yoshida</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. International Conference on Learning Representations</title>
+				<meeting>International Conference on Learning Representations</meeting>
+		<imprint>
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">IBR-Assisted Volume Rendering</title>
+		<author>
+			<persName><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE Visualization</title>
+				<meeting>IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="1999">1999</date>
+			<biblScope unit="volume">99</biblScope>
+			<biblScope unit="page" from="5" to="8" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Rectified Linear Units Improve Restricted Boltzmann Machines</title>
+		<author>
+			<persName><forename type="first">V</forename><surname>Nair</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><forename type="middle">E</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 27th International Conference on International Conference on Machine Learning</title>
+				<meeting>the 27th International Conference on International Conference on Machine Learning</meeting>
+		<imprint>
+			<date type="published" when="2010">2010</date>
+			<biblScope unit="page" from="807" to="814" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Visual Trends Analysis in Time-Varying ensembles</title>
+		<author>
+			<persName><forename type="first">H</forename><surname>Obermaier</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Bensema</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<biblScope unit="page" from="2331" to="2342" />
+			<date type="published" when="2015">2015</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Drag and Track: A Direct Manipulation Interface for Contextualizing Data Instances within a Continuous Parameter Space</title>
+		<author>
+			<persName><forename type="first">D</forename><surname>Orban</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">F</forename><surname>Keefe</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Biswas</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Rogers</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="256" to="266" />
+			<date type="published" when="2018">2018</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<author>
+			<persName><forename type="first">P</forename><surname>O'leary</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Ahrens</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Jourdain</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Wittenburg</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">H</forename><surname>Rogers</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Petersen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Cinema Image-based In Situ Analysis and Visualization of MPAS-ocean Simulations</title>
+				<imprint>
+			<date type="published" when="2016">2016</date>
+			<biblScope unit="volume">55</biblScope>
+			<biblScope unit="page" from="43" to="48" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">PyTorch: An Imperative Style, High-Performance Deep Learning Library</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Paszke</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><surname>Gross</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">F</forename><surname>Massa</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Lerer</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Bradbury</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Chanan</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><surname>Killeen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Z</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Gimelshein</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><surname>Antiga</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advances in Neural Information Processing Systems</title>
+				<imprint>
+			<date type="published" when="2019">2019</date>
+			<biblScope unit="page" from="8024" to="8035" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">An Evaluation of the Ocean and Sea Ice Climate of E3SM Using MPAS and Interannual CORE-II Forcing</title>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">R</forename><surname>Petersen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><forename type="middle">S</forename><surname>Asay-Davis</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><forename type="middle">S</forename><surname>Berres</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Q</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Feige</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">J</forename><surname>Hoffman</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">W</forename><surname>Jacobsen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">W</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><forename type="middle">E</forename><surname>Maltrud</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">F</forename><surname>Price</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Advances in Modeling Earth Systems</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1438" to="1458" />
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Visual Reconciliation of Alternative Similarity Spaces in Climate Modeling</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Poco</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Dasgupta</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">Y</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">W</forename><surname>Hargrove</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">R</forename><surname>Schwalm</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><forename type="middle">N</forename><surname>Huntzinger</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><surname>Cook</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">E</forename><surname>Bertini</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="1923" to="1932" />
+			<date type="published" when="2014">2014</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<author>
+			<persName><forename type="first">T</forename><surname>Ringler</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Petersen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><forename type="middle">L</forename><surname>Higdon</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Jacobsen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">P</forename><forename type="middle">W</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Maltrud</surname></persName>
+		</author>
+		<title level="m">A Multi-Resolution Approach to Global Ocean Modeling. Ocean Modelling</title>
+				<imprint>
+			<date type="published" when="2013">2013</date>
+			<biblScope unit="volume">69</biblScope>
+			<biblScope unit="page" from="211" to="232" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">GNN-Surrogate: A Hierarchical and Adaptive Graph Neural Network for Parameter Space Exploration of Unstructured-Mesh Ocean Simulations</title>
+		<author>
+			<persName><forename type="first">N</forename><surname>Shi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">W</forename><surname>Wurster</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Guo</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">J</forename><surname>Woodring</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">L</forename><forename type="middle">P</forename><surname>Van Roekel</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">28</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="2301" to="2313" />
+			<date type="published" when="2022">2022</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Interactive Visual Steering of Hierarchical Simulation Ensembles</title>
+		<author>
+			<persName><forename type="first">R</forename><surname>Splechtna</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K</forename><surname>Matković</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">D</forename><surname>Gračanin</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">M</forename><surname>Jelović</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H</forename><surname>Hauser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Conference on Visual Analytics Science and Technology (VAST)</title>
+				<meeting>IEEE Conference on Visual Analytics Science and Technology (VAST)</meeting>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2015">2015</date>
+			<biblScope unit="page" from="89" to="96" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">Visualization by Proxy: A Novel Framework for Deferred Interaction with Volume Data</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Tikhonova</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">D</forename><surname>Correa</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Transactions on Visualization and Computer Graphics</title>
+				<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">An Exploratory Technique for Coherent Visualization of Time-varying Volume Data</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Tikhonova</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">D</forename><surname>Correa</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics Forum</title>
+				<imprint>
+			<publisher>Wiley Online Library</publisher>
+			<date type="published" when="2010">2010</date>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="783" to="792" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Explorable Images for Visualizing Volume Data</title>
+		<author>
+			<persName><forename type="first">A</forename><surname>Tikhonova</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">D</forename><surname>Correa</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Pacific Visualization Symposium</title>
+				<imprint>
+			<date type="published" when="2010">2010. 2010</date>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="page" from="177" to="184" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<monogr>
+		<author>
+			<persName><forename type="first">D</forename><surname>Ulyanov</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">A</forename><surname>Vedaldi</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">V</forename><surname>Lempitsky</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1607.08022</idno>
+		<title level="m">Instance Normalization: The Missing Ingredient for Fast Stylization</title>
+				<imprint>
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">A Comparison of Latin Hypercube and Grid Ensemble Designs for the Multivariate Emulation of an Earth System Model</title>
+		<author>
+			<persName><forename type="first">N</forename><forename type="middle">M</forename><surname>Urban</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T</forename><forename type="middle">E</forename><surname>Fricker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Geosciences</title>
+		<imprint>
+			<biblScope unit="volume">36</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="746" to="755" />
+			<date type="published" when="2010">2010</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">Multi-Resolution Climate Ensemble Parameter Analysis with Nested Parallel Coordinates Plots</title>
+		<author>
+			<persName><forename type="first">J</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">X</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">G</forename><surname>Lin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="81" to="90" />
+			<date type="published" when="2016">2016</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Image and Distribution Based Volume Rendering for Large Data Sets</title>
+		<author>
+			<persName><forename type="first">K.-C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">2018 IEEE Pacific Visualization Symposium</title>
+				<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2018">2018</date>
+			<biblScope unit="page" from="26" to="35" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Ray-Based Exploration of Large Time-Varying Volume Data Using Per-Ray Proxy Distributions</title>
+		<author>
+			<persName><forename type="first">K.-C</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">T.-H</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">N</forename><surname>Shareef</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">H.-W</forename><surname>Shen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">26</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="3299" to="3313" />
+			<date type="published" when="2019">2019</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">ORBIT: Optimization by Radial Basis Function Interpolation in Trust-Regions</title>
+		<author>
+			<persName><forename type="first">S</forename><forename type="middle">M</forename><surname>Wild</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">R</forename><forename type="middle">G</forename><surname>Regis</surname></persName>
+		</author>
+		<author>
+			<persName><forename type="first">C</forename><forename type="middle">A</forename><surname>Shoemaker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal on Scientific Computing</title>
+		<imprint>
+			<biblScope unit="volume">30</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="3197" to="3219" />
+			<date type="published" when="2008">2008</date>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

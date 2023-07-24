@@ -1,0 +1,1438 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">A Visual Analytics Framework for the Detection of Anomalous Call Stack Trees in High Performance Computing Applications</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Cong</forename><surname>Xie</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Wei</forename><surname>Xu</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Klaus</forename><surname>Mueller</surname></persName>
+						</author>
+						<title level="a" type="main">A Visual Analytics Framework for the Detection of Anomalous Call Stack Trees in High Performance Computing Applications</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:12+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Call Stack</term>
+					<term>Performance Visualization</term>
+					<term>Representation Learning</term>
+					<term>Active Learning</term>
+					<term>Anomaly Detection</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Fig. 1. The interface of our system for anomalous call stack tree (CSTree) detection. (a) The scatter plot shows the projection of our stack2vec embeddings of the CSTrees. Each point in the projection represents a CSTree. (b) Summary structures of the top candidate anomalies from (a). (c) The user can investigate the detailed structure and the anomalous subtrees of a CSTree of interest. (d) The level-of-detail timeline visualization of the selected CSTree shows the temporal pattern of the invocations and the communications between the HPC nodes. (e) The user is able to label the CSTrees of interest after exploration to update the anomaly detection model.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>High Performance Computing (HPC) is imperative in many scientific domains. However, the supercomputer resources in use are limited and costly, thus adverse runtime behaviors and latencies can have a large negative impact. For this reason the detection of anomalies <ref type="bibr" target="#b7">[8]</ref> • Cong <ref type="bibr">Xie</ref>  in the parallel program execution is a critical mission. Anomalous function executions are usually identified from the detailed trace events of the HPC cluster. Trace events are sequences of all the activities of function entry, function exit, and message passing in an HPC node during application execution. <ref type="figure" target="#fig_0">Fig. 2 (a)</ref> shows an example sequence of trace events inside one execution of the compute function <ref type="bibr" target="#b41">[42]</ref>  <ref type="bibr" target="#b40">[41]</ref> in an HPC node.</p><p>During their analyses, domain scientists, such as physicists solving complex molecular equations, typically detect the anomalous function executions based on their individual properties, such as execution time and exit timestamps. For example, a very large execution time of an MPI_Wait function may indicate that there is some unexpected communication delay between cluster nodes. That long execution of MPI_Wait is then identified as a candidate anomaly. However, using only the execution properties of each function independently typically fails to identify the real anomaly. Here are several scenarios where this problem occurs:</p><p>• The behavior of a function execution is affected by the children functions. For example, a forward_comm_pair with many MPI_Wait children is supposed to use more time than a forward_comm_pair with only one MPI_Wait child. In this case, the long execution time of forward_comm_pair may not be related to a delay of communication. • Different parents of the same function may lead to different runtime behavior. For example, a MPI_Wait may have a longer duration when it is called by function A than function B. Nevertheless, a long MPI_Wait execution with parent A can still be a normal function and do not represent an anomaly. • The latency of an execution in an HPC node may be related to the context nodes which it communicates with. For example, a function waiting for the response of a very busy HPC node will have a long delay. As the cases given above illustrate, it is insufficient to define anomalous function execution using only the temporal information of the execution without the context. Conversely, the call stack ( <ref type="figure" target="#fig_0">Fig. 2 (b)</ref>) during a function execution records both temporal and call path information of the function execution. Our approach takes advantage of this call stack information and models the comprehensive runtime behavior of an execution using a call stack tree (CSTree) representation ( <ref type="figure" target="#fig_0">Fig. 2 (c)</ref>). Therefore, the anomalous behavior detection can then be formulated as the problem of finding anomalous tree structures in a call stack forest. Take the compute function in <ref type="figure" target="#fig_0">Fig. 2</ref> as an example, our algorithm will return the compute invocations whose CSTrees are the most unexpected among all compute executions in the HPC cluster.</p><p>We propose a visual analytics approach for the detection of the anomalous trees with the user's domain knowledge. First, for the representation and comparison of the CSTrees, we propose stack2vec to convert each CSTree into a feature vector. Second, with this embedding vector in hand, we employ a One-Class Support Vector Machine (OCSVM) <ref type="bibr" target="#b42">[43]</ref> to detect the top candidate anomalies. Finally, to aid a detailed investigation of a candidate, we devise dedicated visualizations of subtrees and timelines in order to show the top subtree features and temporal invocations, respectively. After verification, the user is then able to label the candidates as either normal or abnormal. The labeling information is fed back to refine the OCSVM model.</p><p>The main contributions of our paper are:</p><p>• We formulate the problem of finding anomalous runtime behavior as the detection of anomalous tree structure in a call stack forest, which improves upon the existing performance analysis by utilizing the context of function executions. • We propose stack2vec, which optimizes the graph kernel approach and uses neural networks for the learning of tree representations in a forest.</p><p>• We propose a new visual anomaly detection approach with active learning strategy for finding, verifying and labeling the candidate anomalous CSTrees interactively.</p><p>The remainder of our paper is structured as follows. Section 2 reviews related work. Section 3 defines the problem and gives an overview of our approach. Section 4 introduces our algorithm for vector representation learning of CSTrees. Section 5 describes our visual analytics approach for anomalous CSTree detection with active labeling. Three case studies are used to validate our approach in Section 6. Section 7 ends with conclusions and future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Performance analysis for heavy computation applications usually focuses on the data (e.g., trace events) collected by the instrumentation and measurement tools <ref type="bibr" target="#b1">[2]</ref>   <ref type="bibr" target="#b11">[12]</ref> have been proposed for the visualization, analysis, and diagnosis of these execution data <ref type="bibr" target="#b12">[13]</ref>. Our paper mainly focuses on the anomalous runtime behavior detection, which is one of the most important tasks in performance analysis <ref type="bibr" target="#b21">[22]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Anomalous Behavior Detection in HPC</head><p>The existing anomaly detection approaches deal with different kinds of runtime behaviors that occur in HPC clusters, such as high I/O latency <ref type="bibr" target="#b47">[48]</ref>, large memory utilization <ref type="bibr" target="#b18">[19]</ref>  <ref type="bibr" target="#b48">[49]</ref>, and deadlock <ref type="bibr" target="#b2">[3]</ref>.</p><p>One challenge for the anomaly detection is that most approaches calculate an anomaly score based on the features of an execution, such as time <ref type="bibr" target="#b22">[23]</ref> or memory usage <ref type="bibr" target="#b18">[19]</ref>  <ref type="bibr" target="#b48">[49]</ref>, while the contextual information (e.g., the structure of the program execution) is largely ignored. In contrast, our approach uses the context obtained from the call stacks to identify the potential anomalous executions.</p><p>Another problem is that the unsupervised learning algorithms detect outliers purely based on density <ref type="bibr" target="#b6">[7]</ref> or clusters <ref type="bibr" target="#b19">[20]</ref> in the dataset. However, sometimes a rare execution pattern does not necessarily indicate abnormal behavior. For example, an initialization subroutine is only invoked at the beginning of the program, but it is normal.</p><p>One solution to the second problem is reducing anomaly detection to a classification problem <ref type="bibr" target="#b16">[17]</ref> [15] <ref type="bibr" target="#b4">[5]</ref>, which is able to utilize the labeling information provided by the user. However, the labeled data is usually not sufficient due to the complexity of human-based labeling. Active learning <ref type="bibr" target="#b44">[45]</ref> [1] is a solution that reduces the human effort by choosing maximally informative samples for labeling. Our approach integrates the active learning <ref type="bibr" target="#b44">[45]</ref> [21] strategy with One-Class SVM <ref type="bibr" target="#b42">[43]</ref>, which returns the top anomaly candidates. The user is then asked to inspect, verify, and provide labels for the most critical data instances to refine the model.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Performance Visualization in HPC</head><p>Visualization of the program execution structure <ref type="bibr" target="#b12">[13]</ref>  <ref type="bibr" target="#b21">[22]</ref> is widely used for performance navigation and monitoring tasks <ref type="bibr" target="#b34">[35]</ref>  <ref type="bibr" target="#b52">[53]</ref>. Jumpshot <ref type="bibr" target="#b54">[55]</ref> and Vampir <ref type="bibr" target="#b27">[28]</ref> show the call relations of functions in the trace events with a timeline. Profiling call tree visualizations <ref type="bibr" target="#b31">[32]</ref>  <ref type="bibr" target="#b37">[38]</ref> seek to provide insight about the structure and runtime costs of the function calls. Other visualizations <ref type="bibr" target="#b12">[13]</ref>  <ref type="bibr" target="#b21">[22]</ref> focus on executions and message communications, such as SyncTrace <ref type="bibr" target="#b23">[24]</ref>. While these methods are effective for a human scientist to understand the execution context, it tends to be very time-consuming for the user to search and identify the anomalies manually among the typically large numbers of trace events. To bridge the gap between automatic anomaly detection and call tree visualization, we support a visually-guided training of the anomaly detection model in our structural and temporal visualizations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Graph Structure Embedding</head><p>The major challenge of anomaly detection in a forest of trees lies in how to represent and compare the structural features. Recent research on neural graph learning provides an efficient solution for this problem. Node representations such as DeepWalk <ref type="bibr" target="#b39">[40]</ref> and node2vec <ref type="bibr" target="#b17">[18]</ref> focus on the embedding of a vertex in a single graph. These techniques, however, are unable to represent the structure of a graph. Convolutional neural networks (CNNs) <ref type="bibr">[</ref>  nodes using an analogy to the pixel-level neighborhood of images. However, the labeling of the graphs for the training of the CNNs is usually not available in unsupervised anomaly detection. Another family of techniques for graph isomorphism and similarity analysis is graph kernels, which decompose a graph into substructure features (e.g., random walk <ref type="bibr" target="#b24">[25]</ref> and shortest path <ref type="bibr" target="#b5">[6]</ref>). For example, Weisfeiler-Lehman graph kernels <ref type="bibr" target="#b46">[47]</ref>, extracting non-linear subgraphs, is one of the most popular approaches in practice <ref type="bibr" target="#b53">[54]</ref>. Graph kernels sometimes lead to very high dimensional, sparse and non-smooth representations and thus yield poor generalizations <ref type="bibr" target="#b53">[54]</ref>. Subgraph2vec <ref type="bibr" target="#b35">[36]</ref> and graph2vec <ref type="bibr" target="#b36">[37]</ref> deal with this problem by reducing the substructure features of graph kernels using deep learning approaches <ref type="bibr" target="#b30">[31]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>{T i } {x i }</head><p>To learn the structural features of trees, our stack2vec follows the framework of graph2vec and optimizes the graph kernel computation for our CSTree representation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">PROBLEM DEFINITION AND APPROACH OVERVIEW 3.1 Anomalous Execution Behavior and Call Stack Tree</head><p>Given a critical function A specified by the domain scientists and all of its invoked executions in an HPC cluster, we want to determine which invocations of A indicate anomalous runtime behavior. Here A is usually specified as the main function in each HPC node or a key function (e.g., compute <ref type="bibr" target="#b41">[42]</ref>  <ref type="bibr" target="#b40">[41]</ref>) frequently invoked during the HPC application. From discussions with domain scientists we learned that anomalous behavior is always associated with large execution time (e.g., computation or communication delay) or unusual call path structure (e.g., child functions called in a loop with large counts).</p><p>As mentioned in Section 1, the call stack describes the contextual information of function execution. We represent the structure of an execution of A with a call stack tree (CSTree) T = (V, E, w w w), which is a directed tree with weighted vertices rooted at A <ref type="figure" target="#fig_0">(Fig. 2 (c)</ref>). A vertex v ∈ V represents a function invoked in the call stack and a directed edge e ∈ E shows the call from a parent function to a child function. The vertex weight w(v) is defined as the execution time of its function. With this representation, the anomalous behavior mentioned above can be implied from the structure of the CSTree. For example, a large vertex in a CSTree stands for long execution time of that function. And a vertex with many children of the same function may indicate that the parent function invokes the child function for multiple times in a loop.</p><p>By using all invoked executions of function A in the HPC cluster, a call stack forest can be generated from all its CSTrees. Our problem is then defined as follows: given a forest of CSTrees T = {T i } of A, learn the anomaly labeling l l l of the CSTrees where l i = 1 is normal and l i = −1 is abnormal. The notations are summarized in <ref type="table">Table 1</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Notation</head><p>Description</p><formula xml:id="formula_0">T i = (V, E, w w w)</formula><p>A CSTree of a function execution.</p><p>v ∈ V A vertex, which is a function called during the execution of the root function.</p><p>e ∈ E A directed edge, which is a call from a parent function to a child function.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>S i</head><p>The bag-of-subtrees of</p><formula xml:id="formula_1">T i . s ∈ S i A subtree structure of T i . x x x i The embedding vector of T i . T = {T i }</formula><p>The forest of all CSTrees. l l l</p><p>The anomaly labeling vector of T . <ref type="table">Table 1</ref>. Notations used in our paper.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Visual Analysis Tasks</head><p>Allowing experts to inject domain knowledge can greatly enhance automatic learning algorithms. A good way to do this is via visual interactions. After discussions with our domain users, we identified the following four tasks helpful in this process: T1: Gain an overview of the anomaly distribution. T2: Order the CSTrees to focus on the top anomalies. T3: Examine the detailed invocation structure of a CSTree of interest. T4: Examine the temporal patterns of a CSTree, including the message passings and execution durations.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Approach Overview</head><p>Based on these four essential tasks, our visual analytics approach detects anomalous CSTrees using the following four steps ( <ref type="figure" target="#fig_1">Fig. 3)</ref>:</p><p>Step 1 Generating the call stack forest: Given the trace events measured at the HPC nodes and a function of interest A specified by the user, a call stack forest T = {T i } of A is constructed.</p><p>Step 2 Learning the tree representations: Each CSTree T i is converted into a bag-of-subtree representation S i using optimized Weisfeiler-Lehman graph kernels <ref type="bibr" target="#b46">[47]</ref>. Based on the subtrees, the vector representations {x x x i } for the CSTrees {T i } are learned by doc2vec <ref type="bibr" target="#b30">[31]</ref>. The embeddings encode the structural similarities in a reduced space.</p><p>Step 3 Detecting anomalous CSTrees in the forest: With the vector representations of the CSTrees, a One-Class SVM is used to find the potential (candidate) anomalies after training with normal data.</p><p>Step 4 Visual investigation, verification, and labeling of the candidate anomalies: For the candidate anomalous CSTrees, the user can view their detailed structures, message communications, and top subtree features. Based on the observation, the user labels the candidates either as normal or abnormal based on available domain knowledge. The labels are then used to refine the One-Class SVM model.</p><p>Step 3 and</p><p>Step 4 are performed iteratively until satisfying results are achieved. The user can also return to the previous steps for parameter tuning of the algorithm (e.g., embedding dimension in step 2).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">STACK2VEC: LEARNING REPRESENTATIONS FOR CALL STACK TREES</head><p>Our approach begins with the construction of the call stack forest T = {T i } of the target function A. Each CSTree T i is generated from the entry and exit activities occurring in an invocation of A. These activities are retrieved from the trace events. The message passings during the execution are also saved in the vertices of the sending and receiving functions. They can be provided as supplemental information during the visual analysis (Section 5.3.2). From our collaborating scientists we learn that they are less interested in the execution order of the children functions of A since this order is fixed by the source code design. As a result, the CSTree ignores the order of functions. Still, the user is able to view them in the timeline visualization (Section 5.3.2).</p><p>With the constructed call stack forest in hand, the challenge now is how to compute the structural similarities between different instances of CSTrees <ref type="bibr" target="#b43">[44]</ref> for anomaly detection. In addition, most anomaly detection approaches require the input of fixed length feature vectors, rather than tree structures. As discussed in Section 2.3, graph2vec <ref type="bibr" target="#b36">[37]</ref> is an effective solution which converts a tree structure to a feature vector. It combines two popular graph learning approaches: first representing the structural features of graphs by bag-of-substructures using Weisfeiler-Lehman Kernels <ref type="bibr" target="#b46">[47]</ref>, and then learning the graph embeddings using doc2vec <ref type="bibr" target="#b30">[31]</ref>. In this work, we propose stack2vec that customizes these two stages in graph2vec for the CSTree. Specifically, we optimize the original Weisfeiler-Lehman kernels for computing the bag-of-subtrees representation of our directed tree structures.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Accelerated Weisfeiler-Lehman Algorithm</head><p>The Weisfeiler-Lehman (WL) algorithm <ref type="bibr" target="#b46">[47]</ref> employs an iterative vertex relabeling process to extract substructures from graphs. In order to illustrate the WL algorithm, we use an example CSTree T i rooted at function A in <ref type="figure" target="#fig_3">Fig. 4</ref>. At the beginning, the algorithm assigns an initial label string to each vertex in T i . In our case, the vertex labels are initialized as their function names (see initialization in <ref type="figure" target="#fig_3">Fig. 4 (a)</ref>). In each iteration, the WL algorithm performs two operations on the vertex labels: augmentation and compression. Subtree s:</p><p>Weight w(s):</p><formula xml:id="formula_2">Subtree s:</formula><p>Weight w(s): Label augmentation. The label of v is appended by the labels of its children, resulting in a signature string of v. For example, in the 1st augmentation of <ref type="figure" target="#fig_3">Fig. 4 (a)</ref>, the signature (A,BC) of the root is generated by appending its children B and C.</p><formula xml:id="formula_3">Execution durations of functions in T i (c)</formula><p>The signature string of v represents the local structure of v. For example, the signature (A,BC) generated in the 1st iteration stands for a 1-degree subtree (i.e., subtree with depth of 1) of A. To be more general, the signature in the ith iteration represents an i-degree subtree structure (i.e., subtree with depth of i), since it has explored all descendants whose distances to v are less or equal to i. The detailed structure of the generated subtrees are shown in the middle column of <ref type="figure" target="#fig_3">Fig. 4 (b)</ref>. As a result, the local structures of two vertices are identical if and only if their signatures are the same.</p><p>Label compression. A new signature incurred in this iteration is compressed. For example, a new label F is assigned to the signature (A,BC) in the first iteration in <ref type="figure" target="#fig_3">Fig. 4 (b)</ref>. Therefore, the label F represents the 1-degree subtree structure. The meaning of relabeling a same vertex is to discover its subtrees of different degrees. For example, although A, F, I are all labels of the purple vertex, they stand for 0-degree, 1-degree, and 2-degree substructures rooted at that vertex, respectively (see the middle column in <ref type="figure" target="#fig_3">Fig. 4 (b)</ref>).</p><p>The two steps are repeated until a max iteration count set by the user is reached. By default, our algorithm finds the max depth d of the CSTrees in T and sets the max iteration count to (d − 1) to make sure all the subtree structures in the forest are explored. Finally, all the 0-degree (i.e., a vertex) to (d − 1)-degree subtrees (see the last column in <ref type="figure" target="#fig_3">Fig. 4</ref> (b)) will be produced for the bag-of-subtree representation (Section 4.2). The relabeling process is performed for all the trees in the forest to calculate their bag-of-subtrees.</p><p>To optimize the original WL algorithm for our directed tree structure, we introduce early stopping in the relabeling process (see the vertices in the grayed-out regions in <ref type="figure" target="#fig_3">Fig. 4 (a)</ref>). For a vertex v, if the maximum depth of the subtree rooted at v is h, we will stop updating v after the hth iteration. This is because the (h + 1)th iteration will generate a (h + 1)degree subtree, which does not exists for v. Take a dark green vertex C in <ref type="figure" target="#fig_3">Fig. 4 (a)</ref> as an instance, there are only a 0-degree subtree C and a 1-degree subtree (C,DE) rooted at C. Our algorithm stops updating the label and signature of this vertex after the 1st iteration.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Bag-of-subtrees Representation</head><p>In stack2vec, all the subtrees (see the last column in <ref type="figure" target="#fig_3">Fig. 4 (b)</ref>) generated from the WL relabeling process are inserted into a multiset S i = {s} (see the first table in <ref type="figure" target="#fig_3">Fig. 4 (c)</ref>). Similar to bag-of-words, S i is the bag-of-subtrees representation of a CSTree T i . The subtree "corpus" of the forest T is the collection of all unique subtree structures in all the bag-of-subtrees {S i }.</p><p>To encode the temporal information, we assign the weight w(s) of a subtree s ∈ S i to be the weight w(v) of the subtree root v (i.e., execution time of v). Essentially, the execution of a subtree root covers the executions of all of its descendant functions. Therefore w(s) represents the existence duration of the substructure s in the call stack, as shown in the first table in <ref type="figure" target="#fig_3">Fig. 4 (c)</ref>.</p><p>Since a substructure can occur multiple times in T i , we count the "frequency" of a unique subtree structure in T i by aggregating the subtrees with the same label in S i . For example, the two subtrees of C are aggregated in the second table of <ref type="figure" target="#fig_3">Fig. 4 (c)</ref>. The aggregated weight is the summed weight of the original subtrees. Equivalent to the word frequency in a bag-of-words, the weight of an aggregated subtree s represents the total duration of s in T i .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Learning Tree Embeddings using Skip-Gram Model</head><p>The generated bag-of-subtrees can now be directly used as the input of the anomaly detection. However, as mentioned in Section 2.3, a large amount of subtree structures can make this representation very sparse. In analogy to the neural embedding of documents, stack2vec embeds the CSTrees in T with the same framework as doc2vec <ref type="bibr" target="#b30">[31]</ref>. Each CSTree T i is regarded a document and the subtrees s ∈ S i are the words, whose "frequencies" are the corresponding subtree weights w(s). Stack2vec adopts the unordered version of doc2vec (i.e., Distributed Bag of Words version of Paragraph Vector) since there is no fixed order for the subtrees in S. Similar to the Skip-Gram model of word2vec <ref type="bibr" target="#b33">[34]</ref>, it is a shallow but wide neural network <ref type="figure" target="#fig_4">(Fig. 5)</ref>. The input layer takes one-hot vectors of the CSTrees. For T i , the input vector is (0, ..., 0, 1, 0, ..., 0) T , whose component at i is 1 and the others are 0. The hidden layer consists of linear neurons; the number of the neurons is the dimension of the embedding space, which can be specified by the user. The output is a softmax layer which predicts the probability of each subtree's "frequency" in a CSTree. For example, the input T i is trained with the aggregated weights of subtree A -J <ref type="figure" target="#fig_3">(Fig. 4 (c)</ref>) in the output layer.</p><p>Adaptive Moment Estimation (ADAM) <ref type="bibr" target="#b25">[26]</ref> is employed in stack2vec to train the network with adaptive learning rates. Negative sampling <ref type="bibr" target="#b33">[34]</ref> is used for fast training of stack2vec. After training, the output x x x i from the hidden layer for each CSTree T i is used as its embedding vector, which encodes the structural information of T i .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">VISUAL TRAINING FOR ACTIVE ANOMALY DETECTION</head><p>With the embedding vectors {x x x i } of the CSTrees {T i }, an unsupervised learning algorithm (e.g., Local Outlier Factor <ref type="bibr" target="#b6">[7]</ref>) could be employed to find the outliers. However, the predictive performance of purely unsupervised anomaly detection methods is not always satisfactory <ref type="bibr" target="#b16">[17]</ref>. Anomalous execution patterns cannot be determined only by gauging the density distribution in the embedding space. For example, an initialization subroutine inside a function A (e.g., smalloc of compute for allocating memory) can be rare since it is only invoked in the first execution of A in each HPC node, but it is an expected normal behavior by source code design. Injecting some domain knowledge into the process can help resolve these misconceptions.</p><p>To empower the model to accept additional labels from the user, one solution is to convert it to a semi-supervised binary classifier for normal and abnormal CSTrees <ref type="bibr" target="#b14">[15]</ref>. However, our datasets are extremely unbalanced with just a few anomalies. Furthermore, it is difficult to provide a set of comprehensive abnormal patterns since most of them are unknown to the user. As a result, there will be insufficient negative labeling for the training of the abnormal class.</p><p>Our approach combines both the semi-supervised and the unsupervised learning strategies using a One-Class Support Vector Machine (OCSVM) <ref type="bibr" target="#b42">[43]</ref>. Although being an unsupervised anomaly detection algorithm, OCSVM is adopted due to its capability of utilizing the labeling information to improve the model generation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Anomaly Detection using One-Class Support Vector Machine</head><p>An OCSVM may be viewed as a regular two-class Support Vector Machine where all the training data are assumed to be positive (normal). OCSVM attempts to learn a decision boundary that separates the majority of the data from the origin. The data outside the decision boundary are considered outliers. For example, the dashed circle in <ref type="figure" target="#fig_5">Fig. 6 (a)</ref> approximates the decision boundary for outlier detection in the LAMMPS <ref type="bibr" target="#b41">[42]</ref> [41] dataset (Section 6.1).</p><formula xml:id="formula_4">min w w w,ξ ξ ξ ,ρ 0.5 • w w w 2 − ρ + 1 C n ∑ i=1 u i ξ i s.t. w w w T Φ(x x x i ) − ρ ≥ −ξ i , ξ i ≥ 0<label>(1)</label></formula><p>OCSVM solves the optimization problem given in Eq. 1, where w w w and ρ are parameters of the decision function to be learned. ξ i is the slack variable that allows a point to lie outside the decision boundary. Φ is the kernel function and C is a regularization parameter. The weighted OCSVM <ref type="bibr" target="#b3">[4]</ref> introduces the weight u i for x x x i in Eq. 1. They are initialized as 1 in the model.</p><p>Although OCSVM is not capable to be trained by labeling, our approach utilizes the labels to improve the model though manipulating the weights u u u. On the one hand, if x x x i i i is labeled as negative (abnormal) by the user, the weight u i is set to 0, which is equivalent to removing it from the training set. On the other hand, if x x x i i i is confirmed by the user as positive (normal), we can emphasize it in the model by increasing u i to a larger weight. For example, setting u i to be larger than the estimated number of outliers (e.g., 0.02|T |) makes sure that x x x i will not be regarded an anomaly. By updating it with the labeling, the final OCSVM will learn to model only the normal points. Other points unfamiliar to the OCSVM will be regarded as anomalies.</p><p>For x x x, its decision function value score(x x x) = w w w T Φ(x x x) − ρ can be used as its anomaly score. x x x is abnormal if score(x x x) is negative, otherwise it is normal. To support visual analysis task T1, the scores (b) of all CSTrees are visualized as points in a scatter plot ( <ref type="figure" target="#fig_5">Fig. 6 (a)</ref>).</p><p>Red color indicates a negative score, which denotes points of special interest. Different projection methods such as Multidimensional Scaling (MDS) <ref type="bibr" target="#b29">[30]</ref>, or t-Distributed Stochastic Neighbor Embedding (t-SNE) <ref type="bibr" target="#b32">[33]</ref> can be employed to calculate the point positions. Zooming in/out is allowed in the scatter plot to help the exploration of regions in which points are densely distributed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Active Learning with Interactive Labeling</head><p>For CSTrees, labeling is labor intensive since the user needs to manually examine the structures in full detail. Instead of labeling all CSTrees or randomly labeling a subset of CSTrees, a more efficient labeling strategy is needed to find those samples that help optimize the model. Active learning <ref type="bibr" target="#b44">[45]</ref> provides a solution to focus on the most informative subset of data. For a binary classifier, it asks the user to label the uncertain samples on the decision hyperplane between two classes. Since in our approach the OCSVM has only one positive class, the CSTrees with the most negative anomaly scores can be considered as the "support vectors". They will be presented to the user and visualized in the candidate anomaly list <ref type="figure" target="#fig_5">(Fig. 6 (b)</ref>). The summary structures of these CSTrees are visualized to provide insights into their patterns. To support visual analysis task T2, candidates are ranked according to their anomaly scores. This allows the user to focus on the most anomalous CSTrees in a large dataset. The user can label an interesting CSTree in this list after detailed visualization (Section 5.3).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Visual Investigation and Verification</head><p>For an informed labeling of CSTrees, the user needs to be able to investigate their detailed execution behavior (visual analysis tasks T3 and T4). For this purpose we have devised both a subtree (T3) and a timeline visualization (T4) to support the exploration of the structural and temporal pattern of a selected CSTree, respectively.</p><p>During the labeling, the user can select a CSTree of interest from the scatter plot ( <ref type="figure" target="#fig_5">Fig. 6 (a)</ref>) or the candidate list ( <ref type="figure" target="#fig_5">Fig. 6 (b)</ref>). Further, the user may also explore the average pattern of a group of CSTrees by selecting a region in the scatter plot using a lasso tool (hand drawn region in <ref type="figure" target="#fig_9">Fig. 9 (a)</ref>). The center CSTree of the selection is then visualized.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3.1">Top Subtree Visualization</head><p>For a selected CSTree T , the complete structure is presented (see the left two views of <ref type="figure" target="#fig_7">Fig. 7)</ref>. The area and color of a tree vertex encode the vertex weight and function name, respectively. A force-directed algorithm <ref type="bibr" target="#b13">[14]</ref> is used to make the tree layout compact.  From our case studies we found that users typically determine the reason for a candidate to be an anomaly by searching and identifying the unusual substructures manually. This exploration can be time consuming when the size of the CSTree is large. Extracting and visualizing the top anomalous subtrees can help shorten this time overhead. For this purpose we calculate the importance score of each subtree in T . This score describes the contribution of a subtree for making T anomalous.</p><p>We first compute the importance scores for all of the dimensions in the embedding vector x x x of T , and then translate the scores from the embedding space to the subtree space {s}. A straightforward and fast strategy to calculate the score vector f f f of x x x is to find the differences between x x x and its k-nearest neighbors kNN(x). For each component x ( j) of x x x, its importance score f ( j) is defined as the summed differences to the same component of its neighbors:</p><formula xml:id="formula_5">f ( j) = ∑ y∈kNN(x) |x ( j) − y ( j) |.</formula><p>Therefore, from f f f we can learn which dimensions of x x x are the most different in the neighborhood.</p><p>To convert the importance score in the embedding space to the original subtree importance, we can take advantage of the relation that exists between the embedding x x x and the subtrees {s} in stack2vec <ref type="figure" target="#fig_4">(Fig. 5)</ref>. By inputting f f f to the hidden layer of stack2vec, the importance score vector for the subtrees is given by the output in the last layer.</p><p>With the importance scores of the subtrees calculated, the user can set a score threshold in the visual interface to focus on the top subtrees. These subtrees are shown in the Top Subtree Visualization (see the right views of <ref type="figure" target="#fig_7">Fig. 7 (b)</ref>) to provide insights into the anomalous substructures of the selected CSTree T . Because a substructure may occur in multiple parts of T with different vertex weights, we visualize a subtree with uniform vertex sizes to better focus on its structural pattern.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3.2">Timeline and Message Visualization</head><p>Similar to the visual encodings of Jumpshot <ref type="bibr" target="#b54">[55]</ref> and Vampir <ref type="bibr" target="#b27">[28]</ref>, we show the function invocations and communications within a timeline visualization. The selected CSTree is visualized as a top down stack (e.g., the stack in node#15 in <ref type="figure" target="#fig_8">Fig 8 (a)</ref>) along the time axis. Each invoked function in the CSTree is shown as a rectangle whose horizontal start and end positions encode its entry and exit timestamps in the stack, respectively. The vertical position of the function shows its position in the call stack. For example, in <ref type="figure" target="#fig_8">Fig 8 (a)</ref>, the topmost compute is the root function of the selected stack. The two green functions in the second row are the children functions called by compute.  Because communication latency is a typical factor of performance degradation, messages are visualized as vertical arrowed lines from their sending nodes to the receiving nodes at their timestamps (see black lines between node#15 and context HPC nodes in <ref type="figure" target="#fig_8">Fig. 8 (a)</ref>). To provide communication context, the nodes which communicate with the selected CSTree are visualized as sequences of function executions. For example, node#7 in <ref type="figure" target="#fig_8">Fig. 8 (a)</ref> shows the sequence of functions running in it along the time axis.</p><p>Since the function events may occur very intensely in a small time interval, zooming into an interesting time window can help investigate any detailed activities of the nodes. We provide level-of-detail exploration in the timeline, which allows the user to view the functions and messages in different temporal granularity. For example, <ref type="figure" target="#fig_8">Fig. 8 (c)</ref> shows the zoomed timeline of <ref type="figure" target="#fig_8">Fig. 8 (b)</ref> between 509ms to 519ms.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CASE STUDIES</head><p>We conducted case studies with three scientific collaborators (SC1, SC2 and SC3), all of whom were physicists. SC1 and SC2 were from a team working on the LAMMPS <ref type="bibr" target="#b41">[42]</ref>  <ref type="bibr" target="#b40">[41]</ref> application, which is a parallel molecular dynamics simulator in the HPC cluster. SC3 was interested in the NWCHEM <ref type="bibr" target="#b49">[50]</ref> application, which is another scientific program for molecular simulation. The participants collected the trace events of the HPC cluster via TAU instrumentation <ref type="bibr" target="#b45">[46]</ref>. They wanted to use our system to find anomalous runtime behaviors in the function executions. None of the participants were experts in visualization or machine learning. The summaries of their datasets are shown in <ref type="table" target="#tab_5">Table 2.   Dataset  Case 1 &amp; 2  Case 3  Total number of CSTrees  5, 792  1, 280  Total number of vertices  879, 332  1, 078, 804  Total number of messages  323, 780  646, 683  Number of unique subtrees  (Subtree corpus dimension)</ref> 901 843</p><p>Maximum CSTree depth 5 4 Embedding dimensions 128 128 <ref type="table">Table 2</ref>. Summary of the forests constructed in the cases.</p><p>Before the study, we had a number of thorough discussions with the domain scientists to learn about functions of interest and possible anomalous behavior patterns. Each case study started with a training session to introduce our system. We then asked each participant to use the system for their datasets. Finally, an interview session was conducted to gather evaluations and subjective feedback.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Case Study 1: Investigating Functions with Communication Delays</head><p>SC1 ran LAMMPS on 16 HPC computation nodes which were supported by 16 I/O nodes. He would like to learn about the factors and types of the execution delay. Especially, SC1 was interested in compute, a function for the major computational task with frequent message communications. compute was called 5, 792 times in the HPC cluster ( <ref type="table">Table 2)</ref>. We constructed a forest with each tree representing an invoked execution of compute. The WL labeling extracted 901 unique subtree structures from the forest. We pre-computed the vector representation {x x x i i i } of the CSTrees {T i } using stack2vec with an embedding size of 128. All CSTrees were unlabeled at the start of the analysis. SC1 first trained OCSVM to detect the anomalous CSTrees. The learning results showed that most anomalous candidates were located on the border of the scatter plot distribution <ref type="figure" target="#fig_5">(Fig. 6 (a)</ref>).</p><p>SC1 chose CSTree #4-40 from <ref type="figure" target="#fig_5">Fig. 6 (b)</ref>, which was the first candidate in the list. Here, the code "#4-40" means that it was the #40 invocation of compute in node#4. To compare it with a regular call stack pattern, he also selected a normal CSTree #15-361 in the center of the scatter plot. <ref type="figure" target="#fig_7">Fig. 7 (a)</ref> shows that the sizes of all vertices in #15-361 are small, suggesting short function executions. In contrast, SC1 observed that the vertices of MPI_Wait, MPI_Send, and FLUSH in #4-40 were unusually large (see the left view of <ref type="figure" target="#fig_7">Fig. 7 (b)</ref>). As expected, the corresponding subtrees were identified as anomalous in the Top Subtree Visualization (see the right two windows in <ref type="figure" target="#fig_7">Fig. 7 (b)</ref>).</p><p>To learn about the temporal pattern and message communication, SC1 examined the Timeline Visualizations. He noticed from the time axes that execution of #15-361 ( <ref type="figure" target="#fig_8">Fig. 8 (a)</ref>) took only about 2ms while #4-40 ( <ref type="figure" target="#fig_8">Fig. 8 (b)</ref>) took 20 times longer (about 40ms). #15-361 showed a normal communication pattern, where MPI_Send and MPI_Wait were invoked alternately multiple times (see dark and light orange functions in node#15 in <ref type="figure" target="#fig_8">Fig. 8 (a)</ref>). They sent/received messages (see arrowed lines in <ref type="figure" target="#fig_8">Fig. 8 (a)</ref>) to/from the context nodes with regular and short execution times. While in the timeline of #4-40, SC2 found that there were communication delays of the functions MPI_Wait and MPI_Send (see node#4 of <ref type="figure" target="#fig_8">Fig. 8 (b)</ref>), which made the total execution time of #4-40 much longer than that of #15-361.</p><p>SC1 zoomed into the time window of the first long MPI_Wait function in #4-40, as shown in <ref type="figure" target="#fig_8">Fig. 8 (c)</ref>. From the messages (see highlighted red lines in <ref type="figure" target="#fig_8">Fig. 8 (c)</ref>), he learned that #4-40 sent two messages to node#5 and node#7 around 509ms and then waited for their response in MPI_Wait. However, at that time, node#5 and node#7 were also delayed in their MPI_Irecv and MPI_Wait, respectively. This formed a chain of waiting, which took 10ms until node#5 and node#7 sent messages back to #4-40. SC1 pointed out that this indicated a problem with the scheduling strategy. By exploring the remaining portion of #4-40, SC1 also noticed a long FLUSH (see FLUSH in node#4 in <ref type="figure" target="#fig_8">Fig. 8 (b)</ref>), causing the waiting of node#5 and node#7 consequently.</p><p>Finally, after examination of other candidate CSTrees <ref type="figure" target="#fig_5">(Fig. 6 (b)</ref>), SC1 found that the similar pattern of delay chain also occurred in other nodes around the same time period, such as in #1-40, #2-40, and #12-40. He concluded that he needed to adjust the machine configuration to avoid these types of delay situations in the future. SC1 went on and labeled all those CSTrees as abnormal and exported them for his scheduling strategy analysis. He trained the model again with his labeling and saved the model for future prediction of anomalous executions in LAMMPS applications.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Case Study 2: Finding Potential Cluster Anomalies</head><p>SC2, who was from the same team of SC1, also focused on the compute function in the LAMMPS dataset. He used the OCSVM model from the last study, since it was improved by the labeling of SC1. SC2 focused on collective anomalies. He mentioned that a group of anomalies with similar patterns were likely to be labeled as normal by the automatic algorithm. This was because the OCSVM could only detect an outlier when it had a different pattern with respect to its neighbors.</p><p>At the onset of the exploration, SC2 found that most normal points were projected in the scatter plot center, yielding a display too crowded to observe any distribution patterns. He therefore switched to t-SNE projection <ref type="figure" target="#fig_9">(Fig. 9 (a)</ref>), which reduced the tendency to crowd points together <ref type="bibr" target="#b32">[33]</ref>. He explored the points in a cluster far away from others (see the highlighted points in <ref type="figure" target="#fig_9">Fig. 9 (a)</ref>) and noticed their distinct structural patterns. He selected the cluster using the lasso tool; the center of the selection was shown in the structure and timeline visualizations.</p><p>Different from the structural pattern of a common CSTree (e.g., #15-361 in <ref type="figure" target="#fig_7">Fig. 7 (a)</ref>), the CSTree of the cluster center (see tree #0-161 in <ref type="figure" target="#fig_9">Fig. 9 (b)</ref>) invoked an abundance of tiny ev_tally functions. The Top Subtree Visualization (see the right two views in <ref type="figure" target="#fig_9">Fig. 9</ref> (b)) also indicated that the substructures which contained ev_tally made this CSTree different from others in the forest. After investigating the timeline view ( <ref type="figure" target="#fig_9">Fig. 9 (c)</ref>), SC2 told us that he was confused why there were frequent invocations of ev_tallys after the exit of forward_comm_pair in compute.</p><p>By zooming into the timeline ( <ref type="figure" target="#fig_9">Fig. 9 (d)</ref>), SC2 noticed that ev_tally was also invoked intensively in the context nodes at the same time, as shown in the pink strips in node #1, #3, #4, and #8 in <ref type="figure" target="#fig_9">Fig. 9 (d)</ref>. He mentioned that he was expecting lots of communications between ev_tallys of different HPC nodes. However, he did not observe any message from ev_tallys in the visualization. He suggested that ev_tallys might use other communication means (e.g., shared memory), which was not recorded in the form of trace events.</p><p>After exploring other points in the selected cluster, SC2 found that they had similar patterns with lots of ev_tallys. He labeled all CSTrees in this cluster as anomalies ( <ref type="figure" target="#fig_9">Fig. 9</ref> (e)), since he wanted to export them for further analysis with machine logs and source code. He trained the model again; the updated results showed that all the CSTrees in the selected cluster changed from normal to abnormal.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.3">Case Study 3: Identifying Functions with Unusual Execution Sequences</head><p>SC3 was one of the developers of the NWCHEM application on the HPC cluster. He focused on the MD_NEWTON function for solving Newton's equations of motion <ref type="bibr" target="#b49">[50]</ref>. The application executed in 5 HPC nodes and MD_NEWTON was called 1, 280 times. A forest was constructed in which each CSTree is an execution of MD_NEWTON. We represented each CSTree by a embedding vector of length 128. All CSTrees at the beginning of the study were unlabeled. After training OCSVM with the initial u u u (Eq. 1), the candidates with low anomaly scores were shown as red points in <ref type="figure">Fig. 1 (a)</ref>. SC3 found that the first executions of MD_NEWTON in each HPC node were listed as the top anomaly candidates (see #0-0, #1-0, #2-0, and #3-0 in <ref type="figure">Fig. 1 (b)</ref>). He selected #0-0 for a detailed investigation. From the Top Subtree View <ref type="figure">(Fig. 1 (c)</ref>), SC3 learned that the substructure rooted at the MD_SHAKE function was one major reason for #0-0 being anomalous. In the timeline ( <ref type="figure">Fig. 1 (d)</ref> invoke a sequence of MPI functions for the initialization of the communication between nodes. He expressed that although this behavior was rare, those functions were executed as expected. He labeled #0-0, #1-0, #2-0, and #3-0 as normal ( <ref type="figure">Fig. 1 (e)</ref>), which increased their weights u u u as positive samples in OCSVM model. By training again, SC3 found that the anomaly scores of those CSTrees became positive.  SC3 continued to explore the remaining candidates. He selected #0-192 in <ref type="figure">Fig. 1 (b)</ref>, which was the #192 execution of MD_NEWTON in node#0. The time axis of #0-192 ( <ref type="figure" target="#fig_11">Fig. 10 (b)</ref>) indicated that it took about 170ms, which was 100ms longer than a normal execution (e.g., #0-33 in <ref type="figure" target="#fig_11">Fig. 10 (a)</ref>). He mentioned that MD_NEWTON was expected to invoke MD_FORCES immediately <ref type="figure" target="#fig_11">(Fig. 10 (a)</ref>), while #0-192 called MD_FORCES after waiting about 100ms <ref type="figure" target="#fig_11">(Fig. 10 (b)</ref>).</p><p>After careful investigation, SC3 pointed out that #0-192 also caused a delay of its context executions in node#1, #2, and #3 in <ref type="figure" target="#fig_11">Fig. 10</ref> (b). He pointed that the context HPC nodes were waiting for the simulation result of #0-192, as indicated in the delayed MD_FORCES functions of node#1, #2, and #3 in <ref type="figure" target="#fig_11">Fig. 10 (b)</ref>. He concluded that this indicated a scheduling problem of the application. SC3 labeled them as anomalies and trained OCSVM again. He examined and noticed that other CSTrees with similar patterns turned abnormal after his update. is especially critical for identifying the specific runtime behavior in performance analysis, such as the clustered anomalies in Case 2 and the unusual but normal initialization subroutines in Case 3. For comparison with a supervised model, we also test the SVM, which has a close performance to AL. However, the labeled dataset for SVM training is usually not available in most anomaly detection application.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.4.2">Complexity of Stack2vec</head><p>Since the complexity of our anomaly detection is the same with the original OCSVM, we only discuss stack2vec in this section.</p><p>In our accelerated WL algorithm, a vertex v appears only once in its parent's signature in the label propagation stage, and is visited once more in its label compression stage. As a result, the total complexity for h iterations is linear to the number of vertices in the forest O(h|T ||V |). It is much faster than the original WL algorithm, which has a complexity of O(h|T | 2 |V |) for a forest. In our algorithm, h is set according to the maximum depth of the CSTrees, as mentioned in Section 4.1. Since the call stack depth in parallel computing is limited (e.g., &lt; 20), our algorithm in practice is much faster.</p><p>During our study, we found that the sizes of subtree corpora generated by WL algorithm (see unique subtree number in <ref type="table">Table 2</ref>) were very small compared with the word corpus in a Natural Language Processing (NLP) application. SC1 mentioned that this might be because the CSTrees were generated from the same source code, limiting the diversity of subtree patterns. Due to this reason, the scalability of stack2vec is better than other doc2vec application in NLP. For a small subtree corpus, we can also directly use the bag-of-subtree vector as the input for anomaly detection without neural embedding.</p><p>To save time for interactive exploration and labeling, the WL algorithm and neural tree embedding in stack2vec are pre-computed.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.4.3">Parameter Settings</head><p>Since the subtree corpus is usually not large, stack2vec uses an embedding size of 128, which we found is sufficient for the representation of a CSTree structure. For anomaly detection, we use a radial basis function kernel (Gaussian) in OCSVM. The regularization parameter C in Eq. 1 is regarded as the estimated number of outliers <ref type="bibr" target="#b42">[43]</ref>. Based on the anomaly frequencies we observed in our datasets, we set C = 0.02|T |.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.5">User Feedback</head><p>We evaluated the learning cost and usability of our visual interface both in the training session and in the interview session, respectively.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.5.1">Learning Cost</head><p>In the training session, our instructor gave a 15-minute demo to explain our algorithm and visualizations. Then SC1, SC2 and SC3 practiced our system with the help of the instructor. They were free to stop practicing whenever they felt ready. To evaluate the learning progress, each participant was given a test which consisted of 6 exercises, which tested user understanding of the proposed visualizations. For example, "Find and select the top anomalous CSTree in the candidate list". We observed that all participants practiced for less than 10 minutes. In the tests, the participants were able to respond to all exercises quickly as expected without any help from our instructor. The participants gave an average rating of 4.67 for the learning cost of our system (1 = very hard, 5 = very easy). All of the participants mentioned that the views were easy to follow since the tree and timeline visualizations are commonly-used by the existing performance analysis tools <ref type="bibr" target="#b21">[22]</ref> [13].</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.5.2">Usability</head><p>In the interview session, all participants rated the usefulness of our system at 5 (1 = very useless, 5 = very useful). We then asked them to give detailed evaluations of how our system supported their visual analysis tasks. SC1 mentioned that the tree structure visualization provided him intuitive understanding of the function call paths (T3). He also commented that, "Usually the machine learning process is a black box; it is hard to understand what is learned. But the Top Subtree Visualization allowed me to get insights into what sub-structures make a call stack anomalous". SC2 suggested that our scatter plot allowed him to explore and identify clustered anomalies, which were usually ignored by an automatic outlier detection algorithm (T1). SC3 noted that our system answered why the performance fluctuated in his NWCHEM application. He commented that ranking candidates by anomaly scores enabled him to only focus on the top anomalies among the large number of function executions (T2). He also told us that the timelines allowed him to quickly determine where the latency came from by examining the execution duration and message distribution (T4).</p><p>The participants were also asked to compare our system with their usual tools. All of them indicated that usually they could only select candidate anomalies by their long execution times. Furthermore, they had to manually locate the time window of a candidate in Jumpshot <ref type="bibr" target="#b54">[55]</ref> to visualize the detailed call paths and messages. In contrast, they praised our framework as more efficient in both identifying and understanding the anomalous behaviors since it is based on the CSTree representation. SC3 commented that our learning strategy allowed him to flexibly adapt the model for special behaviors in HPC. He also mentioned that the active labeling saved him a lot of effort, since he only needed to inspect the potential anomalous executions.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.6">Discussion and Generalizability</head><p>Our approach can be modified based on the actual cases for better performance. First, although our CSTree representation ignores the order of the function invocations, it still allows to model the temporal order by adding directed edges between the sibling functions. Second, cluster-based anomalies could be detected by employing a clustering algorithm to supplement the OCSVM. In this case, clusters whose average patterns are unusual would be reported as candidate anomalies.</p><p>We would like to emphasize that our framework is not restricted to call stacks only. Rather, it applies to any application where the data can be represented as a directed tree structure. For example, we might use it for the identification of interesting branched lineages in social or citation networks. Here, each person (paper) is a vertex and each social link (citation) is modeled as a directed edge between the persons (papers) starting at some root person (paper). The weights might be some importance metric defined on each person (paper). Our framework could then identify anomalous (sub)structures that point to interesting personalities or papers and key connections for either.</p><p>Our approach is also able to be extended to cyclic graph structures. In this case, the substructure features can be extracted by the original WL labeling algorithm, which deals with the general graph.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSION</head><p>We described a visual analytics approach for detecting anomalous executions in HPC clusters. For this purpose we created a CSTree representation and devised a stack2vec embedding method to model the runtime behavior. Moreover, we proposed an active labeling strategy that integrates anomaly detection and user input of domain knowledge during the visual analysis.</p><p>For future work, our approach can be integrated with the machine log analysis and source code study for a complete analysis pipeline of the execution scheduling and code design optimization.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 2 .</head><label>2</label><figDesc>, function:compute, timestamp:200, node-id:0 | event:entry, function:reverse_comm_pair, timestamp:210, node-id:0 | | event:entry, function:MPI_Send, timestamp:215, node-id:0 | | | event:send, destination-node:2, message: ... | | event:exit, function:MPI_Send, timestamp:216, node-id:0 | | ... ... | event:exit, function:reverse_comm_pair, timestamp:280, node-id:0 | ... ... event:exit, function:compute, timestamp:400, node-id:(a) Example trace events of a compute execution in an HPC node. (b) The call stack of the execution can be reconstructed from the trace events. (c) The call stack can be represented as a directed tree with vertex weights.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 3 .</head><label>3</label><figDesc>Overview of our approach for anomalous execution detection. (a) The CSTrees are generated from the trace events. (b) Feature vectors are constructed for the CSTrees using stack2vec. (c) The candidate anomalous CSTrees are detected in the forest. (d) The user can investigate the candidates in detailed visualization. Labeling information provided by the user will be fed back to update the anomaly detection model.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 .</head><label>4</label><figDesc>(a) An example of the WL relabeling algorithm for a CSTree T i with 2 iterations. We optimize the original label updating process by early stopping, as shown in the gray backgrounded regions. (b) The table shows the i-degree subtree created in the ith iteration. (c) The final bag-of-subtrees contains all the generated subtrees. After aggregation, the weight of a subtree represents the total duration of its existence in T i .</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 .</head><label>5</label><figDesc>A doc2vec network is adopted for the tree representation learning with an analogy to documents. This model predicts the subtree occurrences in a CSTree. The outputs of the hidden layer are used as the embedding vectors of CSTrees.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 .</head><label>6</label><figDesc>(a) The MDS projection of the embedding vectors {x x x i } of the CSTrees {T i }. A One-Class SVM is employed to calculate the anomaly scores of {x x x i }. We manually draw the dashed circle to illustrate the approximate decision boundary of the One-Class SVM. (b) The candidate anomaly list shows the summary structures of CSTrees with lowest anomaly scores. The user can label each candidate as normal/abnormal using the blue/red button at the top right in each view.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 7 .</head><label>7</label><figDesc>The user can select CSTrees of interest to view their complete structures and important subtrees. (a) Structural pattern of a regular CSTree. There is no significant anomalous subtree. (b) A candidate CSTree with unusual patterns. The subtrees rooted at forward comm pair and MPI Send are the top two substructures that make the CSTree abnormal.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 8 .</head><label>8</label><figDesc>The timeline view shows the call stack in a top-down manner along the time axis. Functions and messages are visualized as rectangles and arrowed lines, respectively. (a) The timeline visualization of the same CSTree inFig. 7 (a). (b) The time series of the anomalous CSTree inFig. 7(b). (c) The user can zoom into a time window to examine the events and messages in more details.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 9 .</head><label>9</label><figDesc>), he zoomed into MD_SHAKE and found that it called lots of different MPI functions, such as MPI_Type_size.After exploring other normal CSTrees in the center of the scatter plot, SC3 found that usually MD_SHAKE had few MPI children functions. He explained that the first execution (#X-0) in each HPC node would Anomalous execution detection of compute in LAMMPS dataset. (a) T-SNE projection of the embedding vectors of the CSTrees. SC2 selected a normal cluster far away from other points. (b) The structure of the cluster center (#0-161) was visualized. The subtrees with ev tally were unexpected structural patterns. (c) The timeline showed that a lot of ev tallys were invoked at the end of compute. (d) SC2 zoomed into the timeline and noticed that there was no message from the ev tallys. (e) Finally, SC2 labeled all the CSTrees in the selected cluster as abnormal.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Fig. 10 .</head><label>10</label><figDesc>(a) A normal timeline of CSTree #33 in node#0. (b) The timeline of CSTree #192 in node#0 suggested the late invocation of MD FORCES. It also caused the latencies of the MD FORCES functions in other nodes.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head></head><label></label><figDesc>and Klaus Mueller are with Department of Computer Science at Stony Brook University. E-mail: {coxie, mueller}@cs.stonybrook.edu. • Wei Xu is with Computational Science Initiative at Brookhaven National Laboratory. E-mail: {xuw}@bnl.gov.</figDesc><table /><note>Manuscript received xx xxx. 201x; accepted xx xxx. 201x. Date of Publication xx xxx. 201x; date of current version xx xxx. 201x. For information on obtaining reprints of this article, please send e-mail to: reprints@ieee.org. Digital Object Identifier: xx.xxxx/TVCG.201x.xxxxxxx</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head></head><label></label><figDesc>27] [39] learn the local structure of graph</figDesc><table><row><cell>...</cell><cell></cell><cell></cell><cell></cell><cell>Interactive Labeling</cell><cell></cell></row><row><cell>compute entry</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>| MPI_Send entry</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>| | ... ...</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>| MPI_Send exit</cell><cell></cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>| ... ... compute exit,</cell><cell>Call Stack Forest</cell><cell>Learning Embeddings of Call Stack Trees</cell><cell>Anomaly Detection</cell><cell>Users</cell><cell>Timeline and Subtree Visualization</cell></row><row><cell>Trace Events of an Interesting Function</cell><cell>(a)</cell><cell>(b)</cell><cell>(c)</cell><cell>Detailed Investigation and Verification</cell><cell>(d)</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5"><head>Table 3 .</head><label>3</label><figDesc>Comparison of areas under curves of both ROC and PR for different representation approaches and anomaly detection strategies.</figDesc><table><row><cell>Methods</cell><cell>Case 1 &amp; 2 ROC PR</cell><cell>Case 3 ROC PR</cell></row><row><cell>Time+LOF</cell><cell cols="2">0.970 0.792 0.919 0.575</cell></row><row><cell>Stack2vec+LOF</cell><cell cols="2">0.976 0.854 0.959 0.643</cell></row><row><cell>Time+OCSVM</cell><cell cols="2">0.958 0.760 0.919 0.557</cell></row><row><cell cols="3">Stack2vec+OCSVM 0.968 0.808 0.955 0.612</cell></row><row><cell>Stack2vec+SVM</cell><cell cols="2">0.994 0.921 0.990 0.716</cell></row><row><cell>Stack2vec+AL</cell><cell cols="2">0.993 0.909 0.990 0.732</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>We thank Shinjae Yoo, Wen Zhong and Jianing Yan for helpful discussions. This research was partially supported by NSF grant IIS 1527200, BNL LDRD grant 16-041 and 18-009, ECP CODAR project 17-SC-20-SC, and the MSIP (Ministry of Science, ICT and Future Planning), Korea, under "IT Consilience Creative Program (ITCCP)" supervised by NIPA.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Outlier detection by active learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Abe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zadrozny</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Langford</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 12th ACM SIGKDD</title>
+		<meeting>the 12th ACM SIGKDD</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="504" to="509" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Hpctoolkit: Tools for performance analysis of optimized parallel programs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Adhianto</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Concurrency and Computation: Practice and Experience</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="685" to="701" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Stack trace analysis for large scale debugging</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">C</forename><surname>Arnold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">H</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">R</forename><surname>De Supinski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">L</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">P</forename><surname>Miller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schulz</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IPDPS 2007. IEEE International</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="1" to="10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Soft clustering using weighted one-class support vector machines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bicego</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Figueiredo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Pattern Recognition</title>
+		<imprint>
+			<biblScope unit="volume">42</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="27" to="32" />
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Semi-supervised novelty detection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Blanchard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Lee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Scott</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="page" from="2973" to="3009" />
+			<date type="published" when="2010-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Shortest-path kernels on graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">M</forename><surname>Borgwardt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Kriegel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE ICDM</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2005" />
+			<biblScope unit="page">8</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Lof: identifying density-based local outliers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">M</forename><surname>Breunig</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H.-P</forename><surname>Kriegel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">T</forename><surname>Ng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Sander</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGMOD</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="93" to="104" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Anomaly detection: A survey</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Chandola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Banerjee</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Kumar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM computing surveys (CSUR)</title>
+		<imprint>
+			<biblScope unit="volume">41</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page">15</biblScope>
+			<date type="published" when="2009" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Relationlines: Visual reasoning of egocentric relations from heterogeneous urban data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Xia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Wang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Gu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Intelligent Systems Technology</title>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Improving the fidelity of contextual data layouts using a generalized barycentric coordinates framework</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization Symposium (PacificVis), 2015 IEEE Pacific</title>
+		<imprint>
+			<publisher>IEEE</publisher>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="295" to="302" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">The data context map: Fusing data and attributes into a unified display</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="121" to="130" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Colormapnd: A data-driven approach and tool for mapping multivariate data to color</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<idno type="DOI">10.1109/TVCG.2018.2808489</idno>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE TVCG</title>
+		<imprint>
+			<biblScope unit="page" from="1" to="1" />
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Multi-scale navigation of large trace data: A survey</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Ezzati-Jivan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">R</forename><surname>Dagenais</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Concurrency and Computation: Practice and Experience</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">10</biblScope>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Graph drawing by force-directed placement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">M J</forename><surname>Fruchterman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">M</forename><surname>Reingold</surname></persName>
+		</author>
+		<idno>doi: 10. 1002/spe.4380211102</idno>
+	</analytic>
+	<monogr>
+		<title level="j">Softw. Pract. Exper</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">11</biblScope>
+			<biblScope unit="page" from="1129" to="1164" />
+			<date type="published" when="1991-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Semi-supervised outlier detection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Gao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Cheng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P.-N</forename><surname>Tan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 2006 ACM symposium on Applied computing</title>
+		<meeting>the 2006 ACM symposium on Applied computing</meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="635" to="636" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">The scalasca performance toolset architecture</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Geimer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Wolf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">J</forename><surname>Wylie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Ábrahám</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Becker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Mohr</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Concurrency and Computation: Practice and Experience</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="702" to="719" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Toward supervised anomaly detection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Görnitz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">M</forename><surname>Kloft</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Rieck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Brefeld</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Artificial Intelligence Research</title>
+		<imprint>
+			<date type="published" when="2013" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">node2vec: Scalable feature learning for networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Grover</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Leskovec</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM SIGKDD</title>
+		<meeting>ACM SIGKDD</meeting>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="855" to="864" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Anomaly detection in large-scale coalition clusters for dependability assurance</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Guan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Smith</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Fu</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE High Performance Computing (HiPC)</title>
+		<meeting>IEEE High Performance Computing (HiPC)</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="1" to="10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Discovering cluster-based local outliers</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>He</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Deng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Pattern Recognition Letters</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="1641" to="1650" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Visual classifier training for text document retrieval</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Heimerl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Koch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Bosch</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">18</biblScope>
+			<biblScope unit="issue">12</biblScope>
+			<biblScope unit="page" from="2839" to="2848" />
+			<date type="published" when="2012" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">State of the art of performance visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Isaacs</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Giménez</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Jusufi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Gamblin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bhatele</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schulz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P.-T</forename><surname>Bremer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. EuroVis</title>
+		<meeting>EuroVis</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Anomaly detection for visual analytics of power consumption data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Janetzko</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Stoffel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Mittelstädt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">A</forename><surname>Keim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Graphics</title>
+		<imprint>
+			<biblScope unit="volume">38</biblScope>
+			<biblScope unit="page" from="27" to="37" />
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Synctrace: Visual thread-interplay analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Karran</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Trumper</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dollner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Working Conf. on Software Visualization (VISSOFT)</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="1" to="10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Marginalized kernels between labeled graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Kashima</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Tsuda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Inokuchi</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Intern. Conf. on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="321" to="328" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Adam: A method for stochastic optimization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">P</forename><surname>Kingma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ba</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1412.6980</idno>
+		<imprint>
+			<date type="published" when="2014" />
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Semi-supervised classification with graph convolutional networks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">N</forename><surname>Kipf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Welling</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1609.02907</idno>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">The vampir performance analysis tool-set</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Knüpfer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Brunst</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Doleschal</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Jurenz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Lieber</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Mickler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">S</forename><surname>Müller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Nagel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Tools for High Performance Computing</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2008" />
+			<biblScope unit="page" from="139" to="155" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Score-p: A joint performance measurement run-time infrastructure for periscope, scalasca, tau, and vampir</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Knüpfer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Tools for High Performance Computing</title>
+		<imprint>
+			<publisher>Springer</publisher>
+			<date type="published" when="2011" />
+			<biblScope unit="page" from="79" to="91" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">Multidimensional scaling by optimizing goodness of fit to a nonmetric hypothesis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">B</forename></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Psychometrika</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="27" />
+			<date type="published" when="1964" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Distributed representations of sentences and documents</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Le</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Intern. Conf. on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="1188" to="1196" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Towards anomaly comprehension: using structural compression to navigate profiling call-trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Lin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Taïani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">C</forename><surname>Ormerod</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">J</forename><surname>Ball</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM Symp. on Software visualization</title>
+		<meeting>ACM Symp. on Software visualization</meeting>
+		<imprint>
+			<date type="published" when="2010" />
+			<biblScope unit="page" from="103" to="112" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Visualizing data using t-sne</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><forename type="middle">V D</forename><surname>Maaten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Hinton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of machine learning research</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="2579" to="2605" />
+			<date type="published" when="2008-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">Distributed representations of words and phrases and their compositionality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Mikolov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Sutskever</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">S</forename><surname>Corrado</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Dean</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. NIPS</title>
+		<meeting>NIPS</meeting>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="3111" to="3119" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Visual analysis of cloud computing performance using behavioral lines</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Muelder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Zhu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="1694" to="1704" />
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Narayanan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chandramohan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Saminathan</surname></persName>
+		</author>
+		<idno type="arXiv">arXiv:1606.08928</idno>
+		<title level="m">subgraph2vec: Learning distributed representations of rooted sub-graphs from large graphs</title>
+		<imprint>
+			<date type="published" when="2016" />
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<monogr>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Narayanan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chandramohan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Venkatesan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Liu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename></persName>
+		</author>
+		<idno type="arXiv">arXiv:1707.05005</idno>
+		<title level="m">graph2vec: Learning distributed representations of graphs</title>
+		<imprint>
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+	<note type="report_type">arXiv preprint</note>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Vipact: a visualization interface for analyzing calling context trees</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">T</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Wei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Bhatele</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Gamblin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Boehme</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Schulz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P.-T</forename><surname>Bremer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Workshop on Visual Performance Analysis</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="25" to="28" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Learning convolutional neural networks for graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Niepert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Ahmed</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Kutzkov</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Intern. Conf. on Machine Learning</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="2014" to="2023" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Deepwalk: Online learning of social representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Perozzi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Al-Rfou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Skiena</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc ACM SIGKDD</title>
+		<meeting>ACM SIGKDD</meeting>
+		<imprint>
+			<date type="published" when="2014" />
+			<biblScope unit="page" from="701" to="710" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">Fast parallel algorithms for short-range molecular dynamics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Plimpton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of computational physics</title>
+		<imprint>
+			<biblScope unit="volume">117</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="1" to="19" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<monogr>
+		<title level="m" type="main">Large-scale atomic/molecular massively parallel simulator</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Plimpton</surname></persName>
+		</author>
+		<ptr target="https://github.com/CFDEMproject/LAMMPS" />
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">Support vector method for novelty detection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Schölkopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Williamson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Smola</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Shawe-Taylor</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Platt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">NIPS</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="582" to="588" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Graph isomorphism is in the low hierarchy</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Schöning</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Computer and System Sciences</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="312" to="323" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<monogr>
+		<title level="m" type="main">Active learning literature survey</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Settles</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">The tau parallel performance system</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">S</forename><surname>Shende</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">D</forename><surname>Malony</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Int. J. High Perform. Comput. Appl</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="287" to="311" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Weisfeiler-lehman graph kernels</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Shervashidze</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Schweitzer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">J</forename><surname>Leeuwen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mehlhorn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">M</forename><surname>Borgwardt</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Journal of Machine Learning Research</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="2539" to="2561" />
+			<date type="published" when="2011-09" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">A visual network analysis method for large-scale parallel i/o systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Sigovan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Muelder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Cope</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Iskra</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Ross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE IPDPS</title>
+		<imprint>
+			<date type="published" when="2013" />
+			<biblScope unit="page" from="308" to="319" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">Diagnosing performance variations in hpc applications using machine learning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Tuncer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Supercomputing</title>
+		<meeting>Supercomputing</meeting>
+		<imprint>
+			<date type="published" when="2017" />
+			<biblScope unit="page" from="355" to="373" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">Nwchem: a comprehensive and scalable open-source solution for large scale molecular simulations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Valiev</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Physics Communications</title>
+		<imprint>
+			<biblScope unit="volume">181</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="1477" to="1489" />
+			<date type="published" when="2010" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Dimscanner: A relation-based visual exploration approach towards data dimension inspection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Xia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Hou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Hu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebertk</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE VAST</title>
+		<imprint>
+			<date type="published" when="2016" />
+			<biblScope unit="page" from="81" to="90" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b51">
+	<monogr>
+		<title level="m" type="main">Performance visualization for tau instrumented scientific workflows</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Xie</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Ha</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Huck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Shende</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Van Dam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">K</forename><surname>Van Dam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2018" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b52">
+	<analytic>
+		<title level="a" type="main">Vidx: Visual diagnostics of assembly line performance in smart factories</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Xu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Mei</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Ren</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="291" to="300" />
+			<date type="published" when="2017" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b53">
+	<analytic>
+		<title level="a" type="main">Deep graph kernels</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Yanardag</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Vishwanathan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM SIGKDD</title>
+		<meeting>ACM SIGKDD</meeting>
+		<imprint>
+			<date type="published" when="2015" />
+			<biblScope unit="page" from="1365" to="1374" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b54">
+	<analytic>
+		<title level="a" type="main">Toward scalable performance visualization with jumpshot</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Zaki</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Lusk</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Gropp</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Swider</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Int. J. High Perform. Comput. Appl</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="277" to="288" />
+			<date type="published" when="1999-08" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

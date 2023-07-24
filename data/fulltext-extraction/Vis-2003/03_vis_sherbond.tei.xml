@@ -1,0 +1,576 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Fast Volume Segmentation With Simultaneous Visualization Using Programmable Graphics Hardware</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Anthony</forename><surname>Sherbondy</surname></persName>
+							<email>sherbond@stanford.edu</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mike</forename><surname>Houston</surname></persName>
+							<email>mhouston@stanford.edu</email>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="institution">Stanford University</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff1">
+								<address>
+									<settlement>Seattle, Washington</settlement>
+									<country key="US">USA</country>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">Fast Volume Segmentation With Simultaneous Visualization Using Programmable Graphics Hardware</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:52+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>I.4.6 [Segmentation]: Region Growing, Edge and Feature Detection</term>
+					<term>I.3.7 [Computer Graphics]: Three-Dimensional Graphics and Realism-Volume Rendering</term>
+					<term>I.3.8 [Computer Graphics]: Applications region growing, diffusion, segmentation, graphics processor, streaming computation</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>Sandy Napel * (a) (b) (c) (d) Figure 1: These four volume renderings utilize a fully opaque transfer function, but are segmented using the method discussed in this paper. The segmented volumes show: (a) abdominal aortic branch vessels, (b) an aortic aneurysm, (c) an aorta, and (d) peripheral blood vessels in the lung. The yellow arrows indicate the location of the user&apos;s initial seeds that were evolved to form the presented segmentations.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>In current radiological practice, highly trained medical imaging specialists segment anatomical regions of interest from computed tomography (CT) and magnetic resonance (MR) volumes for further analysis. The segmentation process involves the trained operator selecting the voxels that belong to the anatomy of interest by drawing contours around cross-sectional views and linking these cross-sections together.</p><p>This manual procedure can be an extremely tedious chore because of the complexities of anatomical structures. For instance, arterial vessels may take many odd shapes as they twist and turn throughout the anatomy making them very difficult to track along the multitude of cross-sections of the volume. The vessels may also not have clearly defined edges separating them from nearby objects of similar intensity (i.e., bone for contrast enhanced images and soft tissue otherwise) and may have multiple regions where the anatomy stops and then begins again due to constrictions or scanner artifacts. Manually segmented data is impacted by the user's training and judgement. For example, one must decide whether or not to include calcium deposits, thrombus, constricted regions, and different portions of the vessel.</p><p>Many contributions have been made to the field of automatic segmentation. However, the complicated structures found in medical imaging offer several unsolved challenges to automated algorithms, including the lack of global defining morphological characteristics, scanner noise and artifacts, and an incomplete or weak separation between voxels representing neighboring tissue. Any of the existent automated algorithms can be shown to fail on certain datasets for reasons specific to each algorithm <ref type="bibr" target="#b8">[Kirbas and Quek 2003;</ref><ref type="bibr" target="#b12">Leventon et al. 2000]</ref>.</p><p>Another major drawback of the automated algorithms to date is that they offer limited "trial and error" based user interaction. The user often sets global parameters and runs the algorithm hoping to get the correct results. If the desired result is not achieved, the user attempts to adjust the parameters and runs the algorithm again. This iterative, indirect approach can be quite time consuming and, because of the often global effect of these adjustable parameters, the desired results may never be achieved.</p><p>This paper proposes a fast segmentation method that leverages the computational power of modern programmable graphics hardware to combine some of the successful components of automated algorithms efficiently with real-time animation of the segmentation's progress. The segmentation algorithm is based on seeded region growing with the merging criteria based on intensity and gradient values, with the gradient sensitivity scaled using nonlinear diffusion.</p><p>Since the proposed method allows the human operator to observe the segmentation in real time, it removes the necessity of manually marking edges along hundreds of cross-sections through a CT volume. The speed of the segmentation combined with direct visualization offers the ability for the operator to interact with an evolving volume segmentation. Our technique facilitates local control for "expert-based" input and a rapid segment/view/edit cycle, providing practical improvements that are applicable to diagnostic medical imaging.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>There are many useful formulations of the segmentation problem for intensity images. Adams and Bischof separate the techniques into the following four categories: threshold based, boundary localization, region growing, and hybrid approaches that are combinations of the previous methods <ref type="bibr">[1994]</ref>. Others have noted that these categories may represent low-level or voxel-level approaches to the problem and that one may also add top-down approaches <ref type="bibr" target="#b23">[Zucker 2001</ref>]. One example is to compare the image to be segmented with a database of images with known segmentations and then to segment the image by mapping it to its best match in the database <ref type="bibr" target="#b13">[Leventon 2000;</ref><ref type="bibr" target="#b23">Zucker 2001</ref>]. In addition, hybrid approaches have been developed that bridge top-down and bottom-up approaches <ref type="bibr" target="#b12">[Leventon et al. 2000]</ref>.</p><p>To date, no algorithm has been proven to be perfect at automatically segmenting regions of interest from surrounding volume data. In many of these algorithms, user input often involves restarting a fast algorithm with new parameters <ref type="bibr" target="#b5">[Felkel 2000</ref>]. Even extremely fast algorithms perform slowly in such "trial and error" based approaches because many iterations, with careful operator scrutiny of the results, may be required to achieve an adequate result.</p><p>Because the programmability and performance of modern graphics hardware continues to increase at such a rapid pace, many researchers are beginning to adapt computationally intensive algorithms to run on GPUs. These modern high performance graphics processors, such as the ATI Radeon 9800 <ref type="bibr">[2003]</ref> and the nVidia GeForce FX <ref type="bibr">[2003]</ref>, are already capable of outperforming current CPUs in certain compute intensive applications, and the performance difference is expected to increase in the future <ref type="bibr" target="#b7">[Khailany et al. 2003</ref>]. Matrix operations <ref type="bibr" target="#b9">[Larsen and McAllister 2001;</ref><ref type="bibr" target="#b20">Thompson et al. 2002]</ref>, non-linear diffusion <ref type="bibr">[Rumpf and Strzodka 2001b]</ref>, and many other computationally intensive algorithms have been shown to run faster on GPUs than similar implementations on CPUs. While these first attempts to utilize graphics hardware provided excellent performance, they suffered from limited precision (8-bit fixed point) provided by the hardware at the time. But as faster hardware with floating point precision has become available, it has become possible to implement high precision algorithms on graphics hardware.</p><p>To capitalize on the performance available in graphics hardware, several graphics hardware segmentation approaches have been proposed. Yang et al. implemented image segmentation and morphology operations on an nVidia GeForce4 that was 3-5 times faster for segmentation than an optimized version running on a 2.2GHz <ref type="bibr">In-tel P4 [2003]</ref>. This approach falls into the category of providing fast segmentation using global parameters and thresholding alone, which is not a successful technique for many segmentation problems <ref type="bibr" target="#b8">[Kirbas and Quek 2003</ref>].</p><p>Rumpf et al. wrote a 2D level set segmentation algorithm on graphics hardware utilizing the image processing operations provided by the SGI Onyx2 and also the <ref type="bibr">GeForce4 [2001a]</ref>. Despite the 8-bit computation limitations of their platform, they were able to produce visually accurate results. Our approach to the segmentation problem differs in that we are concerned with simultaneous visualization and evolution of a 3D hybrid seeded region growing algorithm. <ref type="bibr">Lefohn et al.</ref> proposed an efficient 3D level set solver with curvature flow integrated with a GPU volume renderer for interactive feedback which they implemented on an ATI Radeon 9700 <ref type="bibr">[2003]</ref>. Their implementation was between 10-15 times as fast as an equivalent CPU implementation of the same algorithm. In order to limit computation to active voxels, they use an intricate packing scheme from which they evolve and render their level set. Our method differs mainly in our choice of segmentation algorithm, the way in which a user interacts with the segmentation, and method of limiting computation. Our method of limiting computation is similar to <ref type="bibr" target="#b17">[Purcell et al. 2002]</ref>, which proposed the notion of preventing computation at certain pixels, as part of a GPU-based ray tracer. Our paper presents "computation masks," a generalization of this idea, to eliminate unnecessary computation on a per pixel basis.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">Algorithm</head><p>In this paper, the segmentation problem is mainly posed as one of growing the regions that the user initializes with seed data. The seeds placed by the user indicate to the algorithm the structure that the user would like to separate from the volume. The seeds are then evolved and either diffuse into other regions or move away from regions based on a Perona and Malik nonlinear diffusion metric <ref type="bibr" target="#b0">[Adams and Bischof 1994;</ref><ref type="bibr" target="#b16">Perona and Malik 1990]</ref>. The implementation of this algorithm consists of four stages: seed selection, segmentation evolution, optional image smoothing, and computational masking.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Seed Selection</head><p>The current system interface is shown in <ref type="figure">Figure 2</ref>. The user paints seeds by drawing on the sectional views of the volume. The user can select a sub-volume from a larger volume for segmentation and rendering. Mouse coordinates are sent to a fragment program on the graphics hardware that adds seeds to voxels, or turns voxels on, based on the geometry of the brush, usually a sphere with a user definable radius. Let S <ref type="bibr">(t, x, y, z)</ref> represent the number of seeds at any position x, y, z ∈ Ω v at some evolution state t, where t = 0 denotes the initial or user defined state and Ω v represents the span of all possible voxel locations. The maximum number of seeds at any voxel location and evolution instance is 2 16 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Segmentation</head><p>The merging criteria for the seeded region growing algorithm is based on the Perona and Malik nonlinear diffusion metric. This metric allows the seeds to smoothly merge into regions of similar intensity, while slowing the diffusion into voxels against high gradients. Therefore, the rate of diffusion is governed by the underlying image characteristics. Let V (t, x, y, z) represent the image intensity value of a voxel at the location x, y, z ∈ Ω v and S(t, x, y, z) be the number of seeds per voxel. Then the diffusion equation governing <ref type="figure">Figure 2</ref>: This figure shows our interface for visualizing and interacting with the evolving segmentation. The bottom of the screen presents an axial image section (intersects z axis) and also a coronal image section (intersects y axis) of the volume. The red box indicates the current active sub-volume for volume rendering and segmentation that can be moved to the desired region of interest in the larger volume. The presented data is from a 512x512x494 CT scan and the active sub-volume is 256 3 . The user can interact with the segmentation by drawing on the sectional views. The volume renderer uses the evolving segmentation to choose the active voxels to render. The user can choose between multiple pre-defined transfer functions. The current transfer function labels all voxels as opaque and allows the segmentation to define the volume of interest.</p><p>the seed flow can be written as:</p><formula xml:id="formula_0">∂S(t, x, y, z) ∂t = div (g(|∇V (t, x, y, z)|)∇S(t, x, y, z))<label>(1)</label></formula><p>where</p><formula xml:id="formula_1">g(s) = ν • exp − s 2 K 2</formula><p>Note that t is a variable that represents the current evolution state. K is a cutoff term that controls how fast g(s) goes to zero for high gradients. ν is a regularization term that controls the sensitivity to noise and speed of grouping nearby objects <ref type="bibr" target="#b2">[Catté et al. 1992]</ref>. The discretization of this equation will also add a regularization factor, but we place it into the continuous equation to directly show the influence it has on the edge stopping criteria. In addition to the metric imposed by the diffusion, there is an added maximal drift criteria that will not allow seeds to diffuse into regions that are beyond a user definable intensity difference from the last voxel directly selected by the user's brush. We discretized the diffusion using a standard explicit forward Euler approach. Without loss of generality, we present a discretized version of Equation (1) along the x axis:</p><formula xml:id="formula_2">S n+1 i = S n i + h • (S n i+1 − S n i ) • g V i+1 −V i ∆x − (S n i − S n i−1 ) • g V i −V i−1 ∆x<label>(2)</label></formula><p>where</p><formula xml:id="formula_3">S n i ≈ S(n • ∆t, i • ∆x), V i = V (i • ∆x), 0 ≤ n ≤ N, 0 ≤ i ≤ W, ∆x = 1/W, and h = ∆t/∆x 2 .</formula><p>Note that our spatial discretization of x, y, z leads to a kernel that spans the six neighbors of the voxel being computed. N is the total number of iterations for the segmentation computation, and W is the total width of the image. S n+1 j and S n+1 k are similarly derived.We recognize that the explicit kernel solution to the PDE limits the "speed" of the evolution (such that h &lt; 1 2 ) in order to maintain stability <ref type="bibr" target="#b15">[Morton and Mayers 1994]</ref>. The explicit Euler scheme in Equation (2) avoids communication overhead between the GPU and the CPU that may be required for an implicit discretization. This savings reduces the total time required for interactively changing parameters and running the algorithm again as communication across the system bus is not required. In addition, we are able to limit computation to active voxels by utilizing computation masks described in Section 3.4.</p><p>The number of iterations of the diffusion is controllable by the user. Each iteration through the volume is broken down into steps in the 3D texture's z direction. Each z slice defines one rendering pass and the results of that pass are rendered to the opposite or output 3D texture for that iteration, as shown in <ref type="figure">Figure 3</ref>. After every 3D iteration, a 3D texture-based real time volume rendering engine generates a view of the segmentation seeds and the image data, each with its own transfer function.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Image Smoothing</head><p>This optional stage provides a scaling to the image that allows the algorithm to perform well under noisy conditions, with ill-defined edges or other factors that may affect the connectedness of voxels within regions. We introduce scaling through the Perona and Malik nonlinear model, which can be considered a piecewise smoothing process, where we expect to evolve the image toward separate, piecewise contiguous regions <ref type="bibr" target="#b21">[Weickert 1997</ref>]. As stated in Section 3.2, V (t, x, y, z) represents the image intensity value of a voxel at the location x, y, z ∈ Ω v . If t is an arbitrary term that represents the current iteration of the diffusion, then the evolution of the image smoothing can be represented by the following equation:</p><formula xml:id="formula_4">∂V (t, x, y, z) ∂t = div(g(|∇V (t, x, y, z)|)∇V (t, x, y, z))</formula><p>If the image smoothing stage is run, it only requires a small number of iterations as it converges quickly towards the minimal energy solution <ref type="bibr" target="#b10">[Leclerc 1989</ref>]. When applied, the image smoothing stage is performed before the segmentation evolution and lies outside the segmentation iteration loop.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.4">Computational Masking</head><p>The explicit scheme used for the segmentation algorithm allows the computation of the segmentation to iterate without using any intermediate representation of the volume data. Consequently, the algorithm may compute on voxels that have no chance of a seed entering the voxel in the current iteration. In order to compensate for this, a "viable" subvolume must be tracked and the computation on voxels outside of this subvolume prevented. The most conservative subvolume, without knowing any particular seed values in the current iteration, is a dilation of the current segmented volume by one voxel in each direction. We use this dilation to create a mask that represents the currently active voxels.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Implementation</head><p>We implemented our proposed algorithm on the ATI Radeon 9800 Pro 256MB using the ARB fragment program extensions <ref type="bibr">[2002]</ref> and the board's unique support for render to 3D texture. Our  <ref type="figure">Figure 3</ref>: This flow chart represents a simplified implementation of our segmentation algorithm. The image smoothing stage is optional and only included for noisy images. The dilated computation mask inset to the right shows the current seeds in yellow, the six neighbor dilation in red, and the masked out portion in blue. The segmentation inset describes the explicit diffusion kernel in which the six neighbors are weighted by scaled Gaussians that differ in shape based on each neighbor's direction to calculate the value of the current pixel. Note that the computation renders to sections of the 3D texture and therefore must iterate through all sections in the z direction before a complete volume iteration is completed.</p><p>method is implemented as depicted in <ref type="figure">Figure 3</ref>. The volume data is loaded into a 3D texture on the graphics card before the algorithm starts. The 3D texture is stored using 32 bits/voxel with 16 bits allocated to the intensity from the CT image data (ALPHA) and 16 bits allocated to the seeds (LUMINANCE). Therefore, each voxel may contain multiple seeds and the maximum number of seeds at any voxel is 2 16 . It should also be noted that arithmetic operations on the ATI 9800 are limited to 24-bit precision. The image smoothing fragment program was written using 30 instructions composed of 7 3D texture lookups (6-neighbors plus the current voxel), 10 4-vector operations and 13 scalar operations. Six of the scalar operations are power (POW) operations that expand into three hardware instructions each on the ATI 9800 Pro. The segmentation evolution fragment program is similar to the image smoothing program, as they are both discretized with the scheme described in Equation (2), but it requires slightly more instructions. The segmentation program requires 39 total instructions. These instructions expand to 56 floating point operations with 8 of those being 4-vector operations and 24 being scalar operations. These algorithms require only one rendering pass per slice of the volume, which allows for efficient execution.</p><p>Before the computation of the segmentation is run on the current section, an additional fragment program is run to calculate the current computational mask. The computational masking step alters the depth buffer on a per pixel basis by placing a high depth value for any voxel that contains seeds or is a six-neighbor of a voxel with seeds. If the current voxel fails this test, then the depth buffer value   <ref type="figure">(Figure 1a</ref>), Aorta 1 <ref type="figure">(Figure 1b)</ref>, Aorta 2 <ref type="figure">(Figure 1c)</ref>, and the Lung <ref type="figure">(Figure 1d)</ref>. Each segmentation was seeded in the location depicted in <ref type="figure">Figure 1</ref>. The numbers in parenthesis represent the performance without computational masking. Notice the improvement that computational masking provides.</p><p>will be set to a very low value. The segmentation computation will then fail a depth test at any location that has the very low value.</p><p>Since the depth test occurs before the fragment program runs, early z-kill can be done by the hardware, preventing the fragment program from executing on masked-out portions.</p><p>An important note is that the ATI Radeon 9800 Pro's implementation of render to 3D texture does not allow reading from and writing to the same texture. Because of this, the algorithm must 'pingpong', or write between, two 3D volumes. This requires twice the amount of memory as the volume we want to segment, limiting the maximum volume resolution to 256 3 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Results</head><p>All results were collected using an ATI Radeon 9800 Pro with 256MB of onboard memory on a 2.4GHz P4 with a 533MHz front side bus. We utilized a 128 3 volume of 16-bit intensity data from a CT scan for all presented results. <ref type="table" target="#tab_2">Table 1</ref> presents the results of running the segmentation algorithm while continuously pumping seeds into the already segmented voxels, to test the maximum throughput of the algorithm. The results of the table show the benefits of the computation mask.</p><p>We also measured the performance of the individual fragment program components. Each execution of the segmentation fragment program requires 0.22 ms. Just doing the 3D texture lookup from within a fragment program takes 0.09 ms of that time. To perform any computation, we need to flip-flop textures, which costs an additional 0.04 ms. This gives a total time of 0.26 ms for each slice of the volume, or 33 ms per full volume iteration. We measured the time for the building the computation mask to be 0.14 ms per slice in addition to the time for the segmentation evolution. This means that the crossover point for gaining performance from computational masking occurs when computation on about half of the voxels in the volume can be prevented. These numbers scale linearly for different volume/slice sizes up to the maximum 256 3 volume limited by onboard memory. Without considering the savings from computational masking, the segmentation algorithm is capable of processing 64 Mvoxels/s, or 128 MB/s, of volume data.</p><p>We also measured our performance when simultaneously displaying the progress of the segmentation in a 3D texture hardwarebased volume renderer. Recent 3D texture-based volume renderers are now capable of rendering at interactive rates on programmable graphics hardware <ref type="bibr" target="#b3">[Engel et al. 2001;</ref><ref type="bibr" target="#b6">Gelder and Kim 1996]</ref>. Using Blinn-Phong shading and calculating gradients on the fly for lighting, the volume renderer used for this paper is able to render 128 3 volumes at 15-25 fps (40-66 ms per frame) and 256 3 volumes at 5-15 fps (66-200 ms per frame) at useful screen resolutions.   <ref type="figure" target="#fig_0">Figure 4</ref>. The arrow in the volume rendering image points to where one of the tiny vessels makes contact with bone and the segmentation leaks through the weak interface between the bone and the vessel.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Discussion</head><p>The animation of the segmentation evolution does not substantially affect the volume rendering performance. In fact, a full iteration in the evolution of the volume segmentation runs roughly the same speed or faster than the volume rendering. This allows for effective visualization of the evolving segmentation, and the shared data structures between the computation and rendering allow for a simple and efficient implementation.</p><p>Our GPU-based volume segmentation algorithm achieves a speedup of ten to twenty times over a SSE2 optimized CPU-based solution. It should be noted that the CPU implementation used 32bit precision while the GPU implementation is limited to 24-bit precision. Whereas we are able to process 64 Mvoxels/s without computational masking, the CPU is only able process 3 Mvoxels/s. Using computational masking, our GPU-based algorithm is more than twenty times faster than the CPU-based solution when we can prevent computation on about half of the voxels. When we can no longer limit our computation on voxels as efficiently as the CPUbased solution can, at the worst point, we are still more than an order of magnitude faster (33 Mvoxels/s vs. 3 Mvoxels/s).</p><p>A qualitative comparison of thresholding and our segmentation method is shown in <ref type="figure" target="#fig_0">Figures 4 and 5</ref>. In <ref type="figure" target="#fig_0">Figure 4</ref> the thresholded im-age picks up the desired aortic aneurysm as well as bone and other tissue, which were present in the selected subvolume and were similar in intensity. Using the same transfer function for rendering as <ref type="figure" target="#fig_0">Figure 4</ref>, <ref type="figure" target="#fig_1">Figure 5</ref> shows the result of an iterative use of the segmentation algorithm on the aorta. One can clearly see the aneurysm and the stenosis below the aneurysm as well as the vessels that feed from it. However, the cursor on the volume rendering points to a leak from one of the small vessel branches into the bone. The leak of seeds across weak boundaries is a common difficulty with edge based algorithms in general and is motivation for having an interactive segmentation process.</p><p>In comparison to the packing technique employed by <ref type="bibr" target="#b11">Lefohn et al. [2003]</ref>, the computation masks allow more straightforward computation and visualization. In addition, as the arithmetic intensity of the computation stage increases, e.g. by adding geometric constraints or other operations per evolution, the cost of building the computation masks would have a smaller impact on the total performance of the algorithm, thus continuing to provide speedups for much larger active regions. Furthermore, by employing more aggressive culling techniques, such as only tracking the evolving front or "most active" voxels, one may stay well below our current fifty percent cutoff for computation savings.</p><p>The performance advantages of the computational masking suggest that our algorithm would benefit from improved support for building computation masks. Currently, the depth of a fragment cannot be set from within a program outputting floating point values. This requires us to take an additional rendering pass, comprised mostly of the same texture lookups as in the segmentation evolution pass, to build the computation mask. Besides the cost of the redundant texture lookups, there is also some overhead involved with setting up and running an additional fragment program. Currently, our conservative application of computational masking improves performance if more than one half of the volume computation can be saved. As better support for computational masking becomes available, the added cost of building the masks can be reduced, substantially increasing the benefits of tracking the subvolume.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Future Work and Conclusion</head><p>A segmentation algorithm with interactive visual feedback allows human operators to segment complex 3D structures in real time. New mechanisms for interacting with an evolving 3D scene would allow the user to more effectively harness the speed of such algorithms. Alternative 3D scene painting techniques could enhance the user's local control provided by this algorithm. For instance, the user could paint simple 3D strokes, suggesting structure, that the algorithm would interactively evolve into a detailed volume boundary. The segmentation process would also benefit from carefully crafted visualizations that facilitate discerning the changing segmentation surface from the volume data.</p><p>This future proposal for user steering of the segmentation is similar to other researchers' <ref type="bibr" target="#b4">[Falcao et al. 2000;</ref><ref type="bibr" target="#b14">Mortensen and Barrett 1995]</ref> approaches for 2D tracing utilizing a live-wire method. Our method also involves user guidance; however, ours would be a 3D approach, and rather than having the user's attention on the boundary, we allow the user to force structure segments to be included or not by painting seeds in the volume. This input would help the automatic part of the segmentation grow through structures and/or avoid "leaking" into adjacent structures.</p><p>This paper has shown that computational masking can be an effective and simple way to save computation and speed up GPUbased algorithms. Although we only explore one method for creating computational masks in this paper, a simple dilation of the segmentation, more aggressive methods could be considered. For example, one could mask out all voxels containing seeds not likely to evolve in future time steps, i.e. voxels surrounded by voxels with identical seed values. By employing more aggressive methods, one could limit the number of active voxels to be below the computational mask crossover point.</p><p>This paper presents a segmentation method that allows interactive visualization and control because of its computation speed and coordination with a hardware accelerated volume renderer. In addition, using the GPU for general computation will become even more advantageous as graphics processors continue to outpace the performance of CPUs. Also, through the use of computational masking we are able to use the computational resources of modern graphics hardware more effectively. With interactive 3D segmentation available, researchers can now explore volumetric segmentation with human intervention.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 4 :</head><label>4</label><figDesc>This figure shows the results of thresholding a 256 3 subvolume of a contrast enhanced abdominal CT centered at 270 Hounsfield Units. In addition to the aorta, many other parts of the lower abdomen anatomy are picked up by the threshold operation.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 5 :</head><label>5</label><figDesc>This figure depicts a segmentation of the aortic aneurysm as well as the large vessels distal to the bifurcation from the same subvolume shown in</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 1 :</head><label>1</label><figDesc>The results of our segmentation algorithm on various 128 3 datasets: C. Vessels</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Acknowledgments</head><p>We would like to thank James Percy at ATI for all of his help with render to 3D texture and all of the help getting beta drivers and also Mark Segal from ATI for giving us early access to the R300 and R350 which made this work possible. We would also like to thank Tim Purcell, Ian Buck and Pradeep Sen from Stanford University for thoughts and ideas on optimizing our fragment programs and many conversations about computational masking. Also, we appreciate the support of everyone at the 3D Radiology Lab for their thoughts on interactive segmentation and its application. We would especially like to thank Pat Hanrahan for the many conversations that sparked the original idea and supported our continued efforts.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Seeded Region Growing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Adams</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Bischof</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Pattern Analysis and Machine Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="page" from="641" to="647" />
+			<date type="published" when="1994-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title/>
+		<ptr target="http://www.ati.com" />
+	</analytic>
+	<monogr>
+		<title level="j">ATI</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+	<note>RADEON 9800</note>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Image Selective Smoothing and Edge Detection by Nonlinear Diffusion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Catté</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lions</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Morel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Coll</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIAM Journal of Numerical Analysis</title>
+		<imprint>
+			<biblScope unit="volume">29</biblScope>
+			<biblScope unit="page" from="182" to="193" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">High-Quality Pre-Integrated Volume Rendering Using Hardware-Accelerated Pixel Shading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the ACM SIG-GRAPH/EUROGRAPHICS workshop on Graphics hardware</title>
+		<meeting>the ACM SIG-GRAPH/EUROGRAPHICS workshop on Graphics hardware</meeting>
+		<imprint>
+			<publisher>ACM Press</publisher>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">An Ultra-Fast User-Steered Image Segmentation Paradigm: Live Wire on the Fly</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Falcao</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Udupa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Miyazawa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transaction on Medical Imaging</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="page" from="55" to="62" />
+			<date type="published" when="2000-01" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Segmentation of Vessels in Peripheral CTA Datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Felkel</surname></persName>
+		</author>
+		<idno>TR-VRVis-2000-008</idno>
+	</analytic>
+	<monogr>
+		<title level="m">A-1220</title>
+		<meeting><address><addrLine>Vienna, Austria</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2000-12" />
+			<biblScope unit="volume">1</biblScope>
+		</imprint>
+	</monogr>
+	<note type="report_type">VRVis Technical report</note>
+	<note>www.vrvis.at</note>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Direct Volume Rendering With Shading in Three-Dimensional Textures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">V</forename><surname>Gelder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Kim</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the 1996 symposium on Volume visualization</title>
+		<meeting>the 1996 symposium on Volume visualization</meeting>
+		<imprint>
+			<publisher>IEEE Press</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page">23</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Exploring the VLSI Scalability of Stream Processors</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Khailany</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Dally</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Rixner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">U</forename><surname>Kapasi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Owens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Towles</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of the Ninth Symposium on High Performance Computer Architecture</title>
+		<meeting>the Ninth Symposium on High Performance Computer Architecture</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Vessel Extraction Techniques and Algorithms: A Survey</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Kirbas</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Quek</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Review: IEEE Conference Bio-Informatics and Bio-Engineering (BIBE)</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<monogr>
+		<title level="m" type="main">Fast Matrix Multiplies using Graphics Hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">S</forename><surname>Larsen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mcallister</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+	<note>Supercomputering</note>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Constructing Simple Stable Descriptions for Image Partitioning</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Leclerc</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">International Journal of Computer Vision</title>
+		<imprint>
+			<biblScope unit="volume">3</biblScope>
+			<biblScope unit="page" from="73" to="102" />
+			<date type="published" when="1989" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Interactive Deformation and Visualization of Level Set Surfaces Using Graphics Hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Lefohn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Kniss</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Whitaker</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">To Appear in Proceedings of IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Statistical Shape Influence in Geodesic Active Contours</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Leventon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Grimson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Faugeras</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Vision and Pattern Recognition (CVPR)</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="75" to="84" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Statistical Models for Medical Image Analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Leventon</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+	<note type="report_type">MIT Ph.D. Thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Intelligent Scissors for Image Composition</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Mortensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Barrett</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH&apos;95</title>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="191" to="198" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<monogr>
+		<title level="m" type="main">Numerical Solution of Partial Differential Equations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Morton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Mayers</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+			<publisher>Cambridge University Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Scale-space And Edge Detection Using Anisotropic Diffusion</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Perona</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Malik</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Pattern Analysis and Machine Intelligence</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="629" to="639" />
+			<date type="published" when="1990-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Purcell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Buck</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Mark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+		<idno>0730-0301</idno>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of ACM SIGGRAPH</title>
+		<meeting>ACM SIGGRAPH</meeting>
+		<imprint>
+			<date type="published" when="2002-07" />
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="page" from="703" to="712" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Level Set Segmentation in Graphics Hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Rumpf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Strzodka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE International Conference on Image Processing</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="1103" to="1106" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Level Set Segmentation in Graphics Hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Rumpf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Strzodka</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of EG/IEEE TCVG Symposium on Visualization VisSym &apos;01</title>
+		<meeting>EG/IEEE TCVG Symposium on Visualization VisSym &apos;01</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="75" to="84" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Using Modern Graphics Architectures for General-Purpose Computing: A Framework and Analysis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Thompson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Oskin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">International Symposium on Microarchitecture</title>
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">A Review of Nonlinear Diffusion Filtering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Weickert</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Scale-Space Theories in Computer Vision</title>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="3" to="28" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<monogr>
+		<title level="m" type="main">Fast Image Segmentation and Smoothing Using Commodity Graphics Hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Welch</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+	<note>To appear in the Journal of Graphics Tools Special Issue on Hardware Accelerated Rendering Techniques</note>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<monogr>
+		<title level="m" type="main">Relaxation Labelling: 25 years and Still Iterating</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">W</forename><surname>Zucker</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2001" />
+			<publisher>Kluwer Academic Publisher</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

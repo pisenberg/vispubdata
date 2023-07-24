@@ -1,0 +1,1203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Volume MLS Ray Casting</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+				<date type="published" when="2008-10-19">19 October 2008</date>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Christian</forename><surname>Ledergerber</surname></persName>
+						</author>
+						<author role="corresp">
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gaël</forename><surname>Guennebaud</surname></persName>
+							<email>guennebaud.gael@isti.cnr.it</email>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Miriah</forename><surname>Meyer</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Moritz</forename><surname>Bächer</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Senior Member, IEEE</roleName><forename type="first">Hanspeter</forename><surname>Pfister</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">•</forename><forename type="middle">C</forename><surname>Ledergerber</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">•</forename><forename type="middle">G</forename><surname>Guennebaud</surname></persName>
+						</author>
+						<title level="a" type="main">Volume MLS Ray Casting</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date type="published" when="2008-10-19">19 October 2008</date>
+						</imprint>
+					</monogr>
+					<note type="submission">received 31 March 2008; accepted 1 August 2008; posted online</note>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:48+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Volume Visualization</term>
+					<term>Unstructured Grids</term>
+					<term>Moving Least Squares Reconstruction</term>
+					<term>Adaptive Integration</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>The method of Moving Least Squares (MLS) is a popular framework for reconstructing continuous functions from scattered data due to its rich mathematical properties and well-understood theoretical foundations. This paper applies MLS to volume rendering, providing a unified mathematical framework for ray casting of scalar data stored over regular as well as irregular grids. We use the MLS reconstruction to render smooth isosurfaces and to compute accurate derivatives for high-quality shading effects. We also present a novel, adaptive preintegration scheme to improve the efficiency of the ray casting algorithm by reducing the overall number of function evaluations, and an efficient implementation of our framework exploiting modern graphics hardware. The resulting system enables high-quality volume integration and shaded isosurface rendering for regular and irregular volume data.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Volume visualization has become an integral component of the scientific discovery process and the simulation pipeline. Data coming from scanning devices such as MRI or ultrasound machines, as well as results from simulations in fields like computational fluid dynamics, geophysics, and biomedical computing, are often represented volumetrically. These volumes, however, can be defined over regular or irregular grids, giving rise to several distinct classes of rendering algorithms and a plethora of implementations.</p><p>In this paper we propose a unified framework for generating high-quality visualizations of arbitrary volumetric datasets using the method of Moving Least Squares (MLS). MLS is a popular scheme for reconstructing continuous functions from scattered data due to its well understood mathematical foundations. Furthermore, the MLS framework contains several distinct components that provide a high level of control over the function reconstruction, and allows for a tunable amount of data smoothing as well as interpolation.</p><p>Using MLS, we reconstruct continuous functions from data stored on regular as well as irregular grids. We introduce volume MLS ray casting to generate high-quality images with volume integration and isosurfaces, such as that shown in <ref type="figure" target="#fig_0">Figure 1</ref>.</p><p>The volume MLS framework enables computing analytic derivatives for high-quality isosurface shading with specularities. To decrease the over-all number of MLS function evaluations we propose a novel adaptive preintegration technique.</p><p>The main contributions of this work are: a unified MLS framework for reconstructing continuous functions and their derivatives from both regular grids and unstructured volume data; a novel adaptive preintegration scheme for ray casting continuous functions with transfer functions that include isosurfaces; and a system that combines high-quality isosurface rendering and volume integration. We provide details on the theoretical foundations of the MLS framework, along with an exploration of the various tunable parameters. We also present an implementation of volume MLS ray casting on modern graphics processor units (GPUs), provide details of our system implementation, and show results on several regular and irregular volume data sets.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">PREVIOUS WORK</head><p>Direct Volume Rendering: The generation of high-quality images of volume data relies on methods that accurately solve the volume rendering integral <ref type="bibr" target="#b27">[28]</ref>, which models a volume as a medium that can emit, transmit, and absorb light. The standard method for solving this integral is ray casting, and was proposed by Levoy <ref type="bibr" target="#b20">[21]</ref> for regular grids, and by Garrity <ref type="bibr" target="#b13">[14]</ref> for irregular grids, specifically tetrahedral meshes. Splatting, an alternative to ray casting, was proposed by Westover <ref type="bibr" target="#b48">[49]</ref> for regular grids, and has been extended to irregular grids <ref type="bibr" target="#b24">[25,</ref><ref type="bibr" target="#b50">51]</ref>. In either case, a continuous function must be reconstructed from the discrete volume data.</p><p>While there are well-established mathematical frameworks for reconstruction of continuous functions from regular volume data <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b26">27,</ref><ref type="bibr" target="#b8">9]</ref>, irregular volumes are more challenging as there is no implied spatial structure to the data points. Ray casting of tetrahedral meshes allows a direct interpolation of the data at ray-triangle intersections using homogeneous coordinates <ref type="bibr" target="#b13">[14]</ref>. For curvilinear grids, interpolation is more complicated <ref type="bibr" target="#b44">[45]</ref> and is typically performed at the intersection points with cell faces <ref type="bibr" target="#b5">[6]</ref> or in computational space <ref type="bibr" target="#b12">[13]</ref>. Another popular algorithm for rendering tetrahedral meshes is the cell projection method <ref type="bibr" target="#b41">[42]</ref>, in which tetrahedral cells are projected in back to front order onto the image plane <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b10">11]</ref>. However, a correct depth-ordering of cells does not always exist, and great care must be taken to avoid visual artifacts <ref type="bibr" target="#b49">[50]</ref>. Finally, another class of algorithms uses a sweepplane through the volume followed by rendering of 2D cells <ref type="bibr" target="#b14">[15,</ref><ref type="bibr" target="#b42">43]</ref>.</p><p>In the case where no explicit structure of the data is given, scattered data reconstruction schemes are applied. Arguably the most prominent method among these are radial basis functions (RBFs) that were introduced to volume rendering by Jang et al. <ref type="bibr" target="#b16">[17]</ref>. While RBFs can be evaluated and rendered efficiently <ref type="bibr" target="#b30">[31]</ref>, the method requires a costly initial solution to a global system of equations, the size of which is tied to the number of data points. Other methods proposed in the context of volume visualization are inverse distance weighting <ref type="bibr" target="#b34">[35]</ref>, which is a special case of MLS <ref type="bibr" target="#b40">[41]</ref>, and discrete Sibson interpolation <ref type="bibr" target="#b35">[36]</ref>. This latter method inherently relies on resampling the data onto a regular grid. In contrast to these approaches, volume MLS ray casting provides a unifying mathematical framework for the reconstruction of arbitrarily sampled volume data that allows the user to control the reconstruction and data smoothing in a principled manner.</p><p>MLS Function Reconstruction: MLS was introduced almost half a century ago by Shepard <ref type="bibr" target="#b40">[41]</ref>, and more recently shown by Levin as a powerful surface approximation technique <ref type="bibr" target="#b19">[20]</ref>. This technique has been embraced by the computer graphics community for reconstructing point set surfaces <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b3">4]</ref>, where a number of extensions have been proposed, such as reconstructing surfaces with sharp features <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b22">23]</ref> and using anisotropic support regions <ref type="bibr" target="#b0">[1]</ref>. Unlike RBFs, MLS does not require a solution to a global system of equations.</p><p>Volume Integration: During ray casting, a transfer function (TF), which maps scalar values and (optionally) gradients to colors and opacities, is applied to the volume function. These color and opacity properties of the volume are integrated along rays to obtain the final pixel colors. The TF must be smooth in order to compute the numerical integral efficiently and accurately as no general, closed-form solutions are available. For the case of a smooth TF, well-known adaptive numerical schemes can be employed <ref type="bibr" target="#b31">[32]</ref>, and theory from Monte Carlo integration can guide their design <ref type="bibr" target="#b6">[7]</ref>. Also, interval arithmetic has been proposed to make the above approaches robust <ref type="bibr" target="#b32">[33]</ref>.</p><p>In practice, however, smooth TFs limit the range of achievable rendering effects, e.g., isosurface rendering via thin spikes in the TF that, in theory, require an infinite sampling density. To circumvent this problem Roettger et al. <ref type="bibr" target="#b38">[39]</ref> introduce preintegration, which avoids visual artifacts by precomputing the volume rendering integral for ray segments, assuming that the underlying scalar function is linear. Recent efforts focus on accelerating the precomputation <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b36">37]</ref>, faster approximation algorithms <ref type="bibr" target="#b23">[24]</ref>, multidimensional transfer functions <ref type="bibr" target="#b29">[30]</ref>, and preintegrated lighting <ref type="bibr" target="#b23">[24,</ref><ref type="bibr" target="#b28">29]</ref>.</p><p>In this paper we propose an adaptive integration scheme based on preintegration. This scheme is similar in spirit to other numerical integration schemes, such as adaptive Simpson <ref type="bibr" target="#b31">[32]</ref> and the second derivative refinement scheme of Roettger et al. <ref type="bibr" target="#b37">[38]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">VOLUME MLS</head><p>In order to generate high-quality images, a ray caster must evaluate a continuous representation, and the associated derivatives, of volumetric data. For volume data defined over a grid, two approaches can be taken: first, the connectivity of the grid can be used to define a reconstruction scheme over the locally connected data points; or second, the data points can be used independently of their grid connections in a scattered data reconstruction scheme. The first approach works well for regular grids, where higher order polynomials are often employed to reconstruct functions of arbitrary continuity. For irregular grids, however, reconstructions are challenging for anything other then piecewise linear interpolation. Thus, we advocate a unified reconstruction framework that takes the latter approach, allowing for continuous and differentiable representations of regular and irregular grids.</p><p>Scattered data reconstruction takes a set of n data points, p i = (x i , f i ), defined over a volume V , and computes an approximation (or interpolation) to the data points f (x) : V → R. One such wellstudied, meshless scheme is MLS, where f (x) is obtained by approximating the local neighborhood of x in a weighted least squares (WLS) sense. The MLS method has a high degree of flexibility, making it particularly appealing for the reconstruction of volumetric data, while avoiding the artifacts often incurred by reconstruction schemes that are constrained to arbitrarily poor connectivities (i.e., interpolation over poorly shaped mesh elements). This flexibility provides the capacity for (controllably) handling noise due to measurement errors in scanned data or numerical errors in simulated data. Furthermore, the MLS approximation is a continuous reconstruction with well-defined, smooth derivatives which allows for high-quality shading effects.</p><p>In this section, we first describe the MLS framework and mathematical foundations in the context of reconstructing continuous functions from scattered data. We then discuss and explore the various components of the MLS method as they relate to reconstructing data stored over regular and irregular grids specifically for generating highquality visualizations by ray casting. Our notation is as follows: bold face lower-case variables denote column vectors, such as x = [x y z] T , while bold face upper-case variables denote matrices, such as the identity matrix I. We note that the MLS discussion and mathematical definition holds for arbitrary dimensions, even though we restrict our examples and results to R 3 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">The MLS Framework</head><p>The main idea behind the MLS reconstruction method is depicted for a 1D signal in <ref type="figure" target="#fig_1">Figure 2</ref>. Shown in red, a continuous approximation f (x) is reconstructed from a set of n data points (x i , f i ) by computing  and evaluating a local approximation g x at x (shown in blue):</p><formula xml:id="formula_0">f (x) = g x (x).<label>(1)</label></formula><p>The local approximation g x is obtained by the following WLS minimization problem:</p><formula xml:id="formula_1">g x = argmin g ∑ i w i (x)|g(x i ) − f i | 2 ,<label>(2)</label></formula><p>where w i (x) is the weight of the sample p i for the current evaluation point x. These weights typically decrease with distance from x (see Section 3.1.2). Assuming g x can be represented as a linear combination of k basis functions</p><formula xml:id="formula_2">b(x) = [b 1 (x), . . . , b k (x)] T with coefficients c x = [c 1 , . . . , c k ]</formula><p>T , Equation 2 can be rewritten in the following matrix form:</p><formula xml:id="formula_3">c x = min c∈R k ( W(x)Bc − f) 2 ,<label>(3)</label></formula><p>where</p><formula xml:id="formula_4">W(x) = diag(w 1 (x), . . . , w n (x)) ∈ R n×n and B i j = b i (x j ), B ∈ R n×k .</formula><p>It is well-known from linear algebra that the above least squares problem can be solved using the normal equation. Substituting the solution for c x into f (x) = b(x) T c x yields the following explicit formulation of the MLS approximating function:</p><formula xml:id="formula_5">f (x) = b(x) T (B T W(x)B) −1 B T W(x)f .<label>(4)</label></formula><p>This function is smooth, assuming the weights w i (x) are smooth <ref type="bibr" target="#b18">[19]</ref>, and can be computed as long as the weighted covariance matrix B T W(x)B is invertible, which is the case if rank(W(x)B) ≥ k -this . The boundary behavior of the MLS reconstruction is due to the divergence of the function during extrapolation <ref type="bibr" target="#b18">[19]</ref>.</p><p>implies that at least k weights have to be nonzero. We emphasize that the matrix W(x) depends on the evaluation point, and hence the least squares system must be solved at every x.</p><p>In the MLS framework, the smoothness of the reconstruction, as well as the tightness of the approximation to the data values (i.e., interpolation), is controlled through the choice of the basis and weighting functions. Each of these components are discussed in the following sections.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.1">Basis Functions</head><p>When choosing the basis (i.e., b(x)), the main trade-offs are approximation power versus efficiency. Lower order polynomial bases are less accurate at approximating the data due to fewer degrees of freedom in the function. Higher order polynomial bases, however, are less efficient as a larger linear system must be solved, as well as the determination of a larger neighborhood to maintain stability in the linear system computation. Furthermore, a too-large basis can yield overfitting. We have experimented with several bases, and for ray casting MLS volumes, we advocate the use of linear b(x) = (1, x, y, z) T basis functions. Indeed, as shown in <ref type="figure" target="#fig_2">Figure 3</ref>, a quadratic basis does not give much better results while increasing the computational burden by more than a factor of two.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1.2">Weighting Functions</head><p>Once the basis function has been fixed, the quality of the reconstruction highly depends on the weights assigned to the neighboring samples. For uniform data sets, we employ the following simple weighting scheme:</p><formula xml:id="formula_6">w i (x) = θ x − x i h ,<label>(5)</label></formula><p>where h is the support size, and θ is a smooth, decreasing weight function for which several options have been proposed in the literature <ref type="bibr" target="#b46">[47]</ref>. In this work, we use the following compactly supported polynomial:</p><formula xml:id="formula_7">θ (x) = (1 − x 2 ) α if x &lt; 1 0 otherwise.<label>(6)</label></formula><p>where the power factor α controls the speed at which the weighting function decreases. Although larger values of α increases the continuity of the function, large values also require a wider support for stable computation. A good compromise is α = 4, which guarantees a C 3 reconstruction. Note that in Equation 4, since θ (x) has a finite support, only points within a distance h of x have to be taken into account, which allows for efficient computation while avoiding square roots in the distance computations. The effect of the support size in the reconstruction is depicted in <ref type="figure" target="#fig_2">Figure 3</ref>.</p><p>To reconstruct irregular, and possibly anisotropic, datasets we use the weighting scheme proposed by Adamson and Alexa <ref type="bibr" target="#b0">[1]</ref>, and attach ellipsoidal weight supports H i to each input sample:</p><formula xml:id="formula_8">w i (x) = θ ( H i (x − x i ) ) .<label>(7)</label></formula><p>The weight transforms, H i , are obtained using a covariance analysis of the one-ring neighborhoods. <ref type="figure" target="#fig_5">Figure 6</ref> depicts an example of such anisotropic weight supports. For irregular datasets that do not present significant anisotropy, it is sufficient to replace the expensive ellipsoids by balls, reducing the 3 × 3 matrices H i to a single scalar radius h i . In addition to data approximation, the MLS framework is also capable of data interpolation using weighting functions that contain a singularity <ref type="bibr" target="#b40">[41]</ref>. One such function proposed by Adamson et al. <ref type="bibr" target="#b1">[2]</ref> is:</p><formula xml:id="formula_9">θ (x) = ln(x) 2 − x 2 + 2x − 1 0 ≤ x ≤ 1 0 x &gt; 1<label>(8)</label></formula><p>Compared with other interpolating weighting schemes, such as those based on inverse distances <ref type="bibr" target="#b40">[41,</ref><ref type="bibr" target="#b34">35]</ref>, Equation 8 has a finite support, which is important for efficient evaluation. One property of interpolating MLS which is noteworthy is the flat spot phenomenon <ref type="bibr" target="#b40">[41,</ref><ref type="bibr" target="#b18">19]</ref>. This implies that for a constant basis, the gradient of the approximation at any data point is zero ∇ f (x i ) = 0. To avoid this undesirable characteristic a higher order basis can be used.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Gradient Computation</head><p>The generation of high-quality shading effects requires accurate gradient information, as does the adaptive preintegration scheme discussed in Section 4. There are two established methods for computing the gradient within the MLS framework. The most accurate method is to analytically compute the gradient from the partial derivatives of the MLS scalar field formula (Equation 4):</p><formula xml:id="formula_10">∂ f (x) ∂ x k = ∂ b(x) ∂ x k T c x −b(x) T A(x) −1 ∂ A(x) ∂ x k c x + B T ∂ W(x) ∂ x k f<label>(9)</label></formula><p>where A(x) is the weighted covariance matrix B T W(x)B. A more computationally efficient alternative is to compute the gradient of the local WLS approximation g x , which has been shown to reasonably approximate the gradient of the underlying function <ref type="bibr" target="#b21">[22]</ref>:</p><formula xml:id="formula_11">∂ f (x) ∂ x k ≈ ∂ g x (x) ∂ x k = ∂ b(x) ∂ x k T c x .<label>(10)</label></formula><p>In practice we find that images shaded using either the local gradient or the analytic formula most often lead to indistinguishable results, except for models presenting high frequencies, such as the result shown in <ref type="figure" target="#fig_3">Figure 4</ref>. Hence we advocate, in general, the use of the more efficient local gradient.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">ADAPTIVE PREINTEGRATION</head><p>The unified MLS framework proposed in this paper incurs a more expensive scalar field function evaluation than other lower order reconstruction schemes. As such, we propose an adaptive preintegration scheme that modifies the length of evaluation intervals along rays, focusing the computation along segments where the volume integral changes the fastest. We observe that all of the information needed to robustly determine an appropriate interval length for evaluating the volume integral is contained in the preintegration tables and the scalar function itself. First, because the preintegration tables ensure that isosurfaces will be composited as long as the scalar function is monotonic over an interval, the interval length can be increased with increasing composited opacity values. And second, because isosurfaces near extrema in the scalar function can be missed, the interval length must decrease near these features.</p><p>From these observations we propose a novel, adaptive preintegration method for computing the volume rendering integral. An illustrative result of the method is shown in <ref type="figure">Figure 5</ref>, where the adaptive sample locations along one ray are shown. The behavior of the scalar function along the ray is shown in red while the accumulated opacity is shown in blue. It can be seen that the sampling of the adaptive scheme (bold vertical lines) becomes more coarse as the accumulated opacity increases. Refinement occurs, however, around scalar function extrema to ensure that all isosurface intersections are detected. Finally, the sampling is terminated when the opacity is saturated. In contrast, standard preintegration methods <ref type="bibr" target="#b7">[8]</ref> can only take advantage of early ray termination while choosing a conservative step size such that extrema in the scalar function are adequately sampled, producing oversampling along intervals where the volume integral changes slowly. <ref type="figure">Fig. 5</ref>. An illustration of the sampling along a ray with adaptive (vertical lines). The function is plotted in red while the opacity along the ray is shown in blue. It can be seen that the adaptive scheme refines near local extrema and at the beginning of the ray where the contribution to the integral is large while the interval length increases with increasing opacity.</p><p>In the remainder of this section we first formulate an approximation of the volume rendering integral using arbitrary length evaluation intervals (Section 4.1), which is followed by a description of the interval length adaptation scheme (Sections 4.2 and 4.3). We then include details on the computation of the preintegration tables and a description of how to handle clipped ray segments incurred from intersecting rays with irregular grids (Section 5).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Approximating the Volume Integral</head><p>In this section we derive an approximation of the volume rendering equation <ref type="bibr" target="#b27">[28]</ref> for use with the proposed adaptive preintegration method. Specifically, the derivation allows for the integration along a ray to be approximated with a composition of colors and opacities computed over arbitrary-length subintervals of the ray. To begin, the volume rendering integral is given as:</p><formula xml:id="formula_12">I = D 0 c( f (x(λ )))τ( f (x(λ )))e − λ 0 τ( f (x(λ ′ )))dλ ′ dλ (11)</formula><p>where c is the emitted color and τ is the extinction which changes with the scalar function f along the ray x(λ ). For use with preintegration, the domain D of the integral can be split into the intervals <ref type="bibr" target="#b7">[8]</ref> </p><formula xml:id="formula_13">([d 0 , d 1 ], . . . , [d n−1 , d n ])</formula><p>, where d 0 = 0 and d n = D. the opacity (α) and color (C) for arbitrary length intervals can then be defined as:</p><formula xml:id="formula_14">α [d i ,d i+1 ] = 1 − exp − d i+1 d i τ( f (x(λ )))dλ (12) C [d i ,d i+1 ] = d i+1 d i c( f (x(λ )))τ( f (x(λ )))e λ d i τ( f (x(λ ′ )))dλ ′ dλ .<label>(13)</label></formula><p>Using Equations 12 and 13 we arrive at the well-known recursive front-to-back composition formulas for opacity and color:</p><formula xml:id="formula_15">α i+1 = α i + (1 − α i )α [d i ,d i+1 ]<label>(14)</label></formula><formula xml:id="formula_16">C i+1 = C i + (1 − α i )C [d i ,d i+1 ]<label>(15)</label></formula><p>where I = C n + I 0 α n and α 0 = C 0 = 0. This reformulation is exact, and because there are no assumptions about the length of the intervals, the step size can be varied along the ray. Furthermore, as Equations 14 and 15 add the contribution of the interval</p><formula xml:id="formula_17">[d i , d i+1 ], this contribu- tion is fully determined by (1 − α i )α [d i ,d i+1 ] and (1 − α i )C [d i ,d i+1 ] .</formula><p>This property is important in Section 4.2.</p><p>Assuming that f (x(λ )) is a linear function on the interval</p><formula xml:id="formula_18">[d i , d i+1 ], α [d i ,d i+1 ] and C [d i ,d</formula><p>i+1 ] can be precomputed in a 3D table. This precomputation depends on the value of the scalar function f at the front f (d i ) and the back f (d i+1 ) of the interval, as well as on the length l = d i+1 − d i of the interval. We note that these table values are only an approximation to the true integral over the interval because the function is, in general, nonlinear and the table has a finite resolution.</p><p>For the remainder of this section let us denote the approximated color of an interval (stored in a preintegration table) byC i,i+1,l ≈ C [d i ,d i+1 ] and similarly, the approximated opacity asα i,i+1,l ≈ α</p><formula xml:id="formula_19">[d i ,d i+1 ] .</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Interval Length Adaptation</head><p>The accuracy of the volume integral approximation along a interval can be increased by further subdivision along the interval. As such, the interval can be progressively refined until the difference of the volume integral approximation between any two successive subdivision levels is below some error threshold.</p><p>Starting with a coarse step size, the initial volume integral approximation along an interval for color (i.e., the contribution of the interval in Equation 14), C 1 , is:</p><formula xml:id="formula_20">C 1 =C i,i+1,l<label>(16)</label></formula><p>To increase the accuracy of this approximation, the interval is subdivided, and the contribution, C 2 , becomes a summation over the two subintervals:</p><formula xml:id="formula_21">C 2 =C i,i+1/2,l/2 + (1 −α i,i+1/2,l/2 )C i+1/2,i+1,l/2</formula><p>The subdivided contributions for opacity are defined similarly as:</p><formula xml:id="formula_22">α i,i+1,l ≈ α i,i+1/2,l/2 + (1 −α i,i+1/2,l/2 )α i+1/2,i+1,l/2</formula><p>This subdivision continues recursively until the difference in the volume integral approximation over the entire interval changes by only some small amount. Based on the volume integral approximations C 1 and C 2 we define the relative error of the approximation as |C 1 − C 2 |/|C 2 |, where |C| = C.r 2 +C.g 2 +C.b 2 -note that this is not independent from the opacity (see Equations 15 and 16). To adapt the sampling as the opacity increases we multiply the relative error by (1 − α). The final termination criteria for the recursive subdivision is:</p><formula xml:id="formula_23">(1 − α i )|C 1 −C 2 |/|C 1 | &lt; ε.<label>(17)</label></formula><p>In the recursion it is important to first subdivide the interval</p><formula xml:id="formula_24">[d i , d i+1/2</formula><p>] such that α i+1/2 is known when subdividing the interval</p><formula xml:id="formula_25">[d i+1/2 , d i+1 ].</formula><p>This is because α i+1/2 is used in the computation of the termination criteria for the interval</p><formula xml:id="formula_26">[d i+1/2 , d i+1 ].</formula><p>Note that this scheme is automatically optimal for constant transfer functions and linear scalar fields, since C 1 and C 2 will be equal to within numerical errors.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Handling Scalar Function Extrema</head><p>The subdivision scheme in the previous section works well as long as the scalar function is monotonic over an interval. If this property is violated, an isosurface may exist near an extrema of the scalar function which is never recovered during subdivision. The MLS reconstructions are not guaranteed to be monotonic over an arbitrary interval as they are not linear. Because of that, we allow extrema in the scalar function to induce subdivisions in the adaptive preintegration scheme. We propose using the derivatives at the beginning and end of an interval to determine whether the interval contains an extrema. Thus, an interval</p><formula xml:id="formula_27">[d i , d i+1 ] will be further subdivided if D v ( f (x(d i )))D v ( f (x(d i+1 ))) &lt; 0 (18)</formula><p>where </p><formula xml:id="formula_28">D v ( f (x(d i )))</formula><formula xml:id="formula_29">D v ( f (x)) = ∇ f (x) • v .<label>(19)</label></formula><p>Equation 19 is efficient to compute in the proposed MLS framework as ∇ f (x) is already determined for shading, and imposes very little overhead in an MLS function evaluation. It should be noted that the accuracy of the termination criteria heavily depends on the accuracy of the computed gradient ∇ f (x).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">IMPLEMENTATION</head><p>The first step in the proposed volume MLS ray casting system is to compute the preintegration tables based on an input transfer function. We compute the table for opacity, as well as the packed tables for shading and material properties, using the incremental subrange preintegration algorithm proposed by Lum et al. <ref type="bibr" target="#b23">[24]</ref>. In the adaptive preintegration scheme implementation we must choose two parameters, l max and l min , which bound the length of an interval. Since we know that during the subdivision process only intervals of length l max , l max /2, . . . , l min will be used, only those tables need to be computed. We found that our adaptive preintegration scheme is sensitive to numerical errors in the preintegration tables. To be able to explicitly control the accuracy of the preintegration tables we improved the incremental subrange preintegration such that we can control the maximal step size of the numerical integration, i.e., we supersample intervals if necessary. While the table of length l k can also be computed from the table of length l k /2 using the idea of incremental preintegration <ref type="bibr" target="#b45">[46]</ref>, we found it difficult to control the errors in such a scheme. The need for high accuracy preintegration also implies larger tables. All the results in this paper use tables with a resolution of 512 2 . While these large tables increase the memory footprint of the system (the tables require approximately 72MB), they are relatively fast to compute (up to 10 seconds on the CPU) and could likely be generated on the GPU at faster speeds, enabling interactive user control of the TFs.</p><p>In the case where an interval is clipped against the bounding geometry of the volume we must compute the integral for a length that is not present in any of the tables. For this scenario, the integral can be determined by carefully combining values from different tables. Because this happens only twice per ray, this additional complexity is virtually unnoticeable.</p><p>Next, the ray caster intersects each ray with the boundary of the volume, finding all the intervals that lie within the (possibly nonconvex) hull of the grid. These intersection points are important as the MLS function approximation is ill-defined away from the data points. Along each of the intersected ray segments, integration intervals are determined using the adaptive scheme described in Section 4, and the MLS function and gradient are computed at the front and back of each interval (see next section). Finally, the volume integration along the interval is computed via lookups into the preintegration tables. The resulting color and opacity are composited with the stored values on the ray. Early ray termination occurs when the opacity value is greater than some threshold close to one (for the results in this paper we use 0.99).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Fast and Robust MLS Evaluation</head><p>The most time critical part of our rendering system is the evaluation of the MLS function and its gradient, which involves both a neighborhood query and solving a linear system. The complexity of the latter operation depends on the size of the neighborhood and the number of degrees of freedom in the basis. For a small basis, once the covariance matrix B T W(x)B is computed, solving the normal equation itself is relatively cheap and can be done efficiently using a Cholesky decomposition without square roots of the covariance matrix. Given</p><formula xml:id="formula_30">B T W(x)B = LDL T ,<label>(20)</label></formula><p>where L is a lower triangular matrix with unit diagonal, and D is a diagonal matrix, we can solve c x as:</p><formula xml:id="formula_31">c x = L −T D −1 L −1 B T W(x)f .<label>(21)</label></formula><p>Not only does avoiding the computation of square roots improve performance, but it also increases the stability of the system. Moreover, both stability and efficiency can be further improved by shifting the origin of the basis to the the evaluation point, i.e., b(</p><formula xml:id="formula_32">x i ) = b(x i − x)</formula><p>, which is mathematically equivalent and avoids large numbers when computing the function far from the origin. Since the basis function is only evaluated at x, i.e., at the origin, it is therefore sufficient to compute the constant coefficient c 1 of c x , hence avoiding most of the calculation in Equation 21.</p><p>The computations of the neighbor samples, on the other hand, requires efficient spatial-data structures. More precisely, given an evaluation point x, the challenge is to find all samples p i having strictly positive weights. Therefore, the choice of both the data structure and search algorithm is related to the weighting scheme. For the weighting function defined in Section 3.1.2, we need to find all the ellipsoids (or balls) containing x. In our CPU implementation this is accomplished using a kd-tree partitioning of the space where a sample is referenced by all leaves intersecting its corresponding ellipsoid. Our kd-tree is built recursively from top to bottom until the size of the node is smaller than the average radius of the node's samples. <ref type="table">Table 1</ref>. This table lists the data sets presented in this paper, along with the timings of our GPU implementation for the standard and adaptive integration schemes as well as the number of function evaluations needed by both schemes to satisfy the RMSE shown. We also show the step size parameters l min , l max and the termination criterion ε (see Section 4.2) for the adaptive scheme which were used to generate these results. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Data Set</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">CUDA Implementation</head><p>In order to achieve nearly interactive performance we implemented a GPU-based version of the raycaster using CUDA <ref type="bibr" target="#b33">[34]</ref>. In our current implementation, each thread processes a single ray, and the ray traversal is entirely decoupled from the volume data structure. For the ray traversal we implemented both a constant step size strategy and the adaptive algorithm described in Section 4. In the latter case, the recursion is managed via a small stack stored in local memory. To efficiently find neighbor samples, we use the dynamic redundant octree of Guennebaud et al. <ref type="bibr" target="#b15">[16]</ref>. This spatial search data structure is particularly efficient for GPU applications, allowing for dynamic updates as well as intuitive control of the memory footprint versus performance. We did not yet implement the anisotropic weights discussed in Section 3.1.2 on the GPU, even though that is possible.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">RESULTS</head><p>In this section we present results of the proposed MLS framework for several well-known regular and irregular datasets. Except where noted otherwise, all of the MLS images were generated using a linear basis with approximate gradients and the proposed adaptive preintegration scheme with our GPU-based implementation. <ref type="table">Table 1</ref> provides information on each data set, including the relevant parameters used to generate the images and performance results. The results were computed on a 2.6GHz Intel Core 2 Duo with 8 GB of RAM and an NVIDIA Quadro FX5600 GPU with 1.5 GB of video memory. The parameters in <ref type="table">Table 1</ref> lead to a root mean square error (RMSE) below 5% compared to ground truth images computed using a very small step size. We found that this error tolerance leads to visually indistinguishable results from the ground truth images. Of all the parameters ε (see Section 4.2) is the least sensitive for the resulting image quality, while a too-large value for l max (see Section 5) can cause the adaptive integration scheme to entirely miss extrema in the volume integral by inducing an early termination of the automatic refinement scheme. This early termination results in visible discontinuities in the final image. A too-large segment length for the standard integration scheme also introduces artifacts, but those are harder to detect because the images is less likely to exhibit discontinuites as the sampling positions on neighboring rays are very similar.</p><p>The capabilities of the MLS system for regular grids are shown in the renderings of the heptane plume dataset in <ref type="figure" target="#fig_0">Figure 1</ref> and the Marschner-Lobb dataset in <ref type="figure" target="#fig_6">Figure 7</ref>. To illustrate MLS ray casting of curvilinear grids we show renderings of the highly anisotropic NASA blunt fin dataset in <ref type="figure" target="#fig_5">Figure 6</ref>. We show performance numbers for rendering the blunt fin on the CPU because we did not yet implement anisotropic weights on the GPU. Note that the CPU implementation is not optimized and takes orders of magnitude longer than the GPU implementation. Irregular grid renderings of tetrahedral meshes are shown in <ref type="figure">Figure 8</ref> with the bucky ball dataset (left) and the Utah torso model (right). For the torso model we estimated the sampling density at the input samples using the k-nearest neighbor radius and rendered the reconstructed function. In all of these images, the high-quality shading of smooth isosurfaces confirms the quality of the MLS reconstruction, while the range of datasets and grid-types illustrates the versatility of the MLS scheme.</p><p>To compare the MLS system with existing ray casting methods, we implemented a standard piecewise-linear scheme with weighted normals <ref type="bibr" target="#b25">[26]</ref> for tetrahedral meshes (see <ref type="figure" target="#fig_5">Figure 6</ref> (left)). The image shows significant visual artifacts, even though we are using weighted normals. <ref type="figure" target="#fig_6">Figure 7 (middle)</ref> shows the result of cubic B-spline convolution for the reconstruction of a continuous function over a regular grid. The B-spline reconstruction has been shown to be optimal for the Marschner-Lobb dataset <ref type="bibr" target="#b26">[27]</ref>. The comparison shows that MLS reconstruction obtains competitive results. Using a linear MLS basis on a regular grid does not reduce approximation errors at the grid points <ref type="bibr" target="#b43">[44]</ref>, which explains why the MLS approximation is not tighter. However, we note that convolution is equivalent to MLS with a constant basis function <ref type="bibr" target="#b43">[44]</ref>, making MLS is a more general framework that subsumes convolution. <ref type="figure">Fig. 8</ref>. Our MLS framework allows for high-quality isosurface shading, including specularity, combined with volume integration. This is illustrated for the irregular bucky ball dataset (left) and the torso model (right). The torso model displays the sampling density of the sample points estimated using the k-nearest neighbor radius.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.1">Performance Analysis</head><p>In theory, the complexity of our algorithm is O(m * p * (k + log(n))) for irregular data sets where m is the number of pixels, p is the number of function evaluations per ray, n is the size of the dataset, and k is the number of neighbors used. As pointed out in Section 4.2, the number of function evaluations per ray depends on the complexity of the scalar function and transfer function. The runtime of a function evaluation is O(k + log(n)), where O(log(n)) represents the traversal complexity of the hierarchical data structure -in practice the size of the dataset has very little impact on the evaluation cost that is highly dominated by the size of the neighborhoods. Using an adaptive scheme, the total number of function evaluations can be significantly reduced (see <ref type="table">Table 1</ref>). However, the limited flexibility of current GPU architectures makes it very challenging to take full advantage of this gain. In our experiments we observed that more complex datasets (i.e., those that contain more high-frequency features) benefited the most from the adaptive scheme.</p><p>To give further insight into the complexity of a function evaluation we compare the number of floating point operations (flops) used for  the evaluation of a number of reconstructing functions in <ref type="table" target="#tab_1">Table 2</ref>. We compare standard trilinear interpolation of the normals and standard tetrahedral ray casting with weighted normals <ref type="bibr" target="#b25">[26]</ref> to MLS ray casting with constant and linear basis functions. The MLS performance is a function of the number of neighbors (k). In practice, k usually varies between 8 and 20. From this analysis we conclude that the flops for one MLS evaluation is usually less then three times that of a trilinear interpolation. For irregular datasets the most expensive part of a function evaluation remains the neighborhood query. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6.2">Reconstruction Quality Analysis</head><p>In practice, function reconstruction is an ill-posed problem for which there are many reasonable solutions. Furthermore, for visualization there is a tradeoff between approximation power and visually pleasing results. The latter is subjective, while the former is well-studied for MLS. Convergence theory <ref type="bibr" target="#b47">[48,</ref><ref type="bibr" target="#b21">22]</ref> yields error bounds of the MLS reconstruction, and multivaried nonparametric regression in statistics <ref type="bibr" target="#b39">[40]</ref> has lead to a thorough understanding of its bias and variance.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">CONCLUSIONS &amp; FUTURE WORK</head><p>Volume MLS ray casting produces high-quality images and provides an easy to understand mathematical framework with intuitive parameters. It is a first step towards creating an efficient framework which is able to handle any kind of data regardless of its topology. A next step in this direction would be to remove the necessary boundary information and compute a (possibly) nonconvex hull of the data purely based on the sampling. Our volume MLS framework ties in nicely with a wealth of existing tools for MLS reconstruction. For example, one could extend this work to include exact reconstruction of sharp features.</p><p>The proposed system lends itself well to streaming data. Since an additional data point only affects the scalar function in a bounded region, a local update of the image could be computed and no global system has to be solved. The ray casting approach is attractive due to its simplicity and because it can easily be extended to include complex cut and region of interest geometry. Finally, our adaptive preintegration scheme is immediately useful for other ray casting frameworks. We believe that progress on the theory of the convergence of preintegration could improve the efficiency and robustness of our scheme.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 .</head><label>1</label><figDesc>The continuous temperature function of a simulated heptane plume rendered with volume MLS ray casting.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 .</head><label>2</label><figDesc>MLS reconstruction of a given set of scattered data points (x i , f i ) in 1D. The local WLS approximation g x for the point x is shown in blue. Its computation and evaluation at every point of the domain yields the complete MLS reconstruction shown in red.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 3 .</head><label>3</label><figDesc>The effects of using different basis functions and support sizes for reconstructing the Marschner-Lobb data set. In the first row, the data is approximated using a linear basis with support size 1.8 (left), 2.4 (middle), 4 (right). The second row shows a quadratic basis with support size 2.6 (left), 3 (middle), 4 (right)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 .</head><label>4</label><figDesc>MLS reconstructions shaded using the local approximate normals (left), and the exact analytic normals (right).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head></head><label></label><figDesc>is the derivative of the scalar function f at x(d i ) in the direction of the ray v. To compute D v ( f (x(d i ))) we use the standard formulation:</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 .</head><label>6</label><figDesc>The irregular blunt fin data set rendered using a standard tetrahedral rendering scheme (left), the proposed MLS technique with adaptive preintegration (middle), and the anisotropic weights used in the MLS reconstruction (right).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 7 .</head><label>7</label><figDesc>This image shows a comparison of different reconstructions of the Marschner-Lobb dataset sampled on a 41 × 41 × 41 grid. We show the analytic function (left), a reconstruction with a B-spline filter (middle), and a reconstruction using MLS with linear basis and a support size of 2.4 samples (right).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 2 .</head><label>2</label><figDesc>This table compares the number of flops needed to compute one function evaluation for different function approximation schemes and k neighbor samples. For the constant basis we computed the analytic MLS gradient while we included the approximate gradient for the linear basis. For the trilinear interpolation we included a central difference gradient.</figDesc><table><row><cell></cell><cell>TriLinear</cell><cell>Standard Tetrahedral</cell><cell>Constant</cell><cell>Linear</cell></row><row><cell></cell><cell>Kernel</cell><cell>Ray Casting</cell><cell>Basis</cell><cell>Basis</cell></row><row><cell>function</cell><cell>30</cell><cell>7</cell><cell>15*k + 1</cell><cell>39*k + 56</cell></row><row><cell>gradient</cell><cell>186</cell><cell>20</cell><cell>14*k + 9</cell><cell>free</cell></row><row><cell>total</cell><cell>216</cell><cell>27 (+52 ray intersect.)</cell><cell cols="2">29*k + 10 39*k + 56</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>The authors sincerely thank Markus Gross, ETH Zurich, for inspiring this work during stimulating discussions at the outset of this project. The authors wish to thank David Luebke and NVIDIA for generous donation of hardware. Christian Ledergerber, Miriah Meyer, and Moritz Bächer were supported by funding from the Initiative in Innovative Computing (IIC) at Harvard. Gael Guennebaud was supported by the ERCIM "Alain Bensoussan" Fellowship Programme. The Utah torso model is courtesy of the NCRR Center for Integrative Biomedical Computing at the University of Utah, and heptane plume dataset is courtesy of the Center for the Simulation of Accidental Fires and Explosions, also at the University of Utah.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Anisotropic point set surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Adamson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Alexa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Afrigraph</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="7" to="13" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Point-sampled cell complexes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Adamson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Alexa</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">25</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="671" to="680" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Computing and rendering point set surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Alexa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Behr</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Or</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Fleishman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Levin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="3" to="15" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Defining point-set surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Amenta</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><forename type="middle">J</forename><surname>Kil</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="264" to="270" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">An adaptive framework for visualizing unstructured grids with time-varying scalar fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><forename type="middle">F</forename><surname>Bernardon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">P</forename><surname>Callahan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">.</forename><forename type="middle">L D C</forename><surname>Jo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Parallel Comput</title>
+		<imprint>
+			<biblScope unit="volume">33</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="391" to="405" />
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Parallel volume rendering for curvilinear volumes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Challinger</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Scalable High Performance Computing</title>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="14" to="21" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Fast algorithms for volume ray tracing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Danskin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Workshop on Volume Visualization</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="91" to="98" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">High-quality pre-integrated volume rendering using hardware-accelerated pixel shading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIG-GRAPH/EUROGRAPHICS Workshop on Graphics Hardware</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Extensions of the zwart-powell box spline for volumetric data reconstruction on the cartesian lattice</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Entezari</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="1337" to="1344" />
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Member-Torsten Moller</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Practical box splines for reconstruction on the body centered cubic lattice</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Entezari</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Van De Ville</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Moller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="313" to="328" />
+			<date type="published" when="2008-04" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Zsweep: An efficient and exact projection algorithm for unstructured volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Farias</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S B</forename><surname>Mitchell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Volume visualization</title>
+		<meeting><address><addrLine>New York, NY, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="91" to="99" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Robust moving least-squares fitting with sharp features</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Fleishman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Or</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. Graph</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="544" to="552" />
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Raycasting of non regularly structured volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Frühauf</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="293" to="303" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Raytracing irregular volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">P</forename><surname>Garrity</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In IEEE Workshop on</title>
+		<imprint>
+			<biblScope unit="volume">visualization</biblScope>
+			<biblScope unit="page" from="35" to="40" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Volume visualization of sparse irregular meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Giertsen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="40" to="48" />
+			<date type="published" when="1992-03" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Dynamic sampling and rendering of algebraic point set surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Guennebaud</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Germann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">27</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="653" to="662" />
+			<date type="published" when="2008-04" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Interactively visualizing procedurally encoded scalar fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Jang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Hopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Huang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">S</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">P</forename><surname>Gaither</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics / IEEE Symposium on Visualization</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="35" to="44" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Curvature-based transfer functions for direct volume rendering: Methods and applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Kindlmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Whitaker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Tasdizen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Moller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<meeting><address><addrLine>Washington, DC, USA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="513" to="520" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Surfaces generated by moving least squares methods</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lancaster</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Salkauskas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Mathematics of Computation</title>
+		<imprint>
+			<biblScope unit="volume">37</biblScope>
+			<biblScope unit="issue">155</biblScope>
+			<biblScope unit="page" from="141" to="158" />
+			<date type="published" when="1981" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">The approximation power of moving least-squares</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Levin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Mathematics of Computation</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="volume">67</biblScope>
+			<biblScope unit="page" from="1517" to="1531" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Display of surfaces from volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics &amp; Applications</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="29" to="37" />
+			<date type="published" when="1988-05" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Error bounds and optimal neighborhoods for mls approximation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lipman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Or</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Levin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Geometry Processing</title>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="71" to="80" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Data-dependent MLS for faithful surface approximation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Lipman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Cohen-Or</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Levin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Geometry Processing</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="59" to="67" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">High-quality lighting and efficient pre-integration for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">B</forename><surname>Lum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Wilson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K.-L</forename><surname>Ma</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics / IEEE Symposium on Visualization</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="25" to="34" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Splatting of non rectilinear volumes through stochastic resampling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Mao</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="156" to="170" />
+			<date type="published" when="1996-06" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<title level="m" type="main">Fast ray traversal of unstructured volume data using plucker tests</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Marmitt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Slusallek</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+		<respStmt>
+			<orgName>Saarland University</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">An evaluation of reconstruction filters for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Marschner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Lobb</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Volume Visualization</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="100" to="107" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">Optical models for direct volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Max</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="99" to="108" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Interactive lighting models and pre-integration for volume rendering on PC graphics accelerators</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Meissner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Graphics Interface</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="209" to="218" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">A fast high accuracy volume renderer for unstructured data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Moreland</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Angel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Symposium on Volume Visualization</title>
+		<imprint>
+			<date type="published" when="2004" />
+			<biblScope unit="page" from="9" to="16" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<monogr>
+		<title level="m" type="main">Gpu accelerated image aligned splatting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Neophytou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005-06" />
+			<biblScope unit="volume">Graphics</biblScope>
+			<biblScope unit="page" from="197" to="205" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">Controlled precision volume integration</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Novins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Arvo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Workshop on</title>
+		<imprint>
+			<biblScope unit="volume">visualization</biblScope>
+			<biblScope unit="page" from="83" to="89" />
+			<date type="published" when="1992" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<monogr>
+		<title level="m" type="main">Adaptive error bracketing for controlled-precision volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">L</forename><surname>Novins</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Arvo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Salesin</surname></persName>
+		</author>
+		<idno>TR92-1312</idno>
+		<imprint>
+			<date type="published" when="1992" />
+		</imprint>
+		<respStmt>
+			<orgName>Cornell University Department of Computer Science</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">Programming Guide</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Nvidia</forename><surname>Cuda</surname></persName>
+		</author>
+		<ptr target="http://developer.nvidia.com/object/cuda.html" />
+		<imprint>
+			<date type="published" when="2007" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">A framework for real-time volume visualization of streaming scattered data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Park</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Linsen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Kreylos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Owens</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Workshop on Vision, Modeling, and Visualization</title>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="225" to="232" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Discrete Sibson interpolation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">W</forename><surname>Park</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Linsen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">O</forename><surname>Kreylos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">D</forename><surname>Owens</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="243" to="253" />
+			<date type="published" when="2006" />
+			<publisher>Member-Bernd Hamann</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">A two-step approach for interactive pre-integrated volume rendering of unstructured grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Röttger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE symposium on Volume visualization and graphics</title>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="23" to="28" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b37">
+	<analytic>
+		<title level="a" type="main">Smart hardware-accelerated volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Röttger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Guthe</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Strasser</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics Symposium on Data visualisation</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="231" to="238" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b38">
+	<analytic>
+		<title level="a" type="main">Hardware-accelerated volume and isosurface rendering based on cell-projection</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Röttger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="109" to="116" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b39">
+	<analytic>
+		<title level="a" type="main">Multivariate locally weighted least squares regression</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Ruppert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">P</forename><surname>Wand</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Annals of Statistics</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="1346" to="1370" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b40">
+	<analytic>
+		<title level="a" type="main">A two-dimensional interpolation function for irregularlyspaced data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Shepard</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM national conference</title>
+		<imprint>
+			<date type="published" when="1968" />
+			<biblScope unit="page" from="517" to="524" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b41">
+	<analytic>
+		<title level="a" type="main">A polygonal approximation to direct scalar volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Shirley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tuchman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">SIGGRAPH Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="63" to="70" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b42">
+	<analytic>
+		<title level="a" type="main">The lazy sweep ray casting algorithm for rendering irregular grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">T</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S</forename><surname>Mitchell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">03</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="142" to="157" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b43">
+	<analytic>
+		<title level="a" type="main">Kernel regression for image processing and reconstruction</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Takeda</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Farsiu</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Milanfar</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Image Processing</title>
+		<imprint>
+			<biblScope unit="volume">16</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="349" to="366" />
+			<date type="published" when="2007-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b44">
+	<analytic>
+		<title level="a" type="main">Rapid exploration of curvilinear grids using direct volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Visualization</title>
+		<imprint>
+			<biblScope unit="page" from="70" to="77" />
+			<date type="published" when="1993" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b45">
+	<analytic>
+		<title level="a" type="main">Hardware-based ray casting for tetrahedral meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Weiler</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kraus</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Merz</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page">333</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b46">
+	<analytic>
+		<title level="a" type="main">Piecewise polynomial, positive definite and compactly supported radial functions of minimal degree</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Wendland</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Advances in Computational Mathematics</title>
+		<imprint>
+			<biblScope unit="volume">4</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="389" to="396" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b47">
+	<analytic>
+		<title level="a" type="main">Local polynomial reproduction and moving least squares approximation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Wendland</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IMA Journal of Numerical Analysis</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="285" to="300" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b48">
+	<analytic>
+		<title level="a" type="main">Footprint evaluation for volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Westover</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In ACM SIG-GRAPH Comp. Graph</title>
+		<imprint>
+			<biblScope unit="page" from="367" to="376" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b49">
+	<analytic>
+		<title level="a" type="main">A coherent projection approach for direct volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">V</forename><surname>Gelder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In ACM SIGGRAPH Comp. Graph</title>
+		<imprint>
+			<biblScope unit="page" from="275" to="284" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b50">
+	<analytic>
+		<title level="a" type="main">Ewa volume splatting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Zwicker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Pfister</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Van Baar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="29" to="36" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

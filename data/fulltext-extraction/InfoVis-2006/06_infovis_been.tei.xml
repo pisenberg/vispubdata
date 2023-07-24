@@ -1,0 +1,746 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Dynamic Map Labeling</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Ken</forename><surname>Been</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Eli</forename><surname>Daiches</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chee</forename><surname>Yap</surname></persName>
+						</author>
+						<title level="a" type="main">Dynamic Map Labeling</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T18:52+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Map labeling</term>
+					<term>dynamic maps</term>
+					<term>human-computer interface</term>
+					<term>label placement</term>
+					<term>label selection</term>
+					<term>label filtering</term>
+					<term>label consistency</term>
+					<term>computational cartography</term>
+					<term>GIS</term>
+					<term>HCI</term>
+					<term>realtime</term>
+					<term>preprocessing</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>We address the problem of filtering, selecting and placing labels on a dynamic map, which is characterized by continuous zooming and panning capabilities. This consists of two interrelated issues. The first is to avoid label popping and other artifacts that cause confusion and interrupt navigation, and the second is to label at interactive speed. In most formulations the static map labeling problem is NP-hard, and a fast approximation might have O(n log n) complexity. Even this is too slow during interaction, when the number of labels shown can be several orders of magnitude less than the number in the map. In this paper we introduce a set of desiderata for &quot;consistent&quot; dynamic map labeling, which has qualities desirable for navigation. We develop a new framework for dynamic labeling that achieves the desiderata and allows for fast interactive display by moving all of the selection and placement decisions into the preprocessing phase. This framework is general enough to accommodate a variety of selection and placement algorithms. It does not appear possible to achieve our desiderata using previous frameworks. Prior to this paper, there were no formal models of dynamic maps or of dynamic labels; our paper introduces both. We formulate a general optimization problem for dynamic map labeling and give a solution to a simple version of the problem. The simple version is based on label priorities and a versatile and intuitive class of dynamic label placements we call &quot;invariant point placements&quot;. Despite these restrictions, our approach gives a useful and practical solution. Our implementation is incorporated into the G-Vis system which is a full-detail dynamic map of the continental USA. This demo is available through any browser.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>In computational map labeling <ref type="bibr" target="#b27">[27,</ref><ref type="bibr" target="#b31">30]</ref> the issue is to apply general cartographic principles for map labels in an efficient and automatic fashion. In most algorithmic treatment, label placement is posed as a global optimization <ref type="bibr" target="#b16">[16]</ref>-e.g., place the maximum number of labels without overlap, given a set of alternative locations for each label. Such problems are typically NP-hard (e.g., <ref type="bibr" target="#b17">[17,</ref><ref type="bibr" target="#b11">11]</ref>) and approximations or heuristics become essential. In such a context, an O(n log n) solution would be considered very fast, although most solutions are considerably worse <ref type="bibr" target="#b16">[16]</ref>.</p><p>In this paper we are interested in dynamic maps, which are characterized by support for continuous zoom (change of scale) and continuous pan (change of region of interest). Labels in dynamic maps must be placed at interactive speed. Since the number of labels in the entire map can be several orders of magnitude more than the number that will be shown in the current view area, even "fast" O(n log n) static solutions are inadequate. (In our map of the USA we have over 12 million labels.) Furthermore, static maps and dynamic maps play different roles for users. A primary goal with static maps is to maximize information content. For a limited edition tricentennial anniversary map of colonial America, we should try to find a globally optimal label placement. A basic purpose of dynamic maps, on the other hand, is navigation, a term we use to capture a variety of tasks, such as searching for a particular location or for the most scenic route between two points. In such tasks labels are useful as navigation markers as well as for information content. For markers in a dynamic environment it is crucial to avoid behavior that is distracting or jarring, such as labels popping or moving about in unexpected ways. In other contexts researchers have sought "frame-coherency" <ref type="bibr" target="#b1">[2]</ref> or "temporal continuity" <ref type="bibr" target="#b7">[7]</ref>. We use the term consistency to capture these ideas and more.</p><p>Let's informally consider four desiderata for dynamic label consistency. As far as we know, no previous work has achieved these desiderata. In the following, placement refers to the location, size</p><p>• Ken Been is with Yeshiva University, E-mail: kbeen@yu.edu.</p><p>• Eli Daiches is with Yeshiva University, E-mail: daiches@yu.edu.</p><p>• Chee Yap is with New York University, E-mail: yap@cs.nyu.edu. and orientation chosen for a label, and selection refers to the decision whether to show a label or not.</p><p>(D1) Except for sliding in or out of the view area, labels should not vanish when zooming in or appear when zooming out. This captures the usual expectation that strictly more features get labeled as we zoom in, and strictly fewer features get labeled as we zoom out. It ensures that labels do not appear, disappear and then re-appear under monotonic zooming. This is similar to the "monotonicity property" in <ref type="bibr" target="#b29">[28,</ref><ref type="bibr" target="#b26">26]</ref>. In some cases we prefer a less restricted version of this desideratum, where we might want, for example, a country label to disappear as we zoom in to street level detail.</p><p>(D2) As long as a label is visible, its position and size should change continuously under the pan and zoom operations.</p><p>(D3) Except for sliding in or out of the view area, labels should not vanish or appear during panning. If (D2) is satisfied, then (D3) can be satisfied by making the decision to select a label a function of scale.</p><p>(D4) The placement and selection of any label is a function of the current map state (scale and view area). In particular, it does not depend on the history of how we arrived at that state. As will be described later, under our algorithm placement and selection are functions of scale alone. In that case, the dynamic map appears like a collection of statically generated maps, one for each scale, even though the labeling is in fact dynamically computed.</p><p>Let's see how these rules can be violated with a naive dynamic labeling solution. As noted above, the number of labels (or the number of features to be labeled) in the entire map is much larger than the number in the current view area. So for interactive speed we need to introduce a label filtering step, which quickly reduces the number of labels that must be considered. For example, we could retrieve just those labels that intersect the current view area, or we could drop all local street names if we are zoomed out far enough. Our naive solution becomes this: do the label filtering, and then run a static labeling algorithm on the reduced set of labels. <ref type="figure" target="#fig_1">Figure 1</ref> shows how desiderata (D1) and (D3) can be violated with this approach. Notice that imposing a global priority order on the labels doesn't help. The source of the problem-the fundamental stumbling block for dynamic labeling-is that from frame to frame the labeling is done on a different set of labels and/or a different set of label conflicts.</p><p>Contributions of this paper. In this paper we present a dynamic labeling solution that satisfies our consistency desiderata, operates at interactive speeds, and generates a high quality labeling. An essential component of our solution is a dynamic labeling framework that guar- . Violations of (D1) under zooming in (a), and (D3) under panning in (b). In both cases, label priority is A &gt; B &gt; C. Initially C is visible. As we zoom out/pan left, C disappears because it conflicts with B. Then C reappears when B disappears because of its conflict with A.</p><p>antees consistency and interactive speed, and that is general enough to incorporate many different algorithms for the actual selection and placement of labels.</p><p>What is this framework? The issue is to solve the three problems of filtering, selection and placement of labels at interactive speeds, supported by preprocessed data structures. Conventionally, it seems best to first filter the labels to a reasonably small set (based on region of interest and/or scale), then select a subset of these labels, and finally place the selected labels. This was Petzold's approach (see Section 2). But our above examples suggest that it would be difficult to achieve consistency this way, even with label priorities. Indeed, our solution uses an "inverted sequence": we first place all the labels, then select from the placed labels. These steps are done in the preprocessing stage. Finally we use filtering during the interaction phase, to merely retrieve the precomputed selection and placement.</p><p>This unconventional sequence leads to a useful and practical dynamic labeling solution. It does, however, limit the scope of our solution to labels that don't "slide around" during panning. This is because we determine, during the preprocessing phase, a placement for each label that is a function of scale. So, for example, a label for a long road cannot slide along the road to stay within the view area as the user pans. Under our approach we can give the illusion of a single static map at each scale, and we (subjectively) see this as adequate, or even preferable, in a typical dynamic map. We can handle long roads by placing several labels along the road-precisely what would be done in a high quality paper map.</p><p>Two screenshots of our implementation appear in <ref type="figure" target="#fig_2">Figure 2</ref>, showing the same location at two different scales. This implementation is incorporated into our open-source G-Vis System <ref type="bibr" target="#b32">[31,</ref><ref type="bibr" target="#b4">5]</ref>, a full detail dynamic map of the continental USA based on the publicly available Tiger data <ref type="bibr" target="#b25">[25]</ref>. Our labeling demo is available on the internet <ref type="bibr" target="#b13">[13]</ref>.</p><p>Prior to this paper, there were no formal models of dynamic maps, nor of dynamic labels. In order to initiate a systematic study, we introduce simple versions of these concepts. We formulate a dynamic labeling optimization problem, and show that a natural version of it is NP-complete. However, we give an efficient solution to a version of the problem that relies on label priorities. We further introduce a simple but versatile class of dynamic label placements called invariant point placements.</p><p>In the next section we will review the related work in this area. Section 3 introduces our dynamic labeling framework, and Section 4 gives a formal model. Section 5 covers some practical considerations for implementing our approach, and we conclude in Section 6. In the appendix we prove the NP-completeness of the simple dynamic labeling optimization problem.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Cartographic principles for labeling maps are laid out in <ref type="bibr" target="#b15">[15,</ref><ref type="bibr" target="#b33">32]</ref>. Starting in the 1980's, static label placement algorithms began to appear [14, 1, 12, 8, 9, 29, 16]. In the 1990's a number of techniques were developed for interactive labeling; a survey of this work was given by Fekete and Plaisant <ref type="bibr" target="#b10">[10]</ref>. For example, with excentric labeling <ref type="bibr" target="#b10">[10]</ref>, all features in a circular neighborhood of the mouse are labeled by listing the labels vertically to the right and left of the neighborhood, and drawing lines from each label to its associated feature. More recent work in this vein includes boundary labeling <ref type="bibr" target="#b5">[6]</ref>.</p><p>Our interest is in producing a labeling that at any given point in time looks like a static labeling, but that adapts to a changing viewpoint in a smooth and consistent way, at interactive speeds. The immediate predecessor for our work is Petzold et al. <ref type="bibr" target="#b18">[18,</ref><ref type="bibr" target="#b19">19,</ref><ref type="bibr" target="#b21">21,</ref><ref type="bibr" target="#b20">20]</ref>, who solve the dynamic map labeling problem in two phases. In the preprocessing phase, they compute a data structure called the "reactive conflict graph"; in the interaction phase, this reactive graph is queried to obtain a static conflict graph G whose nodes are all the map features within the current view, and whose edges indicate potential conflict for labels of these nodes. From G, they finally select a subset of labels that can be placed without conflict at the current scale. This is done by the greedy method: assuming a priority ordering among labels, the labels are placed (or rejected) in priority order. They do not address what we call the label consistency problem.</p><p>Poon and Shin <ref type="bibr" target="#b22">[22]</ref> consider zooming over a set of point labelsi.e., labels for point features, such as towns and cities. They consider only axis-parallel, rectangular labels, where the point feature must be on the left boundary of the label. As we zoom out, the labels grow to the right and vertically. This is a restricted version of our invariant point placements. The one-dimensional version of this problem can be solved for a given scale with greedy interval scheduling. To allow for zooming they build an O(log n) height hierarchy. Each level contains the greedy solution on the points in the next lower level, but at a higher scale. To label a window, first find the most appropriate level in the hierarchy, and then pull out the optimal solution at that level. For the two-dimensional problem, they apply the one-dimensional solution to the labels intersecting a set of horizontal stabbing lines. This solution has relatively high time and space requirements for run-time querying-for example, for label filtering they build a range tree at each level of detail.</p><p>The labeling problem has some similarity to the settlement selection problem <ref type="bibr" target="#b29">[28,</ref><ref type="bibr" target="#b26">26]</ref>, which is to choose the towns and cities that will be shown. Several heuristics for settlement selection are described in <ref type="bibr" target="#b29">[28,</ref><ref type="bibr" target="#b26">26]</ref>, but no consideration is given to consistency during zooming.</p><p>Work on labeling of 3D illustrations <ref type="bibr" target="#b1">[2]</ref> and labeling in virtual and augmented reality systems <ref type="bibr" target="#b7">[7,</ref><ref type="bibr" target="#b2">3]</ref> also relates to our dynamic labeling problem, in that they discuss some heuristics for improving the "frame coherence" or "temporal continuity" of the labeling.</p><p>We may note that map labeling is closely connected to labeling of graph drawings <ref type="bibr" target="#b16">[16,</ref><ref type="bibr" target="#b3">4]</ref>.</p><p>Although the algorithmic literature on label selection as a standalone problem seems to be non-existent, there are several papers discussing heuristics for selecting labels. E.g., Tatemura <ref type="bibr" target="#b24">[24]</ref> discusses "dynamic label sampling" in the context of fisheye-view maps. He does not require non-overlap among labels and/or features. The selection is based on considerations such as the avoidance of clutter, distance from area of interest, etc.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">FRAMEWORK FOR FAST AND CONSISTENT LABELING</head><p>In this section we give an overview of our dynamic labeling approach; in Section 4 we formally define the problem and our solution.</p><p>We can think of static map labeling as being composed of two operations, which may be intertwined: selection and placement. From the set of all possible labels, we need to first select a subset, and then place each label in the subset such that no two labels overlap. Placing a label means determining a size, orientation and location on the map. Now we need to think about what selection and placement mean in a dynamic environment. While the static labeling problem is essentially two-dimensional, the dynamic labeling problem requires a third dimension. It might seem that time would be a natural third dimension, but such a labeling problem would be extremely hard to model in a meaningful way. Instead, we take scale as our third dimension. Under this model, the dynamic selection problem is to determine at which scales a label will be selected, and the dynamic placement problem is to determine a (static) placement for each scale at which a label is selected. Since this approach fixes a single static placement per label per scale, it restricts the scope of our model to labels that don't "slide around" under panning.</p><p>Desideratum (D2) says that a label's position and size should vary continuously with the pan and zoom operations, and we have said that in our model the placement must be a function of scale-i.e., it's position is fixed under panning. Therefore, we can visualize each dynamic placement in world coordinates as an extruded label shape, with the vertical dimension being scale. See <ref type="figure">Figure 3</ref>(a). Since we have not yet considered selection, we can imagine these extrusions as being defined for all positive scales. In our implementation we use a simple form of dynamic placements called invariant point placements, in which the extrusion is a cone. In this case, the label size in world coordinates is proportional to scale, which means the screen size of the label is invariant under zooming. We say that such placements satisfy the label size invariance property. The dynamic placements in <ref type="figure">Figure 3</ref> are invariant point placements, with rectangular labels.</p><p>Desideratum (D1) says that a label should not appear, disappear, and reappear under monotonic zooming. This greatly simplifies the dynamic selection problem. It means that each label must be selected precisely within a single scale interval; we call the selected interval for each label its active range:</p><formula xml:id="formula_0">A L :=[s L min , s L max ]</formula><p>. Under the strict interpretation of (D1), a label may not disappear when zooming in. In that case we must have s L min = 0. If we start with the extrusion defined by a label L and its dynamic placement, and restrict that extrusion to L's active range, we are left with a truncated extrusion. See <ref type="figure">Figure 3</ref>(b). We can ensure that no two labels will overlap at any scale if we do placement and selection in such a way that no two truncated extrusions overlap. (More precisely, the interiors do not intersect; intersection at boundary points is allowed.) <ref type="figure">Figure 3</ref>(b) also shows the outline of the view window cone. A horizontal slice of this graph, at a fixed scale, gives the 2D map that is specified by this dynamic labeling. Two such slices are shown in <ref type="figure">Figure 3</ref>(c). At scale s = 1 all three labels are active, but only the gold and red ones are inside the view area. At s = 2 the view area has expanded (because of zooming out) to encompass all three labels, but the gold label is not active because of the conflict with the red one. As we zoom out from s = 1 to s = 2 (remember that we assume continuous zooming), the gray label slides into the view area, and all three labels slide toward each other. At some scale between s = 1 and s = 2 the gold label disappears because of the conflict with the red one. Since these labels have the label size invariance property, they get bigger in world coordinates as we zoom out, but they remain the same size relative to the view area.</p><p>For a dynamic map, the need for interactive speed means that we must introduce the filtering operation, in addition to selection and placement. The number of labels in the entire map is much larger than can be shown in any given view area, so we can often quickly remove from consideration a large portion of the labels. We can filter on the basis of geographic region, in which case we throw out any label that does not intersect the current view area. We can also filter on the basis of scale-for example, if we are zoomed out far enough, we can throw out all labels for small neighborhood streets.</p><p>As noted in Section 1, a natural first attempt at interactive dynamic labeling would be to first filter the labels (on the basis of scale and/or region), and then run a static placement algorithm on that much smaller subset. We believe that such an approach would not be fast enough for interaction. More importantly, it doesn't seem possible to satisfy our consistency desiderata with this approach. (See <ref type="figure" target="#fig_1">Figure 1.</ref>) Therefore, we propose an inversion of the normal order of doing these operations: place, then select, and finally filter. We achieve interactive speed by moving placement and selection into the preprocessing phase. No label conflict computations are performed in the interaction phase, as it amounts to retrieving a precomputed selection and placement of the labels. Now we can describe our algorithmic framework:</p><p>Preprocessing phase 1. Determine a dynamic placement for each label. This is just a static placement at each scale. In this step we consider each label in isolation, ignoring conflicts with other labels. The dynamic placement should be continuous with scale.</p><p>2. Choose an active range for each label, such that the resulting truncated extrusions are pairwise non-overlapping.</p><p>Interaction phase</p><p>1. Filter the labels on the basis of geographic region and/or scale.</p><p>2. For each label that has not been filtered out, display it if and only if the current scale is within its active range.</p><p>This framework clearly satisfies our consistency desiderata and guarantees that no two labels will ever overlap on screen, yet still allows flexibility in choosing placement and selection algorithms. We only require that placement be a continuous function of scale and selection take the form of active ranges. In fact, there is no a priori reason that placement needs to be done before selection. We have used that order to get a solution that is simple and fast, but in theory selection could be done first or the two could be intertwined.</p><p>In the context of this framework, we want selection and placement algorithms that are in some sense optimal. Informally, optimality amounts to showing "as many labels as possible." In a static map it is clear what is meant by "the number of labels selected." For a dynamic map, we can integrate this number over all scales, and with active ranges the integral reduces to a simple sum. Thus, we arrive at the following dynamic labeling optimization problem:</p><p>Given a set of labels S 0 , determine a dynamic placement and an active range (i.e., a truncated extrusion) for each L ∈ S 0 , such that no two truncated extrusions overlap, and the number of labels active over all scales is maximized. Specifically, maximize</p><formula xml:id="formula_1">∑ L∈S 0 s L max − s L min .</formula><p>Note that at this point we treat each label equally; there is no sense of label priority. Also, for this to make sense we must assume that every active range has a finite upper bound. Let s max be the highest scale at which any label will ever be shown, so that for every label L, we will enforce s L max ≤ s max . For simplicity, let's also take s L min = 0. This amounts to the more restricted version of (D1), in which labels do not disappear when zooming in.</p><p>This problem appears to be quite difficult. In Appendix A we show that the simpler problem of computing an optimal set of active ranges, given a set of dynamic placements, is NP-complete for a suitably generalized class of label shapes. To come up with a practical solution, we now introduce label priorities. Priorities are used by <ref type="bibr" target="#b21">[21,</ref><ref type="bibr" target="#b20">20]</ref> during the interaction phase only; in contrast, we shall exploit priority in the preprocessing phase. We assume that each label has a unique priority. We also assume that whenever two labels "fight" over map space, the higher priority label must "win". To make this notion more precise, say that label L is blocked by label L if expanding L's active range by an infinitesimal amount would cause the two truncated extrusions to overlap. In <ref type="figure">Figure 3(b)</ref>, the gold label is blocked by the red one, and the red label is blocked by the gray one. Now, the priority rule is simply that if L is blocked, it must be blocked by a higher priority label. (It might coincidentally also be blocked by a lower priority label.)</p><p>With label priorities, we can find a solution to the following restricted form of the labeling optimization problem:</p><p>Given a set of labels S 0 and a dynamic placement for each L ∈ S 0 , choose an active range for each L ∈ S 0 such that s L min = 0 for every L, no two truncated extrusions overlap, the priority rule is satisfied, and ∑ L∈S 0 s L max is maximized. The solution is a simple greedy algorithm, G:</p><p>Consider the labels in order of priority, from highest to lowest. For each label L, if there is a scale at which L would be blocked by a higher priority label, then set s L max to the minimum such scale; otherwise set s L max = s max . In other words, we make each truncated extrusion as high as we can, without overlapping any previously determined (and higher priority) truncated extrusion.</p><p>The optimality of this algorithm is proved in Section 4. Our implementation shows that even with these seemingly severe restrictions, we can still produce a dynamic labeling that is useful and fast. In Section 5 we discuss less restricted forms, including the ability to choose from a set of placements for each label.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">DYNAMIC MAP LABELING MODEL</head><p>In this section we formally define the concepts introduced in Section 3.</p><p>We describe label placement with the language of planar affine transformations. We are interested in three types of transformation τ :   Let W 0 be the window, in screen coordinates. The axis-aligned rectangular subset of D 0 that is displayed in W 0 at a given point in time is called the view area. The view area is defined by the width w and height h of W 0 in screen coordinates, a center point (x, y) ∈ D 0 , and a scale s. We define s in such a way that a w×h window corresponds to a ws × hs view area. Thus, increasing the scale corresponds to zooming out. <ref type="bibr" target="#b0">1</ref> For simplicity we assume that w and h are fixed, so that a view area is given by W (x, y, s) ⊆ D 0 , and the current state of the view is (x, y, s). At interaction time, the user issues a sequence of commands of the form "Pan to (x, y)" or "Zoom to s".</p><formula xml:id="formula_2">R 2 → R 2 : (i) τ = T (e, f )</formula><formula xml:id="formula_3">τ(x, y, s) Screen domain W 0 (0, 0) π L LABEL rep(L)</formula><p>If we define the window as having center (0, 0) in screen coordinates, then the transformation τ(x, y, s) that takes W (x, y, s) to W 0 is a translation followed by a dilation:</p><formula xml:id="formula_4">τ(x, y, s) = D(1/s) • T (−x, −y).</formula><p>Note that det(τ(x, y, s)) = 1/s 2 .</p><p>We generally think of a label L as a character string, but it could be an icon or a combination of characters and icons. For our purposes, regard L as a compact, simply connected set rep(L) ⊆ R 2 , representing the canonical rendering of L in its own label coordinate system. Typically rep(L) is a rectangular box <ref type="figure" target="#fig_5">(Figure 4</ref>). L is also associated with the map feature φ (L) ⊆ D 0 that it labels. A static placement for a label L is an allowable transformation π (or π L ) from L's label coordinates into world coordinates-rep(L) is mapped into some translated, rotated, dilated shape π(rep(L)). We say that π is valid if it meets certain cartographic constraints, which typically depend on the nature of the feature φ (L). Intuitively, we expect π(rep(L)) to be near to the point or line feature that it labels, and to overlap the area feature that it labels. Such considerations are outside the scope of this paper.</p><p>A label L is visible under placement π in state (x, y, s) if π(rep(L))∩ W (x, y, s) is non-empty. In screen coordinates, this placement of L shows up in the region (τ(x, y, s) • π)(rep(L)) ∩W 0 . See <ref type="figure" target="#fig_5">Figure 4</ref>.</p><p>A dynamic placement Π L for a label L is a function</p><formula xml:id="formula_5">Π L : s ∈ (0, ∞) → π L s that assigns a static placement π L s to each scale s ∈ (0, ∞). Π L is valid if each π L</formula><p>s is a valid static placement of L. To meet desideratum (D2), Π L should vary continuously with s.</p><p>Π L satisfies the label size invariance property if there is a constant c such that for every scale s, det(π L s ) = cs 2 . By a scaling of L's label coordinates we can, without loss of generality, take c = 1. Then</p><formula xml:id="formula_6">(τ(x, y, s) • π L s )(rep(L))</formula><p>is a translated, rotated copy of rep(L)-i.e., there is no dilation. Hence rep(L) is already "screen size".</p><p>For a set S of labels, a static placement of S is a function</p><formula xml:id="formula_7">π * : L ∈ S → π L that assigns a static placement π L to each label L ∈ S. Similarly, a dynamic placement of S is a function Π * : L ∈ S → Π L</formula><p>that assigns a dynamic placement Π L to each L ∈ S. We say that π * is compatible if for each L, L ∈ S, π L (rep(L)) and π L (rep(L )) do not overlap (i.e., their interiors do not intersect). Let S 0 be the set of all labels. Recall that in our model selection amounts to determining an active range</p><formula xml:id="formula_8">A L = [s L min , s L max ]</formula><p>for each label L. An active range function for S 0 is a function</p><formula xml:id="formula_9">A * : L ∈ S 0 → A L that assigns an active range A L to each L ∈ S 0 .</formula><p>Say that L is active at scale s if s ∈ A L , and consider the set of labels that are active at scale s: A * (S 0 ; s) :={L ∈ S 0 : s ∈ A L }. We say A * is compatible with Π * if, for any s, when we use Π * to place those labels that are active at s under A * , no two labels will overlap. Formally, let the static placement of A * (S 0 ; s) be given by</p><formula xml:id="formula_10">π * s : L ∈ A * (S 0 ; s) → π L s .</formula><p>Then A * is compatible with Π * if π * s is compatible for every s. The dynamic labeling optimization problem from Section 3 can now be formulated as follows:</p><p>Given a set of labels S 0 , find a dynamic placement Π * and an active range function A * such that (i) for each L ∈ S 0 , Π L = Π * (L) is valid and varies continuously with scale, (ii) A * is compatible with Π * , and (iii)</p><formula xml:id="formula_11">∑ L∈S 0 s L max − s L min is maximized.</formula><p>Recall that for every label L we will have s L max ≤ s max , where s L max is the upper bound of the interval A L .</p><p>Let E L refer to the extrusion of rep(L) under a given dynamic placement Π L , and let E L /A L refer to the portion of E L with s ∈ A L . We call this a truncated extrusion. In the following, we take</p><formula xml:id="formula_12">A L = [0, s L max ]</formula><p>, as in the restricted form of (D1). A set of truncated extrusions is compatible if they are pairwise non-overlapping. This is equivalent to A * being compatible with Π * . Say that L is blocked by L under a given Π * and A * if increasing s L max by an infinitesimal amount would cause E L /A L and E L /A L to overlap. The blocking scale of L and L under Π * is the smallest scale s such that E L /A L and E L /A L intersect if s L max &gt; s and s L max &gt; s. Thus, above scale s, only one of L and L can be active. (This is called the "cutting scale" in <ref type="bibr" target="#b21">[21,</ref><ref type="bibr" target="#b20">20]</ref>.)</p><p>Priorities are given by an assignment P : S 0 → R. Priorities are unique: L = L implies P(L) = P(L ). We now require that A * respect the following priority rule: If L is blocked, then it is blocked by some L with P(L ) &gt; P(L).</p><p>The restricted form of the dynamic labeling optimization problem, from Section 3, becomes Given a set of labels S 0 and a dynamic placement Π * for S 0 , choose an active range function A * compatible with Π * such that s L min = 0 for every L, the priority rule is satisfied, and</p><formula xml:id="formula_13">∑ L∈S 0 s L max is maximized.</formula><p>Now we can prove the optimality of the greedy algorithm given in Section 3.</p><p>LEMMA 1 Under the priority rule and the restricted (D1), the A * computed by algorithm G is optimal for any given Π * .</p><p>Proof. First notice that under any optimal solution every label L must either be blocked or have s L max = s max -otherwise we could increase s L max to get a better solution. Now suppose there exists an optimal solution O in which some label has a wider active interval than under G. Let L be the highest priority such label. L must be blocked by some higher priority label L under G, but not under O. So E L /A L is shorter under O than under G. Since O is optimal and respects the priority rule, L must be blocked under O by some higher priority label L . But L is not blocked by L under G, which means that E L /A L is higher under O than under G. But P(L ) &gt; P(L ) &gt; P(L), which contradicts our choice of L. Therefore, every active interval under G is at least as wide as under any optimal solution, so G is optimal.</p><p>Q.E.D.</p><p>The compatibility of A * with Π * implies that in the interaction phase, at any scale s at which L is active we can safely display L using π L s without worrying about conflicts with other labels. This leads directly to our interaction phase algorithm: to label window W (x, y, s), we first filter the (large) set S 0 to get S w ⊆ S 0 , then render each L ∈ S w if and only if s ∈ A L . In contrast to <ref type="bibr" target="#b21">[21,</ref><ref type="bibr" target="#b20">20]</ref>, no label conflict computations are done during the interaction phase.</p><p>We have omitted one important detail from the selection algorithm, which is how to compute the blocking scale of two labels. This computation is facilitated by restricting ourselves to rectangular labels and invariant point placements. Formally, an invariant point placement is a dynamic placement of label L that is represented by <ref type="figure">(p, q, θ )</ref>, where p is a point in world coordinates, q is a point in L's label coordinates, and θ is an angle. For every scale s &gt; 0 this defines the static placement π L s of the form</p><formula xml:id="formula_14">π L s = T (p)R(θ )D(s)T (−q)</formula><p>where T, R and D are the translation, rotation and dilation transformations. We see that π L s (q) = p for all s (this is the "invariant"). For instance, if q ∈ rep(L), then at any scale s, p ∈ π L s (rep(L)). This is illustrated in <ref type="figure" target="#fig_7">Figure 5</ref>. Notice also that invariant point placements have the label size invariance property.   <ref type="figure">3</ref> shows invariant point placements on rectangular labels. The regular shape of the extrusions allows us to derive closed form expressions for the location of each label corner as a function of scale, and these can be used to derive the blocking scale for two labels. We omit the details. By computing the blocking scale of all pairs of labels, an O(n 2 ) implementation of the algorithm to compute A * from a given Π * is straightforward. But when we are zoomed in we expect the label conflict graph to be quite sparse, and when we are zoomed out we expect the number of labels active to be quite small, so it seems that we shouldn't need to check every label pair. In Section 5 we describe some heuristics to speed up this computation.</p><formula xml:id="formula_15">p = πs(q) πs(rep(L)) s = 12 s = 9 s = 6 s = 3 φ (L) φ (L) p = πs(q )</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">REFINEMENTS AND PRACTICAL CONSIDERATIONS</head><p>To avoid complicating the presentation, we have delayed discussion of several issues. (i) With a little intertwining of placement and selection, we can intelligently consider multiple possible placements for each label; (ii) we want a way of allowing a liberal version of (D1), in which some labels might disappear when zooming in, but without sacrificing the optimality of the greedy selection algorithm; (iii) we have yet to give a label filtering algorithm; and (iv) we want to improve on the O(n 2 ) time complexity for computing A * .</p><p>Suppose we have multiple possible dynamic placements for a label, and we don't want to commit to one of them without considering conflicts with nearby labels. For example, we might have four invariant point placements for a point label, corresponding to above left, above right, below left, and below right. A modified greedy algorithm considers all four placements, and chooses the one that allows for the widest active range. Lower priority labels considered later will only be compared with the chosen placement.</p><p>Our key to handling the remaining issues is to introduce levels of detail (LOD). We associate with each label L a live range R L = [s i , s j ], with 0 ≤ i &lt; j ≤ h. This indicates that L "wants" to be displayed in levels λ i ,...,λ j−1 , absent conflict considerations. For example, a country name might only want to appear in λ 4 ,...,λ h−1 , while a local street name might only appear in λ 0 . We require that L may be active only if it is alive: A L ⊆ R L . Now the liberal version of (D1) is that a label can vanish when zooming in, but only upon reaching the lower end point of its live range.</p><p>In our implementation each LOD is labeled separately-each starts with its own set of labels S 0 , consisting of those labels that are alive in this level, and placement and selection are computed on this set. This way, when we compute Π * and A * for λ i , we can simply take the lower bound of each active range to be 0, and use the greedy algorithm G as described in Section 3. If a label's live range does not include λ i−1 , its disappearing when zooming in beyond s i is accomplished by simply not including the label in S 0 when placement and selection are done on λ i−1 .</p><p>The LODs are also treated separately during the interaction phase, so that labeling view area W (x, y, s) only requires searching the LOD that contains s. Thus, filtering on the basis of scale is essentially taken care of in the preprocessing phase. We need to be careful, though, to coordinate between the LODs, so that there is no popping across LOD boundaries. This can be done by computing the labeling in reverse order, from λ h−1 down to λ 0 . Any label that is active at s i+1 in λ i+1 should be given a high enough priority in λ i so that it will also be active at s i+1 in λ i . (We have not yet implemented inter-LOD coordination.)</p><p>Filtering on the basis of geographic region must still be done in the interaction phase. For each λ i we split the map domain D 0 into a grid of buckets, and assign each label to the bucket that contains its invariant point. The labels in each bucket are stored in a list, sorted by s L max , and the lists are stored in a hash table, indexed by grid location. The filtering step now becomes quite simple: given the boundary of the current view area W (x, y, s), we can easily compute which buckets cover it, and pull those lists out of the hash table. The grid size of a bucket for λ i is l × l, where l is assumed to be greater than the maximum length of any label at scale s i+1 . Then, since a label might span a bucket boundary, we also consider a one bucket wide buffer around W (x, y, s), to be sure that all labels intersecting W (x, y, s) are found.</p><p>There is an added benefit to this bucketing approach: since the bucket lists are stored in sorted order, we don't need to traverse an entire list. We only need to step through each list in order of descending s L max , and stop when we get to a label for which the current scale s &gt; s L max . Thus, we traverse only the active labels in each list. Buckets also help to reduce the O(n 2 ) time for computing A * . In practice, there really isn't a problem at high LODs (high scales) because so many labels are filtered out by scale. At lower LODs the conflict graph is sparse, so we shouldn't need to check each label against all others. This is where buckets help: a label only needs to be checked for conflicts with other labels in its bucket or in neighboring buckets. In our implementation we have about 12 million labels and half a million buckets in λ 0 . So an average of about 24 labels per bucket, but with great variability-from 0 in many sparsely populated areas to several hundred or more in dense urban areas.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSIONS AND FUTURE WORK</head><p>This paper makes theoretical, algorithmic and practical contributions to the area of dynamic labeling. We have formalized the dynamic labeling problem, and given a set of desiderata (D1-D4) for label consistency. Our solution is the first to achieve these desiderata. Prior to our work, there have been no formal models of dynamic maps or dynamic labels. We believe this is an essential step for proving correctness and for elaborating on and comparing various solutions in this domain.</p><p>We have formulated a new (and somewhat unintuitive) algorithmic framework for fast and consistent labeling. In this framework, we perform placement and selection of labels in the preprocessing phase, and only filtering during interaction.</p><p>We introduced invariant point placements, and a solution for placement and selection based on them. Our solution is highly efficient in the interaction phase, and yet achieves label consistency (D1-D4). Finally, we have validated the usefulness of our approach by a full-scale web demo for a very large data set.</p><p>Future work. Many extensions are possible. Within our framework, other possibilities for label placement and selection can be explored. Our invariant point placements are just one reasonably good labeling, but other placements might give more flexibility. We leave open interesting theoretical questions about the complexity of dynamic labeling within our model. We plan to pose dynamic map labeling as an online problem, and to introduce competitive analysis for labeling. Finally, we would like to introduce various categories of labels which can be selected or deselected (dynamically) from any view. Besides the standard geographic labels, we can have label categories such as: restaurant, landmark, gas station, public transportation, store, etc. Such extensions are needed to support highly personalized navigation goals in applications.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>A APPENDIX: COMPLEXITY OF OPTIMAL ACTIVE RANGE SE-LECTION</head><p>In this section we show that our restricted dynamic labeling optimization problem is NP-complete, under the assumption of star-shaped labels. (The weaker result for arbitrary polygonal labels follows immediately.) We do this by reducing the independent set problem for planar graphs to it. The independent set problem is this: given a graph G and an integer k, determine if G has an independent set of size k. The reduction associates the vertices of G with invariant point placements of star-shaped labels, and the edges of G with conflicts between placements. Recall that, as in <ref type="figure">Figure 3</ref>, the extrusions for invariant point placements are cones.</p><p>We consider cones in R 3 . The last coordinate of points q ∈ R 3 is called the height of q. Given p ∈ R 2 and s ∈ R, let p (s) ∈ R 3 be the point whose height coordinate is s and whose first two coordinates are given by p.</p><formula xml:id="formula_16">If S ⊆ R 2 , let S (s) = {p (s) : p ∈ S}. A cone C(p, B, h) ⊆ R 3</formula><p>is parametrized by a point p ∈ R 2 ; a compact, simply-connected set B ⊆ R 2 ; and a height h ∈ R. The cone comprises all points q ∈ R 3 of height at most h such that the line p (0) , q intersects B <ref type="bibr" target="#b0">(1)</ref> . Call p <ref type="bibr">(0)</ref> the apex and h the height of the cone. Let H(C) denote the height of cone C. We further assume that B is a star-shaped polygon-that is, a polygon whose interior contains a point that can see all the other points of the interior.</p><p>If I is an interval, and C is a cone, let C/I denote the truncated cone obtained by restricting the points of C to have height lying in I. If I ⊆ [0, H(C)], we say that I is compatible with C. Let C = {C i : i = 1,...,n} be a set of cones in R 3 , and let A be a function that assigns an interval I i = A(C i ) to each C i ∈ C . We say that A is compatible if each I i is compatible with C i , and the set</p><formula xml:id="formula_17">{C i /I i : i = 1,...,n}</formula><p>of truncated cones are pairwise non-overlapping. Here, two point sets are said to be overlapping if their interiors intersect. The active range optimization problem (ARO) is that of computing a compatible A such that v(A) := ∑ n i=1 |I i | is maximized. The active range decision problem (ARD) asks, for a given rational number k, whether there is a compatible A such that v(A) ≥ k. We may simplify the problem by restricting the intervals A(C i ) to the form I i = [0, h i ], for some h i ≥ 0. We then view A as a function that assigns a height A(C i ) = h i to each cone C i . Such solutions correspond to the property that labels never disappear while zooming in. For reference, call this the simple active range decision problem. For complexity purposes, we will consider the version where the input cones C = (p, B, h) have rational coordinates and where B is a star-shaped polygon; this is the case of star-shaped map labels.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>THEOREM 2</head><p>The simple ARD problem is NP-complete for starshaped map labels.</p><p>Proof. It is easy to see that the problem is in NP. To show NPhardness, we exploit two facts: the independent set problem for planar graphs is NP-hard, and every planar graph G = (V, E) has a straight line embedding (see <ref type="bibr" target="#b23">[23]</ref>). To reduce the independent set problem in planar graphs to simple ARD, we will construct a set C of cones where each cone corresponds to a vertex of the input graph G. Each cone has height 1 + ε (for some ε &gt; 0), and C has the property that two cones overlap iff there is an edge between the corresponding vertices of G. Moreover, if two cones overlap, then they first touch each other at height exactly 1. Consider a compatible assignment A for these cones: from the said properties, we may assume WLOG that A assigns heights of either 1 or 1 + ε to each cone. Clearly, the set of cones that is assigned height 1 + ε corresponds to an independent set of G. Conversely, for every independent set S, we have a compatible assignment A S that assigns height 1 + ε to exactly those cones in S. Thus, there is an assignment A such that v(A) = |V | + tε iff G has an independent set of size t. Thus, the construction (G,t) → (C , |V | +tε) is a reduction of the independent set problem in planar graphs to simple ARD. If this reduction can be computed in polynomial time, our NP-hardness claim follows. This is given in the next lemma. Q.E.D.</p><p>The proof of the following lemma makes use of triangular graphs. A triangular graph is a maximal planar graph with at least three vertices. Every face of a straight line, planar embedding of a triangular graph is triangular, including the exterior face. Say that a vertex of a triangular graph is exterior if its embedding borders the exterior face.</p><p>LEMMA 3 For any planar graph G = (V, E) and integer t &gt; 0, we can compute in polynomial time a set C of cones for star-shaped polygonal labels, and an ε &gt; 0, such that G has an independent set of size t iff there is a compatible assignment A with v(A) = |V | + tε.</p><p>Proof. First, we transform the planar graph G to a triangular graph G = (V, E ) by adding edges. By Schnyder's theorem <ref type="bibr" target="#b23">[23]</ref>, there is a linear time algorithm to compute a straight line embedding of G in the (n − 2) × (n − 2) integer grid, where n = |V |. Let p(u) be the embedding for vertex u. Next, for each edge (u, v) ∈ E , define the point</p><formula xml:id="formula_18">m(u, v) = p(u)+p(v) 2 if (u, v) ∈ E 2p(u)+p(v) 3 if (u, v) ∈ E.</formula><p>For each vertex u, form a star-shaped polygon B(u) whose vertices are m(u, v) for each (u, v) ∈ E . If u is an exterior vertex, we add an additional artificial point in the exterior face of the embedding. Each B(u) so defined is a star-shaped region with p(u) as a center of the star. It is clear that B(u) and B(v) touch iff (u, v) ∈ E.</p><p>We now construct a set C of cones as follows: each v ∈ V gives rise to a cone C(p(v), B(v), 1 + ε). The ε &gt; 0 is chosen small enough so that cones C(p(v), B(v), 1 + ε) and C(p(u), B(u), 1 + ε) overlap iff (u, v) ∈ E. Now it is easy to see that the original graph G = (V, E) has an independent set of size t iff C has a compatible solution A with v(A) = n + tε.</p><p>Q.E.D.</p><p>We conjecture that the simple ARD problem is also NP-complete for convex polygonal labels, and possibly for rectangular labels as well. We can reduce the independent set problem to simple ARD for circular labels by using Koebe's theorem <ref type="bibr">(1936)</ref>, which says that every planar graph can be realized as the contact graph of a set of nonoverlapping discs. However, it is not known whether these discs can be constructed in polynomial-time. If they can, then the result for convex polygons follows readily, by taking each disc contact point as a vertex of the polygon.</p><p>It is not even clear that the 1-dimensional version of the simple ARD problem is polynomial-time.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Manuscript received 31</head><label>31</label><figDesc>March 2006; accepted 1 August 2006; posted online 6 November 2006. For information on obtaining reprints of this article, please send e-mail to: tvcg@computer.org.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 1</head><label>1</label><figDesc>Fig. 1. Violations of (D1) under zooming in (a), and (D3) under panning in (b). In both cases, label priority is A &gt; B &gt; C. Initially C is visible. As we zoom out/pan left, C disappears because it conflicts with B. Then C reappears when B disappears because of its conflict with A.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 2 .</head><label>2</label><figDesc>New York street map, zoomed out and zoomed in</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>1 Fig. 3 .</head><label>13</label><figDesc>(a) Dynamic placements for three labels, in world coordinates. These are invariant point placements that satisfy the label size invariance property-screen size is fixed, so size in world coordinates is proportional to scale. (b) The same dynamic placements, but truncated to active ranges so that no two labels intersect at any scale. An outline of the view window cone is also shown. (c) Horizontal slices of the truncated placements at s = 1 and s = 2. The view area is shown in outline.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head></head><label></label><figDesc>is translation by the vector (e, f ) ∈ R 2 , (ii) τ = R(θ ) is rotation by angle θ ∈ [0, 2π), and (iii) τ = D(s) is dilation (uniform scaling) by factor s ∈ R &gt;0 . Let us call allowable any composition of these 3 types of transformations. Each τ can be represented by a 3 × 3 matrix M τ , with composition of transformation corresponding to matrix multiplication. Let det(τ) refer to the determinant of M τ . Clearly det(T (e, f )) = det(R(θ )) = 1 and det(D(s)) = s 2 . Map domain D 0 (world coordinates)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 4 .</head><label>4</label><figDesc>Transformations among world, screen and label coordinates.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 4</head><label>4</label><figDesc>illustrates static placement. Let D 0 denote the domain of map M. D 0 is a rectangular region of R 2 , and is defined in world coordinates. (In a more realistic model D 0 would be a patch of the surface of a sphere). We view the map M as a collection of map features, and there are basically three of interest: point, line and area features. Each feature is viewed as a subset of D 0 . Note that lines and areas are really polygonal lines and simply connected polygonal regions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 5 .</head><label>5</label><figDesc>Two invariant point placements for a point label L, represented by (p, q, 0) and (p , q , 0) at scales s = 3, 6, 9, 12. These are in world coordinates. The feature φ (L) labeled by L is also shown.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure</head><label></label><figDesc>Figure 3 shows invariant point placements on rectangular labels. The regular shape of the extrusions allows us to derive closed form expressions for the location of each label corner as a function of scale, and these can be used to derive the blocking scale for two labels. We omit the details. By computing the blocking scale of all pairs of labels, an O(n 2 ) implementation of the algorithm to compute A * from a given Π * is straightforward. But when we are zoomed in we expect the label conflict graph to be quite sparse, and when we are zoomed out we expect the number of labels active to be quite small, so it seems that we shouldn't need to check every label pair. In Section 5 we describe some heuristics to speed up this computation.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head></head><label></label><figDesc>Partition the scale interval [0, s max ] into h sub-intervals, each representing a level of detail. (In our implementation, h = 8.) Call the LODs λ i , i = 0,...,h − 1. We have h + 1 scales, 0 = s 0 &lt; s 1 &lt; ••• &lt; s h = s max , and each λ i covers the interval [s i , s i+1 ]. (For simplicity we'll let the LODs overlap at the boundary scales.)</figDesc></figure>
+			<note xmlns="http://www.tei-c.org/ns/1.0" place="foot" n="1">In cartography, a "large-scale map" refers to one that shows a smaller area in greater detail. This is the inverse of our definition of scale, which may be called zoom scale. A zoom scale of s corresponds to a map scale of 1 : s.</note>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>The first author would like to acknowledge the support of the Yeshiva University Office of Academic Affairs. The third author was supported in part by NSF Grant CCF-043836 and NSF/ITR Grant CCR-0082056. The authors also thank the reviewers for their constructive comments.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">A program for automatic name placement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Ahn</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Freeman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Symposium on Automated Cartography</title>
+		<meeting>Symposium on Automated Cartography</meeting>
+		<imprint>
+			<date type="published" when="1983" />
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="page" from="444" to="453" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Label layout for interactive 3d illustrations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Ali</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Hartmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Strothotte</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Journal of WSCG</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Evaluating label placement for augmented reality view management</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Azuma</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Furmanski</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE/ACM International Symposium on Mixed and Augmented Reality (ISMAR 2003)</title>
+		<meeting>IEEE/ACM International Symposium on Mixed and Augmented Reality (ISMAR 2003)</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="66" to="75" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<monogr>
+		<title level="m" type="main">Algorithms for drawing graphs: an annotated bibliography</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">D</forename><surname>Battista</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Eades</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Tamassia</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Tollis</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<monogr>
+		<title level="m" type="main">Responsive Thinwire Visualization of Large Geographic Datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Been</surname></persName>
+		</author>
+		<ptr target="http://cs.nyu.edu/visual/home/pub/" />
+		<imprint>
+			<date type="published" when="2002-09" />
+		</imprint>
+		<respStmt>
+			<orgName>New York University, Department of Computer Science, Courant Institute</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Ph.d. thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Boundary labeling: Models and efficient algorithms for rectangular maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">A</forename><surname>Bekos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Kaufmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Symvonis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wolff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 12th</title>
+		<meeting>12th</meeting>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Symposium on Graph Drawing (GD &apos;04)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Int</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Lecture Notes in Computer Science</title>
+		<imprint>
+			<biblScope unit="page" from="49" to="59" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">View management for virtual and augmented reality</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Bell</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Feiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Höllerer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Symp. on User Interface Software and Technology (UIST 2001)</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="101" to="110" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">An empirical study of algorithms for point-feature label placement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Christensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Marks</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Shieber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Trans. on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="203" to="232" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A general cartographic labeling algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Edmondson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Christensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Marks</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Shieber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Cartographica</title>
+		<imprint>
+			<biblScope unit="volume">33</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="13" to="23" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Excentric labeling: Dynamic neighborhood labeling for data visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Fekete</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Plaisant</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. ACM CHI&apos;99</title>
+		<meeting>ACM CHI&apos;99</meeting>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="512" to="519" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">A packing problem with applications to lettering of maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Formann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Wagner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM Symp. on Comp. Geometry</title>
+		<imprint>
+			<date type="published" when="1991" />
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="page" from="281" to="288" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">AUTONAP -an expert system for automatic map name placement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Freeman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 1st International Symp. on Spatial Data Handling</title>
+		<meeting>1st International Symp. on Spatial Data Handling</meeting>
+		<imprint>
+			<date type="published" when="1984" />
+			<biblScope unit="page" from="544" to="569" />
+		</imprint>
+		<respStmt>
+			<orgName>Universität Zürich-Irchel</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<monogr>
+		<title level="m" type="main">Dynamic Labeling Demo</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G-Vis</forename></persName>
+		</author>
+		<ptr target="http://sage.mc.yu.edu/gvis/" />
+		<imprint>
+			<date type="published" when="2002" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">An algorithm for automatic name placement around point data. The American Cartographer</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">A</forename><surname>Hirsch</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1982" />
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="5" to="17" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Positioning names on maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Imhoff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The American Cartographer</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="128" to="144" />
+			<date type="published" when="1975" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">A unified approach to automatic label placement. Int&apos;l</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">G</forename><surname>Kakoulis</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><forename type="middle">G</forename><surname>Tollis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. Comput. Geometry and Appl</title>
+		<imprint>
+			<biblScope unit="volume">13</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="23" to="60" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">The computational complexity of cartographic label placement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Marks</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Shieber</surname></persName>
+		</author>
+		<idno>TR-05-91</idno>
+		<imprint>
+			<date type="published" when="1991" />
+			<pubPlace>Harvard CS</pubPlace>
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">Textplazierung in dynamisch erzeugten Karten. Diplomathesis</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Petzold</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996" />
+			<pubPlace>Bonn</pubPlace>
+		</imprint>
+		<respStmt>
+			<orgName>Institute for Computer Science</orgName>
+		</respStmt>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<monogr>
+		<title level="m" type="main">Beschriftung von Bildschirmkarten in Echtzeit -Konzept und Struktur</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Petzold</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2003" />
+		</imprint>
+		<respStmt>
+			<orgName>Institute of Cartographcy and Geoinformation, University of Bonn</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Ph.d. thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Fast screen map labeling -datastructures and algorithms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Petzold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Gröger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Plümer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 21th International Cartographic Conferences (ICC&apos;03)</title>
+		<meeting>21th International Cartographic Conferences (ICC&apos;03)</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="288" to="298" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Label placement for dynamically generated screen maps</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Petzold</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Plümer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Heber</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 19th International Cartographic Conferences (ICC&apos;99)</title>
+		<meeting>19th International Cartographic Conferences (ICC&apos;99)<address><addrLine>Ottawa, Canada</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1999" />
+			<biblScope unit="page" from="893" to="903" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Adaptive zooming in point set labeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S.-H</forename><surname>Poon</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C.-S</forename><surname>Shin</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings 15th International Symposium on Fundamentals of Computation Theory (FCT 2005)</title>
+		<meeting>15th International Symposium on Fundamentals of Computation Theory (FCT 2005)</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="233" to="244" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Embedding planar graphs on the grid</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Schnyder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 1st ACM-SIAM Symp. on Discrete Algorithms (SODA)</title>
+		<meeting>1st ACM-SIAM Symp. on Discrete Algorithms (SODA)</meeting>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="page" from="138" to="148" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Dynamic label sampling on fisheye maps for information exploration</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Tatemura</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Advanced Visual Interfaces</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="238" to="241" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<monogr>
+		<ptr target="http://www.census.gov/ftp/pub/geo/www/tiger/" />
+		<title level="m">Topologically integrated geographic encoding and referencing system (tiger) homepage, 1995. US Census Bureau</title>
+		<imprint/>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<analytic>
+		<title level="a" type="main">Efficient settlement selection for interactive display</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Van Kreveld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Van Oostrum</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Snoeyink</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings AutoCarto 13: ACSM/ASPRS &apos;97 Technical Papers</title>
+		<meeting>AutoCarto 13: ACSM/ASPRS &apos;97 Technical Papers</meeting>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="287" to="296" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<monogr>
+		<title level="m" type="main">Algorithmic Foundations of Geographical Information Systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">J</forename><surname>Van Kreveld</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Nievergelt</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Roos</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Widmayer</surname></persName>
+		</author>
+		<imprint>
+			<biblScope unit="volume">1340</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<monogr>
+		<title level="m" type="main">CISM Advanced School on the Algorithmic Foundations of Geographical Information Systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Springer</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1996" />
+			<pubPlace>Udine, Italy</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<monogr>
+		<title level="m" type="main">Geometric Algorithms for Geographic Information Systems</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">W</forename><surname>Van Oostrum</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+		<respStmt>
+			<orgName>Universiteit Utrecht</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">PhD thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">A practical map labeling algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">F</forename><surname>Wagner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wolff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Geometry: Theory and Appl</title>
+		<imprint>
+			<biblScope unit="volume">7</biblScope>
+			<biblScope unit="page" from="387" to="404" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<monogr>
+		<title level="m" type="main">The map-labeling bibliography</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Wolff</surname></persName>
+		</author>
+		<ptr target="http://illwww.ira.uka.de/˜awolff/map-labeling/bibliography/" />
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">Responsive thinwire visualization: Application to large geographic datasets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Yap</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Been</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Du</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SPIE Symp. on Visualization and Data Analysis</title>
+		<editor>E. et al.</editor>
+		<meeting>SPIE Symp. on Visualization and Data Analysis<address><addrLine>San Jose, California</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="2002-01-25" />
+			<biblScope unit="volume">4665</biblScope>
+			<biblScope unit="page" from="1" to="12" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<analytic>
+		<title level="a" type="main">The logic of automated map lettering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Yoeli</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">The Cartographic Journal</title>
+		<imprint>
+			<date type="published" when="1972" />
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="page" from="99" to="108" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

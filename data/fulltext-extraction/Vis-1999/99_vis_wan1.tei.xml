@@ -1,0 +1,425 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">High Performance Presence-Accelerated Ray Casting</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ming</forename><surname>Wan</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arie</forename><surname>Kaufman</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steve</forename><surname>Bryson</surname></persName>
+							<affiliation key="aff1">
+								<orgName type="institution">NASA Ames Research Center Moffett Field</orgName>
+								<address>
+									<postCode>94035-1000</postCode>
+									<region>CA</region>
+								</address>
+							</affiliation>
+						</author>
+						<author>
+							<affiliation key="aff0">
+								<orgName type="department" key="dep1">Center for Visual Computing (CVC)</orgName>
+								<orgName type="department" key="dep2">Department of Computer Science</orgName>
+								<orgName type="institution">State University of New York at Stony Brook</orgName>
+								<address>
+									<postCode>11794-4400</postCode>
+									<settlement>Stony Brook</settlement>
+									<region>NY</region>
+								</address>
+							</affiliation>
+						</author>
+						<title level="a" type="main">High Performance Presence-Accelerated Ray Casting</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:41+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Volume rendering</term>
+					<term>presence acceleration</term>
+					<term>run-length encoding</term>
+					<term>projection template</term>
+					<term>multiresolution volumes</term>
+					<term>interactive classification</term>
+					<term>parallel processing</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>We present a novel presence acceleration for volumetric ray casting. A highly accurate estimation for object presence is obtained by projecting all grid cells associated with the object boundary on the image plane. Memory space and access time are reduced by run-length encoding of the boundary cells, while boundary cell projection time is reduced by exploiting projection templates and multiresolution volumes. Efforts have also been made towards a fast perspective projection as well as interactive classification. We further present task partitioning schemes for effective parallelization of both boundary cell projection and ray traversal procedures. Good load balancing has been reached by taking full advantage of both the optimizations in the serial rendering algorithm and sharedmemory architecture. Our experimental results on a 16-processor SGI Power Challenge have shown interactive rendering rates for 256 3 volumetric data sets at 10-30 Hz. This paper describes the theory and implementation of our algorithm, and shows its superiority over the shear-warp factorization approach.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>An effective approach to achieve high frame rates for volume rendering is to parallelize a fast rendering algorithm that relies on some algorithmic optimizations <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b1">2,</ref><ref type="bibr" target="#b2">3,</ref><ref type="bibr" target="#b3">4]</ref>. Two requirements must be met for this approach to achieve interactive rendering. First, the serial volume rendering algorithm must be fast enough. Second, the parallel version of the serial algorithm must scale well as the number of processors increases.</p><p>Many parallel volume rendering algorithms have been developed by optimizing serial volume renderers. Among the most efficient ones is Lacroute's <ref type="bibr" target="#b2">[3]</ref>, a real-time parallel volume rendering algorithm on a multiprocessor SGI Challenge using the shear-warp factorization <ref type="bibr" target="#b4">[5]</ref>, which could render a 256 3 volume data set at over 10 Hz. A dynamic task stealing scheme was borrowed from <ref type="bibr" target="#b0">[1]</ref> for load balancing. Parker et al. <ref type="bibr" target="#b3">[4]</ref> proposed another interactive parallel ray casting algorithm on SGI workstations. Using 128 processors, their algorithm rendered a 1GByte full resolution Visible Woman data set at over 10 Hz. One of their optimizations for ray casting was using a multi-level spatial hierarchy for space leaping.</p><p>In this paper, we explore the effective parallelization of our boundary cell-based ray casting acceleration algorithm on multiprocessors. The serial algorithm is derived from the acceleration technique of bounding-boxes. This technique consists of three steps:</p><p>Email:fmwanjarig@cs.sunysb.edu y Email:bryson@nas.nasa.gov First, the object is surrounded with tightly fit boxes or other easyto-intersect geometric primitives such as spheres. Then, the intersection of the rays with the bounding object is calculated. Finally, the actual volume traversal along each ray commences from the first intersection point as opposed to starting from the volume boundary. Unlike other kinds of presence acceleration techniques which traverse a hierarchical data structure, such as octrees <ref type="bibr" target="#b3">[4,</ref><ref type="bibr" target="#b5">6]</ref> and Kd trees <ref type="bibr" target="#b6">[7]</ref> to skip over empty regions, this approach directly and hence more quickly traverses the original regular grid.</p><p>Obviously, the effectiveness of a bounding-boxes approach depends on its ability to accurately calculate the intersection distance for each viable ray with minimal computational overhead. Therefore, in our previously proposed boundary-cell based ray casting method <ref type="bibr" target="#b7">[8]</ref>, we accurately detected the object boundary at each grid cell of the volumetric data set. Each cell was the volume contained within the rectangular box bounded by eight neighboring grid vertices (voxels). The distance information from the object boundary to the image plane was obtained by projecting all boundary cells (cells pierced by the object boundary) onto the image plane. This projection procedure was accelerated both by exploiting the coherence of adjacent cells and employing a generic projection template. The experimental results showed that the projection time was faster than that of the PARC (Polygon Assisted Ray Casting) algorithm <ref type="bibr" target="#b8">[9]</ref> which was accelerated by graphics hardware.</p><p>However, our previously proposed method <ref type="bibr" target="#b7">[8]</ref> had some limitations. First, it was more effective for small volume data of less than 128 3 voxels. Second, it only supported fast ray casting with parallel projection. In this paper, we present an improved version to solve these problems. We propose to run-length encode the detected boundary cells. This data compression reduces both memory space and access time. Multiresolution volumes are further exploited to reduce the number of boundary cells, so that our method is capable of rendering larger volumes at interactive rates. Efforts have also been made towards a fast perspective projection as well as interactive classification.</p><p>Based on such an improved serial rendering algorithm, we have developed our parallel rendering algorithm using effective task partitioning schemes for both boundary cell projection and subsequent ray traversal procedures. Good load balancing has been reached by taking full advantage of both the optimizations in the rendering algorithm and shared-memory architecture.</p><p>Our parallel algorithm has been implemented on a Silicon Graphics Power Challenge, a bus-based shared-memory MIMD (Multiple Instruction, Multiple Data) machine with 16 processors.</p><p>Rendering rates for 256 3 volumetric data sets are as fast as 10 -30 Hz -among the fastest reported. A detailed comparison between our algorithm and shear-warp factorization approach <ref type="bibr" target="#b2">[3]</ref> is given in Section 5. It is difficult to compare performances between the method in <ref type="bibr" target="#b3">[4]</ref> and ours, since the former used a much larger data set and eight times more processors. Yet, these two methods do have some similarities -both are essentially ray casting algorithms running on multiprocessors, and both are interested in the object boundary. One significant difference lies in that their method could only display the boundary surface of the object, while ours can also visualize the interior structures with translucency. The description of our serial algorithm and its parallel version are given in Sections, 2 and 3 respectively. Performance results are reported in Section 4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">The Serial Algorithm</head><p>Our serial rendering algorithm can be completed in three steps: <ref type="bibr" target="#b0">(1)</ref> run-length encode the boundary cells at a preprocessing stage; (2) project the run-length encoded boundary cells onto the image plane to produce the intersection distance values for each pixel; and <ref type="formula">3</ref>for each viable ray that intersects an object in the volume, start sampling, shading and compositing from the intersection. A discussion on support of interactive volume classification between renderings is given at the end of this section.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">Boundary Cell Encoding</head><p>Since boundary cell information is viewpoint-independent, we can obtain it by scanning the volume in an off-line preprocessing stage. Essentially, the scanline-based run-length encoding scheme exploits the 1D spatial coherence which exists along a selected axis direction <ref type="bibr" target="#b9">[10]</ref>. It gives a kn 2 compressed representation of the data in a n 3 grid, where the factor k is the mean number of runs. A run is a maximal set of adjacent voxels having the same property, such as having the same scalar field value, or associated with the same classified material (see Section 2.4 for interactive classification).</p><p>Obviously, only when k is low can such a scheme be efficient. Fortunately, this is true for a classified volume: a volume to which an opacity transfer function has been applied <ref type="bibr" target="#b4">[5]</ref>. We use this scheme to encode boundary cells in the volume. In our algorithm, each run is a maximal set of adjacent boundary cells in the same grid cell scanline aligned with a selected axis. X axis is selected for runlength encoding in this paper.</p><p>The specific data structure we use for run-length encoding of boundary cells includes a linear run list L and a 2D table T (see <ref type="figure">Figure 1</ref>). List L contains all the runs of boundary cells. Each element L t of L represents a run, including the location of the first boundary cell Ci; j; k of this run and the run length. The position of a cell Ci; j;k is determined by one of its eight voxels with the lowest X;Y;Z coordinate value i; j; k. Accordingly, cell Ci; j; k is the ith cell in scanline j;k. <ref type="table">Table T</ref> records the distribution information of the boundary cells among volume scanlines. Each element T j; k holds the number of the boundary cells located in scanline j;k. According to the information in table T and list L, we can quickly skip over empty scanlines and empty runs.</p><p>In order to reach a high data compression, we suggest that, first, for each run t in list L, only the X coordinate i of the starting cell Ci; j; k needs to be stored in L t , instead of all three coordinates.</p><p>We can easily infer the other two coordinates. Second, all boundary cells which have 6 face-connected boundary cells should be ignored as non-boundary cells in our data structure, because they have no contribution for our object boundary estimation. Third, table T can also be run-length encoded. Each run is a maximal set of adjacent elements having the same number.</p><p>The space complexity S of our run-length encoding data structure is the sum of the space complexities of list L and table T:</p><formula xml:id="formula_0">SBoundary = kn 2 SL t + n 2 ST j; k (1)</formula><p>where k is the mean number of runs per scanline. Two fields are needed for each element L t and one for T j; k . These fields can </p><formula xml:id="formula_1">scanline (j, k) cell ( ,j,k) i0 cell ( ,j,k) i1 run( , 3) i0 list L 12 0 t t+1 m-1 Z Y 0 j k</formula><formula xml:id="formula_2">SBoundary = 2 k + 1 n 2 sizeofint (2)</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Boundary Cell Projection</head><p>By skipping over the runs of non-boundary cells, our run-length encoding scheme not only provides high data compression, but also leads to fast 3D scan over the volume during the boundary cell projection procedure. Both parallel and perspective projections are supported in our algorithm.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2.1">Parallel Projection</head><p>In parallel projection, the projected area of every cell has the same shape and size in the image plane. Obviously, different level-of-accuracy templates provide different accuracy of distance information. Note that in a high resolution volume data set, the cells are very small and densely overlapped from any viewing direction. Therefore, a rough approximation based on the low level-of-accuracy template is often good enough to support efficient skipping over empty space, as evidenced from our experimental results.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Determine Projection Position</head><p>In parallel projection, once the first cell C0; 0;0 is projected onto the image plane, the position of remaining cells can be quickly calculated by incremental vectors with only addition operations.</p><p>Specifically, assume that the center point of the first cell C0; 0;0 is projected to position x0;y 0 on the image plane with depth z0, and that X;Y;Z are respectively the vector directions of volume axis X;Y;Z in image space, and volume size is NxNyNz with unit spacing between voxels. Then, position x1;y 1 and depth z1 of the center point of the cells adjacent to cell C0; 0;0 along volume axes X;Y;Z can be respectively calculated by the following equations:</p><p>xi+1; y i+1; z i+1 = xi; y i; z i + X; i = 0 ::Nx , 3 <ref type="bibr" target="#b2">(3)</ref> xj+1; y j+1; z j+1 = xj; y j; z j + Y; j = 0 ::Ny , 3 <ref type="bibr" target="#b3">(4)</ref> xk+1; y k+1; z k+1 = xk; y k; z k + Z; k = 0 ::Nz ,3 <ref type="bibr" target="#b4">(5)</ref> When run-length encoding is used in our algorithm, the relationship between two adjacent boundary cells in list L is more complicated. These two adjacent cells could be located in the same run, or in two adjacent runs at the same scanline, or in two runs at different scanlines. Assume that the projection information of the two adjacent boundary cells Ci and Ci+1 are respectively xi; y i; z i and xi+1; y i+1; z i+1 . If these two cells are located in the same run, then xi+1; y i+1; z i+1 can be found from xi; y i; z i with a single vector addition operation, by using Equation 3. Otherwise, if Ci and Ci+1 are located in different runs at the same scanline, then xi+1; y i+1; z i+1 can be calculated from xi; y i; z i with two vector addition operations and one vector multiplication operation:</p><p>xi+1; y i+1; z i+1 = xi; y i; z i + xi+1 , xi X <ref type="bibr" target="#b5">(6)</ref> In the case that cell Ci+1 is located on a new scanline in the same slice or in a new slice, its projection information can be similarly calculated from that of the first cell on the previous scanline or slice, by respectively using Equations 4 and 5.</p><p>By using this incremental method, the time-consuming 4 4 matrix multiplications for projection are applied solely to cell C0; 0; 0, rather than to all boundary cells. Thus, the projection procedure is greatly accelerated.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Fill Projection Buffer</head><p>We utilize two projection buffers, Zn and Zf, having the same size as the resultant image, to respectively record the nearest and farthest intersection distances to the object boundary along the rays cast from the image pixels.</p><p>Once the projected position of a boundary cell is determined, the specific projection template M1 of this cell can be quickly generated by adding the distance between the cell center and image plane to both near and far distance values in each viable element of the generic template M. The manner is straightforward for using current template M1 to update distance values in the two projection buffers. First, place template M1 over the image plane with its center template-pixel over the image position where the cell center is projected. Then, for each image-pixel covered by the template, compare the nearest and farthest intersection distances (i.e., zn and zf) in the corresponding buffer-pixels with the non-infinity near and far distances (i.e., dn and df) in the corresponding element of template M1. Specifically, if zn is greater than dn, zn is replaced by dn in the near z-buffer; meanwhile, if zf is less than df, zf is replaced by df in the far z-buffer.</p><p>In the situation where the center point of the cell is not exactly projected on an image pixel, one image pixel covered by the template may be surrounded by two to four template-pixels. Thus, nearest distance dn and farthest distance df of the surrounding template-pixels are taken to give a conservative distance estimation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2.2">Perspective Projection</head><p>Perspective projection is of particular importance when the viewing point is getting close to the data or is located inside the volume, such as during the interactive navigation inside the human colon of our 3D virtual colonoscopy <ref type="bibr" target="#b10">[11]</ref>. The implemented perspective projection procedure in our algorithm is similar to the parallel projection. We still adopt projection templates for fast projection. However, since different cells have different perspective projection shapes and sizes due to their different distances and directions to the view point, there is no generic projection template for all cells. Furthermore, the incremental method for finding the projection information of the adjacent boundary cell does not work for perspective projection. This is because cells aligned with a volume axis no longer have fixed spacing on the screen.</p><p>During our implementation, the low level-of-accuracy template has turned out to be the most competitive candidate among the three. This low template is essentially a degenerated template, including only the height, width, and near and far distances of the projected boundary cell. Whenever one cell does not cover too many screen pixels, the object boundary estimation based on these low templates is satisfactory. Under perspective projection, such a template for a specific boundary cell can be quickly generated. This can be done by projecting the eight vertices of the cell onto the image plane to find the bounding box of the projected area of the cell as well as its minimal and maximal distances to the screen. This template can be directly used to update the near and far projection buffers. Furthermore, since there are four vertices shared by two adjacent boundary cells in the same run, projection information of these four shared vertices from one boundary cell can be reused by the neighboring boundary cell for further speedup. As a result, although perspective projection involves more computation than parallel projection, it can still be done rapidly. Specifics of projection time from our experiments on various data sets are reported in Section 4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Ray Traversal</head><p>Depending on the intersection distance information in projection buffers Zn and Zf, the ray casting procedure is accelerated by casting rays only from viable pixels on the image plane, and traversing each ray from the closest depth to the farthest depth. Other effective ray casting optimizations, such as adaptive image sampling <ref type="bibr" target="#b11">[12]</ref> and early ray termination <ref type="bibr" target="#b5">[6]</ref>, can be conveniently incorporated to further speedup our ray traversal procedure. For example, by employing early ray termination, the traversal along each viable ray stops before the farthest intersection is reached if the accumulated opacity has reached unit or exceeded a user-selected threshold of opacity.</p><p>The ray traversal procedure of our algorithm is often rapidly completed, because the overall complexity of the ray casting algorithm is greatly reduced. Assume that the volume size is n 3 and image size is n 2 . To generate such a ray casting image with parallel projection, rendering complexity of a brute-force ray caster would be On <ref type="bibr" target="#b2">3</ref> . In our algorithm, rendering complexity can be reduced to Okn 2 . Although the value of k is data dependent, it is often quite small compared with n, especially when early ray termination is employed, unless a substantial fraction of the classified volume has low but non-transparent opacity. Note, however, that such classification functions are considered to be less useful <ref type="bibr" target="#b4">[5]</ref>.</p><p>In fact, our accelerated ray traversal speed sometimes becomes so fast that it may approach boundary cell projection speed, especially for larger data sets. When this happens, we are pleased to further reduce the projection time by decreasing the resolution of the boundary cells, since the accuracy of the current object boundary estimation is unnecessarily high. One solution is to reduce the volume resolution by merging m 3 neighboring cells into a macrocell.</p><p>If all the cells in a macrocell are non-boundary cells, this macrocell is a non-boundary macrocell; otherwise, it is a boundary macrocell.</p><p>From our experiment with a 256 256 124 MRI data set of a human brain, even merging the eight neighboring cells (m = 2 ) in the original volume leads to a three-fold decrease in cell projection time and nearly the same ray traversal time.</p><p>Another approach is to use a lower levels-of-detail (LOD) volume for fast object boundary estimation, and then use the original high resolution volume for accurate ray traversal. This approach may produce more accurate estimation, especially when the selected value for m is large. Yet, the user should make sure that the object represented in the lower LOD volume is not "thinner" than its original size, which can be guaranteed either by the modeling algorithm for LOD or by adjusting our projection templates.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.4">Interactive Classification</head><p>In a practical application, the user may want to change the opacity transfer function between renderings while exploring a new data set. Most existing algorithms that employ spatial data structures require an expensive preprocessing step when the transfer function changes, and therefore can not support interactive volume classification. Although our algorithm presented thus far works on a classified volume with a fixed transfer function, it can easily support interactive classification with some minor constraint on the modification of the transfer function.</p><p>In our algorithm, we define an opacity threshold in a transfer function as the minimal scalar field value in the volumetric data set associated with a non-zero opacity. Once this opacity threshold is given in the transfer function, all boundary cells can be determined, of which some but not all the eight vertices possess field values less than the opacity threshold. If the transfer function changes, the previous run-length encoding of the boundary cells based on the previous opacity threshold may not be an appropriate data structure for the new object. Yet, note that an increase in opacity threshold only shrinks the object volume coverage, and that an object with a higher opacity threshold is always enclosed by an object with a lower opacity threshold. Consequently, the run-length encoding of an object boundary with a low opacity threshold can be used as an overestimate of another object boundary with a higher opacity threshold. It follows that, if we start from an object with the lowest opacity threshold, and create run-length encoding of boundary cells according to that opacity threshold, then we can avoid repeating the preprocessing step for boundary cell detection and run-length encoding, when the opacity transfer function changes between renderings. We do this by always using the same run-length encoding data structure as an overestimate for the new object boundary specified by the modified transfer function with a higher opacity threshold.</p><p>Although we can now correctly render images of interactively classified volume, the rendering rates may slow down greatly under radical changes of transfer function, for two reasons. First, the number of boundary cells in our fixed run-length encoding data structure can be larger than that of the shrunken object specified by a higher opacity threshold. This may lead to a longer projection time. Second, such an overestimation for the shrunken object boundary may cause longer ray traversal time due to unnecessary samplings out-side the shrunken object.</p><p>Fortunately, in a typical classified volume, 70,95 of the voxels are transparent <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b4">5]</ref>. From this we know that the total number of boundary cells from each object is very small compared with the volume size. The projection time of these boundary cells is further shortened by employing run-length encoding and template-assisted projection. Accordingly, the difference of projection time between different objects is often minor. Also, since the possible objects are crowded in a small part of the volume, the boundaries of these objects are often so close to each other that the overestimation does not cause much extra ray traversal time. In brief, our algorithm allows interactive classification with a moderate performance penalty. The experimental results from different data sets with both interactive classification and fixed pre-classification are given in Section 4.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">The Parallel Algorithm</head><p>In general, there are two types of task partitionings for parallel volume rendering algorithms: object-based <ref type="bibr" target="#b1">[2]</ref> and image-based partitionings <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b2">3,</ref><ref type="bibr" target="#b3">4]</ref>, respectively working on the volume and image domains. In order to take full advantage of optimizations in the serial algorithm, we have designed an object-based task partitioning scheme for boundary cell projection, and an image-based partitioning scheme for the ray traversal procedure. The shared-memory architecture of the SGI Power Challenge fully supports the implementation of our parallel algorithm.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Object-Based Partitioning for Boundary Cell Projection</head><p>To achieve high processor utilization during the boundary cell projection procedure, the volume should be carefully divided and assigned to the processors so that each processor possesses a subset of the volume with an equal number of boundary cells. Based on our run-length encoding data structure, we are able to precisely divide the volume into subvolumes of contiguous grid cells, each containing a roughly equal number of boundary cells. For the convenience of implementation, we used a run instead of a cell as the fundamental unit of work. Compared with other options, such as static interleaved partitionings and dynamic partitionings, our static contiguous partitioning has several advantages. It maximizes spatial locality in the run-length encoding data structure, and therefore minimizes the memory stall time caused by cache misses. In addition, as a static scheme, less synchronization is required, and task redistribution overhead is also avoided.</p><p>Once the volume is distributed to all available processors, each processor works concurrently and independently on its subvolume by scanning and projecting all related boundary cells onto the image plane. Since the image plane is shared by all processors, each processor establishes a separate pair of near and far projection buffers with the same size as the resultant image, in order to avoid memory access conflict. Each processor finishes its work and supplies a pair of partial projection buffers within about the same span of time. The complete (unified) projection buffers of the whole volume are obtained by combining all of these partial projection buffers.</p><p>This combination procedure is also parallelized by dividing each partial projection buffer into a few sub-buffers of an equal number of contiguous buffer scanlines, with one sub-buffer per processor. Each processor respectively combines all near and far sub-buffers assigned to it, forming a pair of complete sub-buffers. By the end of this process, we obtain a pair of complete projection buffers Zn and Zf. Since the comparison and assignment operations performed during this process are very fast, computation overhead of the combination in our algorithm is very low.</p><p>Evidently, there is another solution to avoid memory access conflict without creating and combining each pair of partial projection buffers. All processors simultaneously access the shared projection buffers Zn and Zf during the parallelized projection procedure in an exclusive mode. Although the implementation is simpler, buffer access time may slightly increase due to the exclusive access mode.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Image-Based Partitioning for Ray Traversal</head><p>In our algorithm, the projection buffers not only provide closer bounds on the intervals where the ray integrals need to be calculated, but also view-dependent information of image complexity. A static image-based contiguous partitioning is therefore a natural choice.</p><p>Note that the amount of computation involved in a specific image section can be calculated by the following formula:</p><formula xml:id="formula_3">m X i=1 gdi (7)</formula><p>where m is the number of viable pixels in that image section, di is the length of a bounded ray interval associated with the ith viable pixel, and g is a function of length di. The value of gdi depends on both length di and the transparency property of the object to be rendered. Generally speaking, the more transparent the object and the greater the value di, the larger the value gdi. The value of gdi can be adjusted during rendering to be more suitable for the object, according to the load balancing feedback.</p><p>Once function g in Equation 7 is determined, the image is divided into large image blocks of contiguous image scanlines. Each block contains roughly an equal amount of work (see <ref type="figure" target="#fig_1">Figure 2</ref>). The fundamental unit of work in our algorithm is an image pixel rather than an image scanline, which supports more accurate partitioning and hence better load balancing. Each processor then takes one image block, casts rays from the viable pixels in that block, and performs ray integrals within the bounded interval along each ray.</p><p>Our parallel ray traversal procedure is further accelerated by existing ray casting optimizations, which fall into two classes according to whether or not there are computational dependencies between rays. Those non ray-dependent optimizations, such as early ray termination, can be directly applied with an image-based partitioning. However, when incorporating the adaptive image sampling which belongs to the ray-dependent class, caution must be taken to avoid the cost of replicated ray casting from pixels shared by different processors.</p><p>In a serial ray casting algorithm, adaptive image sampling optimization <ref type="bibr" target="#b11">[12]</ref> is performed by dividing the image plane into fixed size square image tiles of ! ! pixels, and casting rays only from the four corner pixels of each tile. Additional rays are cast only in those image tiles with high image complexity, as measured by the color difference of corner pixels of the image tiles. All non ray-casting pixels are then bilinearly interpolated from ray-casting pixels. Nieh and Levoy <ref type="bibr" target="#b0">[1]</ref> proposed a dynamic image-based partitioning scheme which reduces the cost associated with pixel sharing by delaying the evaluation of image tiles whose pixel values are being computed by other processors.</p><p>In this paper, we propose a more effective solution based on our static image-based contiguous partitioning. Compared to the previous dynamic image partitioning scheme <ref type="bibr" target="#b0">[1]</ref>, our method has no task redistribution overhead and thus fewer synchronization requirements. The method is described as follows: </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.">Each processor takes one image block and performs adaptive</head><p>image sampling on each tile in that block top down in scanline order. Note that for all shared pixels at the bottom of the image block, the processor directly gets their values from the shared memory, which have been computed by other processors.   Evidently, our algorithm works based on the premise that each processor has approximately an equal amount of work to do. To guarantee and test that no computation on the shared pixels is missed by any of the processors, we set an "alarm" signal s for each shared pixel at the top tiles, with initial values 1. Once a shared pixel has been evaluated, its signal s is set to 0. If a processor reaches a shared pixel with value 1 at its bottom tiles, the alarm sounds to notify the user and stop the rendering. Our experimental results have shown that our algorithm works well, and no alarm has sounded so far.</p><p>It is possible that when more processors are used, we will some day hear the alarm. When this happens, we would like to employ a dynamic task stealing based on the above contiguous image partitioning scheme. The dynamic scheme would produce better load balancing, but also increase the synchronization overhead and implementation complexity. We should realize, however, that when more processors are available, the trend will be to render much larger volume data sets with larger images. Then, the number of processors would be still significantly lower than the number of pixels, and thus our algorithm would remain competitive.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Experimental Results</head><p>Our algorithm has been implemented on an SGI Power Challenge with 16 R10000 processors. The performance results on classified volume data sets are given in <ref type="table" target="#tab_3">Table 1 and 2. The brain data set in   Table 1</ref> is a 256 256 124 MRI scan of a human brain ( <ref type="figure" target="#fig_9">Figure  3</ref>). The head data set in <ref type="table" target="#tab_4">Table 2</ref> is a 256 256 225 CT scan of a human head <ref type="figure" target="#fig_6">(Figure 4</ref>). Rendering times include both the boundary cell projection time and the subsequent ray traversal time, but not the off-line preprocessing time for boundary cell detection and run-length encoding. Preprocessing times are respectively 9:9 seconds and 18:3 seconds on a single processor for these two data sets.</p><p>We would like to point out that when the projection procedure is parallelized on a multiprocessor, extra time is needed to combine all partial buffers generated by the different processors. However, our experiments have shown that combination times with buffer size 256 2 are negligible -less than our minimum measurable time (0:01 seconds).</p><p>In our preprocessing stage, we merged every eight neighboring grid cells into one macrocell to reduce the amount of boundary cells. Then, in the boundary cell projection procedure, we used low level-of-accuracy projection templates and run-length encoding data structure for both parallel and perspective projections. In the subsequent ray traversal procedure, we performed resampling (using trilinear interpolation), shading (using Phong model with one light source), and compositing within each bounded ray interval through the original volume data. The resultant images contain 256 256 pixels. We selected an early-ray-termination opacity cutoff of 95. Ray traversal time with both adaptive and nonadaptive (normal) image sampling were measured. In adaptive image sampling, we used square image tiles of 3 3 pixels along with a minimum color difference of 25, measured as Euclidean distance in RGB (256 256 256) space. The fastest rendering rates for both data sets were above 20 Hz, among the fastest reported.    Our experimental results have shown that the perspective boundary cell projection times are about three to five times longer than parallel boundary cell projection times, depending on the number of boundary cells to be projected. However, subsequent ray traversal times for both perspective and parallel views of the same volumetric object are very close when the projected object has similar sizes on the projection plane. Therefore, the resultant perspective rendering times (including both projection and ray traversal times) are less than three times longer than corresponding parallel rendering times. <ref type="figure" target="#fig_5">Figure 5</ref> shows the speedup curves for both nonadaptive and adaptive renderings (including the boundary cell projection time) on the MRI brain data set with parallel projection. The speedup results on the CT head data set are similar. There are two observations from these speedup curves. First, our parallel program scales well on a multiprocessor. These near linear speedups are ascribed to our effective contiguous object-and image-based partitioning schemes, which lead to both spatial locality and good load balancing. In our boundary cell projection procedure, the computation work assigned to each processor is a subvolume of contiguous run-length encoded scanlines of boundary cells, and therefore provides good spatial locality. With such good spatial locality, we can effectively make use of the prefetching effect of long cache lines on the Challenge, which helps to mask the latency of main memory accesses. In fact, the two medical data sets in <ref type="table" target="#tab_3">Tables 1 and 2</ref> have significant coherence. With the opacity transfer functions we used, 3:1 and 3:2 of the grid cells in the MRI and CT data sets are boundary cells. Accordingly, the run-length encodings of the boundary cells are very small compared to the original volume. When such short run-length encodings are split and assigned to the multiprocessors, they can be easily fixed inside the local caches of these processors with minimal cache misses. Evidently, our ray traversal procedure also benefits from spatial locality provided by our contiguous image-based partitioning, since adjacent rays access data from the same cache line. The second observation is that the speedups for adaptive rendering are nearly as good as those for nonadaptive rendering. Unlike the results reported by Nieh and Levoy <ref type="bibr" target="#b0">[1]</ref> -where adaptive rendering always exhibits worse speedups than nonadaptive rendering, due to extra memory and synchronization overhead -our parallel algorithm shows more efficient adaptive rendering. In their algorithm, memory overhead is larger for adaptive rendering because access to additional shared writable data structures such as the local wait queue is not needed in nonadaptive rendering. Additional synchronization time is also required for the adaptive case, due to the waiting for all processors to complete ray casting before non ray-casting pixels are interpolated from ray-casting pixels. However, in our algorithm, neither the additional shared writable data structure nor additional synchronization time is needed for adaptive rendering. This is because the cost of replicated ray casting is avoided by our load balancing image partitioning scheme without dynamic task redistribution.</p><p>To show the performance of our load balancing schemes, we collected the times of both parallel projection and subsequent nonadaptive and adaptive ray traversal procedures on each processor during the rendering of the MRI brain data set using twelve processors. Ta-   In <ref type="table">Table 4</ref>, a commonly used 66 3 voxel positive potential of a high potential iron protein was rendered by using modified opacity transfer functions with different opacity thresholds between frames. The slow preprocessing stage for run-length encoding was avoided in our algorithm, provided that new opacity thresholds were never less than the initially specified opacity threshold. We set the initial opacity threshold to 10 <ref type="figure" target="#fig_11">(Figure 6a</ref>), and the modified threshold to 120 <ref type="figure" target="#fig_11">(Figure 6b</ref>). The ray traversal times did not increase with the modification. Projection times did not change since we did not change the view. Therefore, interactive rendering rates were maintained during rendering with interactive classification. Similar results are shown in <ref type="table" target="#tab_7">Table 5</ref>, where a 320 320 34 CT scan of a lobster was rendered with interactive classification. The initial opacity threshold was set to 30 to display the semi-transparent shell <ref type="figure" target="#fig_12">(Figure 7a</ref>). The new opacity threshold was set to 90 to display the meat without the shell <ref type="figure" target="#fig_12">(Figure 7b</ref>).  For comparison purposes, we also rendered these two data sets with fixed classification. For each data set, we first recreated the run-length encoding data structure with the new boundary cells according to the modified opacity threshold. Then, we rendered the data set at the same view by using the modified transfer function and the new run-length encoding data structure. <ref type="table" target="#tab_7">Tables 4 and 5</ref> show that rendering times with interactive classification are almost twice as long as those with fixed classification. We also measured the different number of boundary cells with different opacity thresholds, and found that the number of boundary cells corresponding to the modified opacity thresholds was about two thirds of that corresponding to the initial opacity thresholds for these two data sets. It follows that the performance penalty in both rendering rate and memory space is moderate for interactive classification.  In order to further speedup the boundary cell projection time for larger data sets, we used a lower resolution volume during the procedures of boundary cell detection, run-length encoding, and projection. We still used the original high resolution volume for accurate rendering. Such a lower resolution volume can be either a shrunken volume generated from the original volume by merging every m 3 neighboring cells into a macrocell, or a low LOD volume.</p><p>We conducted some experiments on a rendering of a 18625676 voxelized F15 aircraft data set ( <ref type="figure" target="#fig_13">Figure 8a)</ref>. We separately used two run-length encodings created from a shrunken volume (m=2) and a low LOD volume. The low LOD volume had 9312841 voxels (see <ref type="figure" target="#fig_13">Figure 8b)</ref>. The object modeling algorithm <ref type="bibr" target="#b13">[14]</ref> we used guaranteed that the shape of the aircraft in the low LOD volume was not "thinner" than that in the original high resolution volume (as shown in <ref type="figure" target="#fig_13">Figure 8</ref>). <ref type="table" target="#tab_8">Table 6</ref> shows that both projection and ray traversal times from using run-length encoding of the low LOD volume are faster than those of the shrunken volume. We discovered that even though fewer boundary cells were contained in the low LOD volume, they led to a more accurate object boundary estimation, and, therefore, more time savings in both projection and ray traversal procedures. Also note that although we have employed a lighting model and 3D texture mappings (both implemented in software during the rendering time), the ray traversal speeds are very fast. This is because the binary classification of the aircraft decreased the rendering complexity to nearly On 2 , for an image size of n 2 .</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Comparison to Shear-Warp</head><p>The shear-warp factorization technique <ref type="bibr" target="#b4">[5]</ref> is another fast volume rendering method, which has several similarities to our algorithm. The comparison between these two is helpful in evaluating ours.</p><p>First, both methods are high speed volume rendering algorithms without graphics hardware acceleration. Their high performances are reached by combining the advantages of image-and objectorder approaches, and are therefore scalable. Rendering rates as fast as 10-30Hz are reported for both methods to render the same 256 3 volume data set on the 16-processor SGI Challenge. While our method inherits a high image quality from accurate ray casting, the shear-warp method suffers from some image quality problems due to its two-pass resampling and the 2D rather than 3D interpolation filter (as reported in <ref type="bibr" target="#b4">[5]</ref>), Second, the theoretical fundamentals of both methods are directly or indirectly based on the normal ray casting algorithm <ref type="bibr" target="#b12">[13]</ref>.</p><p>Our method directly speeds up the ray casting algorithm by efficiently skipping over empty space outside the classified object without affecting image quality. Thus, existing ray casting optimizations, such as early ray termination and adaptive image sampling, can be conveniently incorporated into our algorithm. The shearwarp method can also be viewed as a special form of ray casting, where sheared "rays" are cast from voxels in the principal face of the volume. Bilinear rather than trilinear interpolation operations are used on each voxel slice to resample volume data (which shortens rendering time, and also reduces image quality). The effect of early ray termination is also achieved.</p><p>Third, both methods employ the scanline-based run-length encoding data structure to encode spatial coherence in the volume for high data compression and low access time. In our algorithm, the small number of boundary cells compared to the volume size leads to minimal extra memory space for run-length encoding. Obviously, we still need the original volume during the ray traversal procedure. In the shear-warp method, although three encoded volumes are required along the three volume axes, the total memory occupation is reported to be much smaller than the original volume.</p><p>Fourth, both methods support interactive classification, with similar moderate performance penalties. In our method, interactive classification performs without extra programming efforts, providing the modified opacity threshold is never less than the initial opacity threshold. In the shear-warp method, a more sophisticated solution is presented with some other restrictions.</p><p>Fifth, both methods are parallelized on shared memory multiprocessors and show good load balancing. Dynamic interleaved partitioning scheme is employed in the parallel shear-warp algorithm <ref type="bibr" target="#b2">[3]</ref>, while static contiguous partitioning schemes are used in our method. Both methods exploit spatial locality in the run-length encoding data structure. In general, our contiguous partitioning of the volume provides higher spatial locality than interleaved partitioning. Also, compared to dynamic partitioning, our static scheme is more economical due to a simplified controlling mechanism and lower synchronization overhead.</p><p>We have compared the performance of parallelized shear-warp algorithm reported by Lacroute <ref type="bibr" target="#b2">[3]</ref> with our experimental results, for the same 256 256 225 voxel CT head data set, achieved on the Challenge with 16 processors. The fastest shear-warp rendering rate is 13 Hz for a 256 256 grey scale image with parallel projection. The rendering time doubles for a color image because of additional resampling for the two extra color channels. We reached a rendering rate of 20 Hz (or 33 Hz, when adopting adaptive image sampling) for color images of the same size, as shown in <ref type="figure" target="#fig_6">Figure 4</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Conclusions</head><p>We have proposed an interactive parallel volume rendering algorithm without using graphics hardware accelerators. It is capable of rendering 10 ,30 frames per second on a 16-processor SGI Power Challenge for 256 3 volume data sets. We achieved these speeds by using an accelerated ray casting algorithm with effective space leaping and other available optimizations, and contiguous task partitioning schemes which take full advantage of optimizations in the serial algorithm with high load balancing and low synchronization overhead. When compared with the shear-warp approach, our method has shown both faster rendering speed and higher image quality.</p><p>Following the encouraging experimental results, we are currently investigating interactive ray casting for very large data sets with our algorithm. Run-length encoding of lower levels-of-detail volume data are being studied to create a near accurate object boundary estimation with much fewer boundary cells. The original full resolution data set will be utilized during ray traversal procedure for high-quality ray casting images.     </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head></head><label></label><figDesc>1. A small fixed size square image tile of ! ! pixels is defined as the fundamental unit of work.2. For P processors, the image is split into P large image blocks of contiguous scanlines of tiles. Each block may not contain the same number of tiles, but contains a roughly equal amount of work.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>A static image-based contiguous partitioning example.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 2</head><label>2</label><figDesc>illustrates a four-processor example of how the image is partitioned in our algorithm, where the fundamental unit of work becomes a square image tile. All square image tiles which contain the shared pixels by different processors are marked with dark shading. They are gathered at the top and bottom of each image block. Therefore, tiles in each image block can be classified as: regular tiles (white tiles in the figure), top tiles (tiles with dark shading), and bottom tiles (with light shading). In our parallel algorithm, each processor Pi starts its work from the top tiles down in its image block Bi in tile scanline order. For all the top and regular tiles, normal adaptive image sampling are performed. However, for each bottom tile, we read their values directly from the shared memory. Therefore, replicated ray casting and interpolation operations at shared pixels are avoided.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 5 :</head><label>5</label><figDesc>Speedups of rendering the MRI brain data set on the Challenge.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>4 :</head><label>4</label><figDesc>Volume rendering times (in sec) for a positive potential of a high potential iron protein data set. (Proj: projection time; Ray: ray traversal time; L: overview with lower opacity threshold 10; H: interior with higher opacity threshold 120.)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Figure 3 :</head><label>3</label><figDesc>Volume rendering with perspective projection of a 256 256 124 MRI brain.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Figure 4 :</head><label>4</label><figDesc>Volume rendering with parallel projection of a 256 256 225 CT head. (a) Initial opacity threshold is 10 (a) Shell with opacity threshold 30 (a) High resolution volume (b) Modified threshold is 100</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Figure 6 :</head><label>6</label><figDesc>Volume rendering with parallel projection of a positive high potential iron protein data set using interactive classification. (b) Meat with opacity threshold 90</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_12"><head>Figure 7 :</head><label>7</label><figDesc>Volume rendering with parallel projection of a lobster data set using interactive classification. (b) Lower LOD volume</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_13"><head>Figure 8 :</head><label>8</label><figDesc>Volume rendering with perspective projection of voxelized F15 aircraft data sets using multiresolution volumes.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 1 :</head><label>1</label><figDesc>Volume rendering times (in sec) for a 256 256 124</figDesc><table><row><cell>MRI brain data set.</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_4"><head>Table 2 :</head><label>2</label><figDesc>Volume rendering times (in sec) for a 256256225 CT head data set.</figDesc><table /><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_5"><head>Table 3 :</head><label>3</label><figDesc>Computation distribution (in sec) of the MRI brain data set on 12 processors.</figDesc><table><row><cell>Procedures Min-Max Variation</cell><cell>Projection 0:01 , 0:01 0:11 , 0:12 0:05 , 0:05 Nonadaptive RT Adaptive RT 0:00 0:01 0:00</cell></row><row><cell cols="2">ble 3 shows that the variations in rendering times among processors</cell></row><row><cell cols="2">for adaptive and nonadaptive ray traversal are respectively zero and 0:01 seconds. A good load balancing was also reached during the boundary cell projection with no measurable variation in projection</cell></row><row><cell cols="2">times among processors. Note that we present load balancing per-formance on 12 rather than 16 processors of our Challenge. This</cell></row><row><cell cols="2">is because when more processors are used, the projection times are too short (often less than 0:01 seconds) for the purposes of compar-</cell></row><row><cell cols="2">ison. Also, in Tables 4-6, we present the rendering rates for several data sets for up to 12 processors (Proc#).</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_6"><head>Table</head><label></label><figDesc></figDesc><table /><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_7"><head>Table 5 :</head><label>5</label><figDesc>Volume</figDesc><table><row><cell>rendering times (in sec) for a lobster data set.</cell></row><row><cell>(Proj: projection time; Ray: ray traversal time; L: shell with low opacity threshold 30; H: meat with high opacity threshold 90.)</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_8"><head>Table 6 :</head><label>6</label><figDesc>Volume</figDesc><table><row><cell></cell><cell cols="2">rendering times (in sec) for a voxelized F15 air-</cell></row><row><cell cols="3">craft data set using different kinds of multiresolution volumes for</cell></row><row><cell cols="3">object boundary estimation. (Para; parallel projection time; Pers:</cell></row><row><cell cols="3">perspective projection time; Ray: ray traversal time.)</cell></row><row><cell>Proc#</cell><cell>Shrunken Volume Para Pers Ray</cell><cell>Low LOD Volume Para Pers Ray</cell></row><row><cell>1</cell><cell></cell><cell></cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Acknowledgments</head><p>This work has been partially supported by NASA grant NCC25231, NSF grant MIP9527694, ONR grant N000149710402, NRL grant N00014961G015, and NIH grant CA79180. Thanks to Huamin Qu, Kevin Kreeger, Lichan Hong, and Shigeru Muraki for their constructive suggestions and to Kathleen McConnell for comments. Special thanks to Milos Sramek for providing the multiresolution volumes of the F15 aircraft. The MRI data set is courtesy of the Electrotechnical Laboratory (ETL), Japan.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Volume Rendering on Scalable Shared-Memory MIMD Architectures</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Nieh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. 1992 Workshop on Volume Visualization</title>
+		<meeting>1992 Workshop on Volume Visualization</meeting>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="17" to="24" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Parallel Performance Measures for Volume Ray Casting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Silva</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization &apos;94</title>
+		<meeting>IEEE Visualization &apos;94</meeting>
+		<imprint>
+			<biblScope unit="page" from="196" to="203" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Real-Time Volume Rendering on Shared Memory Multiprocessors Using the Shear-Warp Factorization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lacroute</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Parallel Rendering Symposium</title>
+		<meeting>Parallel Rendering Symposium</meeting>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="15" to="22" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Interactive Ray Tracing for Isosurface Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Parker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Shirley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Sloan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization &apos;98</title>
+		<meeting>IEEE Visualization &apos;98</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="233" to="238" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Fast Volume Rendering using a Shear-warp Factorization of the Viewing Transformation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Lacroute</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIGGRAPH &apos;94</title>
+		<meeting>SIGGRAPH &apos;94</meeting>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="451" to="457" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Efficient Ray Tracing of Volume Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="245" to="261" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Applying Space Subdivision Techniques to Volume Rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Subramanian</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Fussell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization &apos;90</title>
+		<meeting>IEEE Visualization &apos;90</meeting>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="150" to="158" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Boundary Cell-Based Acceleration for Volume Ray Casting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Bryson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Graphics</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="715" to="721" />
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<analytic>
+		<title level="a" type="main">Towards a Comprehensive Volume Visualization System</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Avila</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Sobierajski</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization &apos;92</title>
+		<meeting>IEEE Visualization &apos;92</meeting>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="13" to="20" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Rendering Volumetric Data Using the STICK Representation Scheme</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Montani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopigno</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Workshop on Volume Visualization</title>
+		<meeting>Workshop on Volume Visualization</meeting>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="page" from="87" to="93" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Volume Rendering Based Interactive Navigation within the Human Colon</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wan</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Q</forename><surname>Tang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Kaufman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Liang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Wax</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. IEEE Visualization&apos; 99</title>
+		<meeting>IEEE Visualization&apos; 99</meeting>
+		<imprint>
+			<date type="published" when="1999" />
+		</imprint>
+	</monogr>
+	<note>in these proceedings</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Volume Rendering by Adaptive Refinement</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Visual Computer</title>
+		<imprint>
+			<biblScope unit="volume">6</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="2" to="7" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Display of Surface from Volume Data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">8</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="29" to="37" />
+			<date type="published" when="1988" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Object Voxelization by Filtering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Milos</forename><surname>Sramek</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Arie</forename><surname>Kaufman</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Symposium on Volume Visualization &apos;98</title>
+		<meeting>Symposium on Volume Visualization &apos;98</meeting>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="111" to="118" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

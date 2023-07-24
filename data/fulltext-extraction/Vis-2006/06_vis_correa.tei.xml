@@ -1,0 +1,662 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">Feature Aligned Volume Manipulation for Illustration and Visualization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Student Member, IEEE</roleName><forename type="first">Carlos</forename><forename type="middle">D</forename><surname>Correa</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Deborah</forename><surname>Silver</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Min</forename><surname>Chen</surname></persName>
+						</author>
+						<title level="a" type="main">Feature Aligned Volume Manipulation for Illustration and Visualization</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:41+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Illustrative visualization</term>
+					<term>Illustrative manipulation</term>
+					<term>GPU computing</term>
+					<term>volume rendering</term>
+					<term>volume deformation</term>
+					<term>computerassisted medical illustration</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>In this paper we describe a GPU-based technique for creating illustrative visualization through interactive manipulation of volumetric models. It is partly inspired by medical illustrations, where it is common to depict cuts and deformation in order to provide a better understanding of anatomical and biological structures or surgical processes, and partly motivated by the need for a real-time solution that supports the specification and visualization of such illustrative manipulation. We propose two new featurealigned techniques, namely surface alignment and segment alignment, and compare them with the axis-aligned techniques which was reported in previous work on volume manipulation. We also present a mechanism for defining features using texture volumes, and methods for computing correct normals for the deformed volume in respect to different alignments. We describe a GPU-based implementation to achieve real-time performance of the techniques and a collection of manipulation operators including peelers, retractors, pliers and dilators which are adaptations of the metaphors and tools used in surgical procedures and medical illustrations. Our approach is directly applicable in medical and biological illustration, and we demonstrate how it works as an interactive tool for focus+context visualization, as well as a generic technique for volume graphics.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>In science, medicine and engineering, hand-drawn illustrations often include manipulating part of an object to depict the stages and outcome of a procedure, uncover hidden features, or reveal the spatial relationship between different components of the objects. Such manipulation typically includes the following characteristics:</p><p>• It often contains cuts and dissections, which, for example, are commonly found in illustrations of surgical procedures as exemplified by <ref type="figure" target="#fig_0">Figure 1</ref>(b).</p><p>• It may allow feature-sensitive operations, which can be applied to a semantic component of the object, such as the skin in <ref type="figure" target="#fig_0">Figure  1</ref>(b), without affecting other parts of the object.</p><p>• It may enable ubiquitous operations, which can be applied to various parts of the object with different geometric transformations, as shown in <ref type="figure" target="#fig_0">Figure 1</ref>(d).</p><p>• It can facilitate virtual operations, which do not necessarily conform to the reality, such as the unreal flaps used to illustrate anatomical structure in <ref type="figure" target="#fig_0">Figure 1</ref>(d).</p><p>In the context of illustrative visualization, we refer to such manipulation as illustrative manipulation, which provides a means for specifying and realizing visualization that contains cuts, dissections, distortion, and various other forms of deformation that are not present in the original data. For example, in <ref type="figure" target="#fig_0">Figure 1</ref>(a), the skin layer (as the context) of the hand is manipulated using the metaphor of "retractors" to reveal the bones or vessels (as the focus), facilitating an illustrative visualization with focus+context. In <ref type="figure" target="#fig_0">Figure 1</ref>(c), a number of virtual manipulation operations are applied to the visible human dataset to achieve an illustrative visualization in a manner similar to a classical anatomic illustration, without resorting to the complex and sometimes contentious processes employed by some contemporary exhibitions.</p><p>It is, however, not intended to provide a physically-based simulation of the internal and external forces involved in the deformation or the physical interaction between the tools and different parts of the object.</p><p>Although physically-based modeling is critical to applications such as surgical simulation, and could ultimately be desirable for illustrative manipulation, a huge computational cost is necessary for any realistic modeling and simulation of a combination of physical behaviors such as elastic and plastic deformation, fractures, stress-strain curves of complex materials, including skins, soft tissues, body fluids, etc. Hence, for illustrative manipulation, one must give the priority to the interactivity and operatability in the process of realizing illustrative visualization.</p><p>In this paper, we propose a feature-based technique for manipulating volumetric objects for illustrative visualization, and describe a GPUbased implementation that enables interactive specification and rendering such visualization. Inspired by medical illustrations that frequently depict the results of manipulation with tools such as peelers, retractors and pliers, we allow the specification of manipulation through a collection of procedurally-defined manipulation operators. Because we place a significant emphasis on the interactivity and operatability, we need to address a number of conflict technical requirements, for example, (i) between the axis-aligned volume texture storage and the arbitrary geometry of features, and (ii) between the normals on a cut surface and the gradient-based normals within the original volume.</p><p>When specifying a cut or peel, one important consideration is "alignment". Here, aligned manipulation refers to those cuts or peels that are applied to certain layers while other features of interest are preserved. The simplest is axis-aligned, which aligns the operator with the axis-planes. It is feature-insensitive and is applied to all points within the volume bounds. This however is not always satisfactory as the "object" within the volume is not necessarily cubic. We introduce two feature-based methods, namely surface alignment and segment alignment for modeling and rendering illustrative manipulation, and compare them with the traditional axis alignment method. We devise a method for estimating accurate normals along the surface of cuts and dissections while maintaining continuous normals, which allows us to obtain correct shading of the object being manipulated, opaque or translucent.</p><p>We built our approach on the general concept of space warping <ref type="bibr" target="#b0">[1]</ref>, which was traditionally realized using ray casting without interactivity. We provide an efficient GPU implementation for allowing illustrative manipulation to be specified and rendered at interactive rates, and we demonstrate the technical feasibility and usability of our approach by applying various illustrative manipulation to a number of volume datasets interactively on a Pentium XEON 2.8 GHz PC with a Quadro , similar to exhibitions such as BodyWorlds <ref type="bibr" target="#b21">[22]</ref>, and Bodies, the Exhibition <ref type="bibr" target="#b8">[9]</ref>. FX4400 graphics card.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">RELATED WORK</head><p>Illustrative visualizations are often associated with cutaway visual effects <ref type="bibr" target="#b6">[7]</ref> and non photorealistic rendering <ref type="bibr" target="#b7">[8]</ref>. This paper is concerned with the former aspect of illustrative visualization, and in particular, we are interested in creating feature-based cutaway visual effects through interactive manipulation of volume datasets.</p><p>McGuffin et al. <ref type="bibr" target="#b14">[15]</ref> proposed a set of interactive manipulation widgets to browse volume data using forward mapping. They used individual voxels as rendering primitives, which can be directly transformed, allowing the modeling of effects such as cuts and openings. While voxels were grouped into segments as features for manipulation, the rendering did not involve connectivity information. It was thereby difficult to achieve good quality visualization, and aliasing was noticeable especially in close-up views or with large deformation such as stretch.</p><p>An alternative approach is to implement manipulation operations using backward mapping. The basic idea, space warping, was first outlined by <ref type="bibr">Barr [1]</ref>, and was realized for volume manipulation through the notion of ray deflectors <ref type="bibr" target="#b12">[13]</ref> and spatial transfer functions <ref type="bibr" target="#b4">[5,</ref><ref type="bibr" target="#b11">12]</ref>. Both <ref type="bibr" target="#b12">[13]</ref> and <ref type="bibr" target="#b4">[5]</ref> employed ray casting for sampling the deformed space, hence high quality rendering was attainable. However, both provided only a brute-force solution to compute the normals of the deformed or dissected objects, and neither considered feature-sensitive manipulation. Furthermore, due to the computational costs involved, this ray-casting approach for volume manipulation is not yet able to support interactive manipulation on current desktop computers.</p><p>There has been a series of efforts for achieving interactive volume rendering by exploiting GPU capacities (e.g., <ref type="bibr" target="#b23">[24,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b20">21]</ref>). Westermann and Salama <ref type="bibr" target="#b24">[25]</ref> utilized 3D texture mapping hardware to achieve interactive deformation of volume datasets. Rezk-Salama et al. <ref type="bibr" target="#b18">[19]</ref> used general purpose rendering hardware, coupled with edge and face constraints, to facilitate the adaptive subdivision of piecewise patches of a volume object. Singh and Silver <ref type="bibr" target="#b19">[20]</ref> used mid-plane geometry to specify and render deformation about joints of visible human, in conjunction with texture mapping hardware. In order to obtain normals that correspond to the deformed volume, Westermann and Salama <ref type="bibr" target="#b24">[25]</ref> employed an approximate solution based on a two-pass rendering approach <ref type="bibr" target="#b16">[17]</ref>. Rezk-Salama et al. <ref type="bibr" target="#b18">[19]</ref> obtain normals via a linear approximation of the gradient. Chen et al. <ref type="bibr" target="#b2">[3]</ref> use raycasting and employ inverse mapping to achieve deformation. Weiskopf et al. <ref type="bibr" target="#b22">[23]</ref> presented a technique for estimating the normals of clipped volumes with a weighting function for blending the normals near the boundaries of the clipping plane. Correa et al. <ref type="bibr" target="#b5">[6]</ref> employed generalized displacement mapping as means to achieve real-time manipulation of volume data. Nevertheless, <ref type="bibr" target="#b24">[25]</ref>, <ref type="bibr" target="#b18">[19]</ref> and <ref type="bibr" target="#b2">[3]</ref> implemented mainly continuous deformation without cuts, while <ref type="bibr" target="#b22">[23]</ref> and <ref type="bibr" target="#b5">[6]</ref> considered mainly axis-aligned operators.</p><p>The work presented in this paper brings together the desirable elements of the above-mentioned previous work. We draw the featurebased approach from <ref type="bibr" target="#b14">[15]</ref> in order to create more meaningful illustrative visualization. We draw the backward mapping approach from <ref type="bibr" target="#b12">[13,</ref><ref type="bibr" target="#b4">5]</ref> in order to facilitate complex manipulation operators and maximize the rendering quality at interactive speeds. We extended the use of segment based features in <ref type="bibr" target="#b14">[15]</ref> by introducing manipulation based on surface features. We further extended the normal calculation method in <ref type="bibr" target="#b22">[23]</ref> by allowing normal adjustment along features of interest. For the first time, we have delivered complex visual effects, such as feature-based peeling and opening, interactively with a rendering quality comparable to non-interactive solutions such as <ref type="bibr" target="#b4">[5]</ref>. As mentioned in Section , this work is not intended to provide a physicallybased simulation of various manipulation, for which there is a rich collection of literature ( <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b3">4,</ref><ref type="bibr" target="#b15">16]</ref>).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">MANIPULATION OPERATORS</head><p>A manipulation operator is a metaphor for a transformation mapping from the original volumetric space to a dissected or deformed volumetric space. From the perspective of a user, such an operator functions like a surgical tool, such as a pair of retractors, and can be used to perform an illustrative manipulation on a volumetric model. In this work, we designed and implemented four types of operators, namely Peeler Retractors Pliers Dilator peeler, retractors, pliers and dilator. <ref type="figure" target="#fig_1">Figure 2</ref> shows the iconic representation of these operators as applied to a simple volume object, and each is accompanied by a medical illustration that exemplifies the operator. All four operators are procedurally defined, and each is associated with a set of parameters, such as operatable size, distortion scale, etc., which can be changed interactively. These operators can be placed anywhere on or within the volumetric model. The transformation of the operators over the volume model or its features is determined dynamically during rendering (see 3.</p><p>2). The detection of self-collision between different parts of the volume model is not featured in the current implementation, because of the computational cost for providing a meaningful feedback rather than the cost for detection. Nevertheless, self-collision can be prevented by interactively modifying the parameters of a manipulation operator. Below we describe briefly the functionality of the four operators, and further examples of their use can be found in Section 6.</p><p>Peeler. The peeler simulates peeling or cutting of the outer layers of a volumetric model. In <ref type="figure" target="#fig_3">Figure 3</ref>, a peeler with cylindrical foldback is shown applied to the CT head dataset. Different parameters of the peeler, such as thickness of the cut and the angle of bending of the peeled layer, can be manipulated interactively to obtain different illustrative effects. For example, the different virtual flaps in <ref type="figure" target="#fig_0">Figure  1</ref>(c) are obtained by placing multiple peeler operators around the body and varying their parameters.</p><p>Retractors. In the context of surgical illustration, retractors are tools used to spread organs or bones, or to hold back soft tissues such as skin. In the context of illustration, they are useful for illustrating the access to the internal organs.</p><p>Pliers. Pliers are tools used to grasp tissue and pull it or poke it into the volumetric object. The operator parameters include the shape of the displacement and the radius of influence which specifies how the displacement propagates through the volume. In <ref type="figure" target="#fig_1">Figure 2</ref>, the pliers are shown pulling a blood vessel.</p><p>Dilator. Dilators are used to gain access into narrow regions, cuts or vessels. They essentially scale the region from the inside typically by blowing air, to increase the visibility or accessibility of the region. When applied to volumetric manipulation, dilators have a similar effect to that of volumetric magic lenses <ref type="bibr" target="#b13">[14]</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Manipulation Alignment</head><p>When using the manipulation operators, we define two properties: alignment and placement. Alignment here refers to the preservation of interesting features while operating, giving the impression that it is aligned with features. Placement, on the other hand, refers to the movement in 3D space of the operator. For example, in <ref type="figure" target="#fig_3">Figure 3</ref>(c), the operator is said to be aligned with the brain tissue, since the peeler appears to follow its contour. Placement of the operator defines how deep is the cut, or in which direction. This paper addresses the problem of alignment. Manipulation operators can be aligned with one of the three main axes, which are intuitive to place in three dimensional space, and easy to implement in conjunction with a texture-based volume renderer. Axis alignment is usually limited, since very rarely features of interest are planar. This limitation can be seen in <ref type="figure" target="#fig_3">Figure 3</ref>(a).</p><p>In this paper, we propose two feature aligned techniques for allowing manipulation operators that are sensitive to the specific features on a volume model. We consider surface features that are defined by an iso-surface, and volume features that are define by a segment, resulting in the notions of surface-aligned and segment-aligned manipulation operators respectively. The merits of such alignments can be seen Consider the skin of the head as the context, and the brain as the focus of these visualizations. From <ref type="figure" target="#fig_3">Figure 3</ref>(a) where a peel is performed using axis-alignment, we can observe that the part being peeled is wedge shaped and the operator cuts through the brain. The visualization conveys limited information about the part in focus. Feature alignment corrects this problem. Virtual surfaces are created without segmentation (except for background), using a distance field computation. The distance field is computed based on a boundary, from which virtual shells of different thicknesses can be defined. For example, in 3(b), a surface-aligned peel is applied to the top of the head with a uniform depth from the surface of the skin. Such alignment can be used to investigate and illustrate layered structures without the pre-knowledge of segmentation. However, while this is a good approximation , the operator still cuts through the brain. If we have the specification of volume features, typically obtained from segmentation or defined by a range of iso-values, we can create a more effective focus+context visualization. In 3(c), with the segmentation knowledge of external layers including the skin and skull, we apply a segment-aligned peel to the head. The brain, that is, the focus, is not only highlighted but also visualized with correct geometry. In addition, the correct shading at the back of the peel provides further meaningful context to the visualization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Volume Manipulation</head><p>In this work, volume manipulation is defined as point-wise mapping that transforms positions of all points in an axis-aligned bounding volume V to new positions. Let P V be a set of all points in V . For each point p ∈</p><formula xml:id="formula_0">P V . p = T F (p) p = T −1 F (p )<label>(1)</label></formula><p>where T F denotes a forward transformation and T −1 F the corresponding inverse transformation. Hence, we obtain a new set P V = {p |∀p ∈ P V , p = T F (p)}. Let V be the new axis-aligned bounding volume for all the points in P V . Unlike the majority of previous work on volume deformation, T F and T <ref type="bibr">−1</ref> F are not necessarily continuous. While the forward transformation is intuitive, it has several shortcomings. First, it is difficult to know the boundary of the new volume V after the manipulation without evaluating T F analytically. One solution to this difficulty is for the user to specify such a bounding volume. Second, it is difficult to render a manipulation operator that involves cuts and dissections. Consider a retractor and a dilator. The former spreads the points apart and introduces empty space between the transformed points, while the latter stretches the points but maintains continuity between the discretely sampled points in V . Regardless whether it is in the image space or the new object space V , it is not possible for a rendering algorithm to determine if it should interpolate between the transformed points. Third, as the transformation is often non-linear, it is difficult to estimate an effective sampling resolution of the final volume in relation to the original volume V . For example, this problem was exhibited in <ref type="bibr" target="#b14">[15]</ref> where sampling resolution was set to one sample per voxel, resulting in unintentional discontinuity when stretching any part of the volume. The most effective way to overcome this problem is to employ the inverse transformation T <ref type="bibr">−1</ref> F , provided that the first issue can be correctly resolved.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.3">Modeling Cuts</head><p>Modeling cuts and dissections is not trivial when using a mesh or surface representation. A common approach would be to subdivide a surface mesh to account for the new surface information that arises from the breakage. However, most surface models assume a 0-thickness boundary representation with either empty or homogeneous solid interior, which are not suitable for illustrative manipulation. Complex multi-layer shell representations are therefore necessary, which may lead to further computational costs in determining collision between operators and objects. In addition, the manipulation would not be easily reversible, as combining meshes is another non-trivial problem in surface modeling.</p><p>On the other hand, the volume representation does not suffer from the above shortcomings. In volume manipulation, cuts and dissections can be modeled as point-wise mapping and do not involve explicit geometric operations. As mentioned in Section 3.2, the use of inverse transformation T <ref type="bibr">−1</ref> F provides a means for high-quality rendering, but may encounter the problem of undefined transformation in the cut area. Ideally, for any forward transformation, T F from P V to P V , we should always have its corresponding T <ref type="bibr">−1</ref> F , such that, for each point p ∈ P V , there exists p ∈ P V and p = T F (p). However, this condition cannot be easily met, because we actually sample the bounding volume V rather than the unknown point set P V , and V is likely to contain points, for instance, in a cut area, which do not have a pre-image in V .</p><p>Let P V be a collection of all points in V . Since P V is a set of all points located in V with a pre-image in V , the empty space in V is thus defined by a set of points P empty = P V − P V . We thereby replace the T −1 F in Eq.(1) with a modified backward transformation T B as:</p><formula xml:id="formula_1">p = T B (p ) = T −1 F (p ) p ∈ P V ∅ p ∈ P empty<label>(2)</label></formula><p>where ∅ denotes a null position, indicating a point that does not have an origin prior to the manipulation. In general, such points are considered empty, or completely transparent. We thereby assume that, for purposes of rendering, the opacity value associated with ∅ is 0. An example is shown in <ref type="figure" target="#fig_4">Figure 4</ref>, where the forward and backward transformation of a retractor tool is illustrated. Note that for sampling points in the interior of the cut, the inverse transform is defined as an empty value. In feature-aligned manipulation, T B needs to be used in conjunction with Eqs.(3) and (4).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">FEATURE-ALIGNED MANIPULATION</head><p>One requirement for illustrative manipulation is the ability to align cuts with features of interest. Therefore it is necessary to have a means for specifying such region. We introduce a masking function M, which defines the feature-sensitivity of points in the original volume V , and is typically represented by a volume dataset. When M(p) ≥ 0.5, p is part of the feature to be preserved, and cannot be transformed. An example of this is shown in <ref type="figure" target="#fig_3">Figure 3(c)</ref> where the peel is applied to the skin and not to the brains (which is masked as a feature of interest). Let P M be the subset of P V , such that P M = {p|p ∈ P V , M(p) ≥ 0.5}, and V M is an axis-aligned bounding volume of P M . Any point not in P M is operatable. In addition, the backward transformation function of each manipulation, T B , is also accompanied by a bounding volume, V T , such that the manipulation is only performed over those points residing</p><formula xml:id="formula_2">in V T .</formula><p>It is possible that the inversely transformed point, p , does not have a pre-image in P V , or p has been masked as non-operatable by M. To handle the complexity associated with V T and V M , we introduce an initial "probe" p 0 , for each point p ∈ P V as follows:</p><formula xml:id="formula_3">p 0 = T B (p ) p resides inV T p otherwise<label>(3)</label></formula><p>We then obtain p by taking the feature mask into account as: Normal estimation is an essential part of the rendering of graphical objects. Following the same rules as Eq. (4), the normal at a point p is defined as:</p><formula xml:id="formula_4">p =      p 0 p 0 ∈ P V ∧ (M(p ) &lt; 0.5 ∧ M(p 0 ) &lt; 0.5) p p ∈ P V ∧ M(p ) ≥ 0.5 ∅ otherwise<label>(4)</label></formula><formula xml:id="formula_5">∇ T (p ) =      ∇ J (p ) p = T −1 F (p ) ∇(p) p = p 0 p = ∅<label>(5)</label></formula><p>where ∇ T denotes the gradient of the transformed point, ∇(p) denotes the original gradient, ∇ J denotes the gradient at the sampling point p , and 0 is the zero vector. ∇ J can be obtained using finite differences on the deformed object. However, this would involve computing the inverse transformation of the adjacent neighbors of p , and would be computationally expensive for real-time rendering. Instead, ∇ J can be estimated at each point via the inverse transpose of the Jacobian of the transformation, as proposed in <ref type="bibr" target="#b0">[1]</ref>. The normal transformed via this method is then denoted here with a subscript J.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Axis Alignment</head><p>For axis-aligned manipulation, all points residing in V are operatable, which is equivalent to P M = {}. Eq. (4) is thus simplified to:</p><formula xml:id="formula_6">p = p 0 p 0 ∈ P V ∅ otherwise<label>(6)</label></formula><p>The normal estimation is also simplified for this case, which reduces to computing ∇ J in most cases. The only challenge here is the computation of the normal in the presence of cuts. Rather than deriving a complex formula for adjusting the Jacobian in the proximity to cuts, we compute the Jacobian on a continuous version of the transformation, where "holes" are filled with valid points. We then estimate a more accurate normal by adjusting the gradient in the vicinity of cuts, by blending from the transformed normal ∇ T , to the "expected" normal from the surface of the cut, which we denote as ∇ α . The blending function can then be defined as:</p><formula xml:id="formula_7">∇ * T (p ) = (1 − ω) ∇ T (p ) + ω∇ α (p )<label>(7)</label></formula><p>where ω ∈ [0, 1] is a weighting function that decreases with the distance to the discontinuity, i.e., for a point in the boundary, ω = 1, and for a point at a pre-defined distance D from the boundary, ω = 0. This parameter ω controls the gradient smoothness of the cut surface, and it is similar to the "impregnation" region described by Weiskopf et al. in <ref type="bibr" target="#b22">[23]</ref> for performing volumetric clipping. The blending mechanism is depicted in <ref type="figure" target="#fig_6">Figure 5</ref>(a).</p><p>Standard manipulation operators can be placed anywhere within the volume by allowing T B and its bounding volume V T to align with an arbitrary axis plane. The general mechanism for performing such alignment is to transform the coordinate frame of the operator before applying it to a volume. As an inverse warping problem, this is equivalent to applying the inverse coordinate transformation to the sampled points p , that is, referring to Eq. (2) we have:</p><formula xml:id="formula_8">p = A × T B (A −1 × p )<label>(8)</label></formula><p>where A is a 4 × 4 affine matrix, which is constant for all the points in the sampled volume. Normals can be obtained by concatenating the Jacobians of the affine transformations with the Jacobian of the manipulation operator, which only requires a multiplication by two constant matrices. Manipulating operators is supported by this mechanism for arbitrary axis alignment.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Surface Alignment</head><p>As stated previously, for certain manipulations axis alignment is not sufficient. Peeling is one such manipulation, since generally the peeling operation is applied to a specific surface layer of an object. In this case, feature-based alignment is desired. If features are not segmented or preassigned, an approximation can be obtained by defining a mask based on distance from the surface. This can be done with the distance field of the volume, after a background segmentation. Let us define DT as the distance field stored as a volume. Then, the mask M can be defined such that M(p) ≥ 0.5 for DT (p) ≥ τ, and M(p) &lt; 0.5, for DT (p) &lt; τ. Here τ &gt; 0 is a parameter that specifies the desired distance from surface. For instance, τ can be thought of as the "depth" of the peeled surface, which is to be transformed in order to reveal the feature underneath.</p><p>Estimation of the normals requires special handling of the boundary around the cut surface defined by DT (p) = τ. For a feature point (i.e., M(p) ≥ 0.5) the gradient of the distance field ∇ DT , points outwards from the interior to the surface. However, for a non-feature point on the boundary (i.e., M(p) &lt; 0.5), the gradient ∇ DT points incorrectly from the surface to the interior. We solve this by using a signed weighting function β . We thus have:</p><formula xml:id="formula_9">∇ * T (p ) = (1 − |β |)∇ T (p ) + β ∇ DT (p ) β =      τ−DT (p) δ − 1 τ − δ &lt; DT (p) &lt; τ τ−DT (p) δ + 1 τ ≤ DT (p) &lt; τ + δ 0 otherwise (9)</formula><p>β is used to gradually blend the normal of the distance field with the transformed normal. Note that it is asymmetric with respect to τ. That is, for a point with DT in the interval [τ, τ + δ ), β ranges from 1 down to 0, but for a point with DT in the interval (τ − δ , τ), β takes values from 0 down to −1. This negative weighting blends the transformed normal ∇ T and the normal between the normal of the distance field in the opposite direction. This results in correct normals at both sides of the break. This is illustrated in <ref type="figure" target="#fig_6">Figure 5(b)</ref>, and an example of surfacealigned peeling is shown in 3(b).</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Segment Alignment</head><p>Segment alignment is obtained by defining M(p) based on a volume feature, that typically is determined through segmentation. It can be seen quite easily that the above technique for surface alignment can be extended to handle an arbitrary volumetric mask by replacing DT (p) directly with M(p). Normal adjustment is handled as follows:</p><p>First, we assume that the gradient of the original volume is computed with the aid of the segmentation information, stored as a volume texture. This correctly estimates the surface gradient of the features of interest. Further, for the boundary between two features, the normals on either side point to the opposite direction of those of the other side. This leads to a problem in texture-based volume rendering, since trilinear interpolation of these opposite normals would yield an incorrect zero gradient. To overcome this problem, we estimate the gradients for segmented data so that they always point outwards from the feature of interest on both sides of the boundary. When computing the gradient volume texture using finite differences, we consider the values of the neighbors of a voxel as 0, if they correspond to a different segment or an empty voxel, or as 1 if they correspond to the segment of interest.</p><p>Finally, we invert the normals in the non-feature side of the cut following the blending mechanism in Section 4.2. To define a thick area where this blending can be possible, we assume that the mask M(p) defines a smooth scalar field. The region where we need to invert the directions of the normals is defined by the isosurfaces M(p) = 0.5 and M(p) = 0, as shown in <ref type="figure" target="#fig_6">Figure 5</ref>(c). This results in the following equation: Previous approaches for achieving the same results of segment alignment often use pre-segmented datasets and two-pass rendering, where the segment of interest to be preserved is rendered first, and then the non-feature part of the volume is manipulated and rendered afterwards. However, this approach results in aliased boundaries, because of presegmentation, and in incorrect post-classification of boundary voxels. <ref type="figure" target="#fig_7">Figure 6</ref> compares our method with this alternative. Note that on the left, segment alignment properly classifies the bone voxels, while the two-pass rendering (middle) gives a tint similar to the color of the skin. On the right, the two insets highlight the different levels of aliasing on the bone segment. Although these problems can be addressed with pre-smoothing and pre-processing of colormaps, our approach works on a single pass and requires no pre-processing of the dataset or the colormap.</p><formula xml:id="formula_10">∇ * T (p ) = (1 − 2γ)∇ T (p ) γ = 2M(p) 0 &lt; M(p) &lt; 0.5 0 otherwise (10)</formula></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">GPU IMPLEMENTATION</head><p>For real-time manipulation, a GPU implementation has been developed. It is based on texture-based view-aligned slice volume rendering <ref type="bibr" target="#b23">[24]</ref>. We assume that the original volumetric object is stored as a 3D texture. In traditional volume rendering, the view-aligned slices are used to sample the 3D texture at regular intervals. In our approach, we sample the deformed space, i.e., we will be performing inverse mapping. The feature mask M is also stored as a 3D texture. There are a number of ways of defining the transformation T B of an operator: explicitly in the fragment shader, which is usually computationally expensive, or sampled in a volumetric domain and stored in a 3D texture. The latter involves the pre-computation of the transformation a priori, and storage on a texture of the result of the operation, as described in <ref type="bibr" target="#b1">[2]</ref> or a 3D displacement, as described in <ref type="bibr" target="#b5">[6]</ref>. We chose 3D displacements because of its flexibility and generality. The union of all the operators and the original volume creates V . This is then sliced along the view direction. As each slice is rendered, a fragment is generated for each pixel in the image. Thus, each fragment generated by rendering a single slice corresponds to a point in the deformed volume. First, the corresponding point in the undeformed volume is found by evaluating Eq. (4). Then, the original volume is sampled to find the voxel density values. In Eq. (4), voxel positions defined as ∅ should not contribute to compositing, so they are defined as having opacity zero. To obtain the correct color attributes, the normals must be determined, by evaluating Eq. <ref type="bibr" target="#b4">(5)</ref>. The normal of each fragment requires at most three gradient texture samples: the normal obtained from the transformation (∇ T ), as discussed in Section 4.1, the normal of the cut (∇ α ), and the normal of the feature mask, depending on the alignment. These are blended together as shown in Eqs. <ref type="formula" target="#formula_7">7</ref>, <ref type="bibr" target="#b8">(9)</ref> and <ref type="bibr" target="#b9">(10)</ref>. The gradients can also be stored as textures to speed up computation.</p><p>The GPU memory requirements for this process are predominantly determined by the resolution needed to store the volumetric dataset (e.g., the head dataset requires 256 3 bytes and its gradient requires 3 × 256 3 bytes). An additional requirement is imposed by the pre-computation of the manipulation operators. However, these are in general very small compared to the 3D volume data. When resources are scarce, normals can be computed on the fly using finite differences, not only for the original dataset, but also for the alignment mask and the operator itself.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Multiple Manipulations</head><p>We have considered the case of a single manipulation applied to a volumetric model. However, as seen in <ref type="figure" target="#fig_0">Figure 1(c)</ref>, it is possible to apply several operators simultaneously to a single dataset. We consider here two distinct cases for introducing multiple manipulations.</p><p>In the first case, each operator represents an independent manipulation on the dataset, and the result of one does not affect the other. We treat each operator as its own proxy geometry, and the original dataset as a "background" proxy geometry. When rendering the scene, the bounding box for each operator is sampled independently with the appropriate manipulation parameters. Finally, the scene is composed with the slices resulting from all the intervening operators. However, overlapping with the background volume may occur. A stencil is used to mask out the operator regions so they are not rendered twice. An example is shown in <ref type="figure" target="#fig_0">Figure 1</ref>(c).</p><p>When manipulations overlap, this case is more complicated, since it requires us to define an algebraic operation for the combination of two operators. There are a number of ways to deal with this situation. For example, if the dataset is segmented, each "segment" (i.e., skin vs. organs) is sliced independently, and the resulting slices are composited into a single image. This can be seen in <ref type="figure" target="#fig_0">Figure 10(d)</ref> where the retractor operator is used to open the skin of the frog, while a plier operator is used to poke and pull the internal organs. Another way is to save the intermediate volume into a new dataset and used the saved volume to apply other operations. These approaches are under investigation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">APPLICATIONS</head><p>One of the applications of feature-aligned volume manipulation is medical and biological illustrations. In <ref type="figure" target="#fig_0">Figure 1(b)</ref>, an illustration from hand surgery is shown. <ref type="figure" target="#fig_0">Figure 1</ref>(a) demonstrates a retraction operator on a CT hand mimicking the same type of cut. <ref type="figure" target="#fig_0">Figure 1(d)</ref> is an image from the illustration of human anatomy by Antonio Scrantoni and Paolo Mascagni, dated 1833 (NLM). Interestingly, this image is very similar to contemporary exhibitions such as BodyWorlds <ref type="bibr" target="#b21">[22]</ref> and Bodies, The Exhibition <ref type="bibr" target="#b8">[9]</ref> which portray dissections of actual bodies. <ref type="figure" target="#fig_0">Figure 1(c)</ref> shows a similar type of operation applied to the Visible Man dataset. The dataset was first posed using <ref type="bibr" target="#b9">[10]</ref> to position the arm upright. Five peel operators were then applied to both arms. <ref type="figure" target="#fig_8">Figure 7</ref> shows a volume manipulation similar to illustrations of forefoot surgery using the retractor operator. <ref type="figure" target="#fig_8">Figures 7(a)</ref> and (b) show the result of surface-aligned manipulation, for a distance parameter of τ = 0.08 and τ = 0.026, respectively (τ = 0 corresponds to the surface of the dataset). <ref type="figure" target="#fig_8">Figure 7</ref>(c) shows the result of segment-aligned manipulation to obtain a better visualization of the bone tissue. 7(d) shows a close-up view of another cut, where it is possible to see different features by applying different layer levels. In the upper image, only bones are visible, whereas in the lower portion, we can see the vessels and muscle tissue below the skin. <ref type="figure" target="#fig_9">Figure 8</ref> shows the dilation operator applied to a colon dataset. This is an affine alignment along a portion of the colon. The bounding box of the operator, is shown, so too part of the bounding box of the original volume V . <ref type="figure">Figure 9</ref>(a) shows a retraction around the torso which moves tissue and reveals internal organs. In <ref type="figure">Figure 9</ref>(b) the plier operator pushes an occluding artery to reveal the spine. <ref type="figure" target="#fig_0">Figure 10</ref> shows an application of feature-aligned manipulation, where a retractor operator is applied to the segmented frog dataset. In order to do this, we define the manipulation mask as the skin and muscles, so the internal organs remain untransformed.  The last image shows a plier operator deforming one of the organs inside the frog. <ref type="figure" target="#fig_0">Figure 11</ref> shows an illustration of the peeling of the stag beetle dataset, where a surface aligned peeling is used to remove only the outer layers. <ref type="figure" target="#fig_0">Figure 12</ref> shows a peeled orange. The peel is defined using surface alignment.</p><p>In addition to illustration-like effects, the manipulation operators also improve on clipping and slicing and generate focus+context visualizations. Now slices can be arbitrary geometries, and there is a fo-cus+context mechanism (peeling) for keeping the sliced portion in view. In <ref type="figure" target="#fig_3">Figure 3</ref>(c) one gets to see the underside of the peel or skin. Other examples can be seen on the accompanying video, and online at: http://www.caip.rutgers.edu/˜cdcorrea/feature.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">PERFORMANCE EVALUATION</head><p>Since we follow a slicing approach to render our scenes, rendering performance is mainly influenced by the fragment shader capabilities of the graphics board. The rendering speed is affected by a number of factors, including: sampling distance of the slices, resolution of the object, viewport size, and the number and the relative size of the operators with respect to the volume. We implemented the manipulation operators within an interactive program which allows the user to rotate and scale the object, to move or change the operator, and to change the color map or lighting parameters.</p><p>Our test configuration consists of a Pentium XEON 2.8 Ghz PC with 4096 MB RAM, equipped with a Quadro FX 4400 (512MB). We tested our approach on a number of datasets, ranging in size from 128 3 to 256 3 , in a 512 × 512 viewport. <ref type="table" target="#tab_2">Table 1</ref> shows the results obtained with our test datasets for the different alignment cases and a slicing distance of 1.0. For higher quality rendering, a distance of d = 0.5 can be used. In this case, the rendering rate was found to be exactly one half of the rate with d = 1.0.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">CONCLUSIONS</head><p>We presented a general mechanism for interactive manipulation of volumetric models, which enables the creation of illustrative visualization with complex deformation involving cuts, dissections and other forms of manipulations. We described a new approach that allows the manipulation operators to be aligned to the features of interest. With both surface and segment-based features, more complex manipulation effects can be realized, representing a further generalization of the traditional axis-oriented volume manipulation technique. We presented several mechanisms for estimating accurately the normals in the deformed volume space and described a feature-sensitive mechanism for adjusting normals in the vicinity of cuts. We provided a GPU-based implementation that renders illustrative manipulation in real time with a quality that is comparable with that obtained using the non-interactive raycasting method. Future research involves efficiently implementing overlapping manipulations, investigating user interface and usability issues, using these techniques for virtual reality applications, and the inclusion of other operators. Through a number of examples, inspired by medical and biological illustrations, we have shown that this technique provides the necessary interactivity and operatability in the process of creating various manipulation effects in illustrative visualization.    </p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 :</head><label>1</label><figDesc>Feature-aligned volume manipulation (a) A feature-aligned retraction applied to a human hand data set, showing bones (left) and vessels (right) (b) Surgical illustration of a hand (Copyright c 2006 Nucleus Medical Art. All rights reserved. www.nucleusinc.com) (c) Multiple peel and cutting away operators applied to the visible human data set (d) Illustration of human anatomy with dissected "flaps", by Antonio Scrantoni and Paolo Mascagni, 1833 (U.S. National Library of Medicine)</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 :</head><label>2</label><figDesc>Iconic representations of four manipulation operators, and example medical illustrations showing similar metaphors. Drawings courtesy of the U.S. National Library of Medicine. Dilator illustration is copyright c medmovie.com.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head></head><label></label><figDesc>Figures 3(b) and 3(c).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 3 :</head><label>3</label><figDesc>(a) Axis Alignment (b) Surface Alignment (c) Segment Alignment An example of different types of alignment. (a) Axis aligned peel. Note how the peeled layer is thick and flat, since it is aligned with an orthogonal axis. (b) Surface aligned peel, aligned with a computed distance field. Notice how it approximates a surface. (c) Segment aligned peel, based on segmentation, which is more accurate. Note that in the feature based alignment (b) and (c) the peel is thin and rounded.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>FFig. 4 :</head><label>4</label><figDesc>Forward (left) and backward (middle) transformation of a retractor tool, modeled as a displacement in the direction of the retraction. For the backward transformation, points in the cuts are transformed to the empty value ∅. Right: feature-aligned transformation. The extra test cases for backward mapping are shown.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head></head><label></label><figDesc>These three cases are shown in Figure 4 right, namely: (Case 1): the point is transformed, (Case 2): the point is masked and therefore untransformed, and (Case 3): the point is empty due to the featurealigned cut.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 5 :</head><label>5</label><figDesc>Normal blending for the different alignments in the boundaries of cuts. Green arrows indicate the estimated normal from the Jacobian, red arrows are the normal orthogonal to the surface of the cut (propagated along the blending region), and the blue arrows indicate the corrected normal after blending.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 6 :</head><label>6</label><figDesc>Segment alignment (left) vs. Two-pass rendering on two presegmented datasets (middle). Note how the bone segment is properly classified on the left. The insets on the right highlight the aliasing effect of the two-pass rendering (bottom), while there is no noticeable aliasing with the segment alignment (top).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 7 :</head><label>7</label><figDesc>Retractor operator applied to a CT foot dataset. (a-b) Surface alignment with two different layer depths, one revealing bone, and the other reveals superficial veins. (c) Segment alignment showing bone tissue. (d) Zoomed-in surface aligned cut.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 8 :</head><label>8</label><figDesc>Dilation operator applied to a colon dataset. (a) Without dilation (b) With dilation. Bounding area of dilation is shown. Dilation works as a type of volumetric lens.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 9 :Fig. 10 :</head><label>910</label><figDesc>Manipulation operators used to improve visibility on a CT dataset. The spreader (a type of retractor) moves tissue and reveals internal organs. (b) The pliers push an occluding artery to reveal the spine. This works as a focus+context visualization. (a-c) Retractor operator used to simulate dissection of a segmented frog dataset. (d) A plier operator is applied to the internal organs, while simultaneously retracting the skin. Geometric models are embedded in the scene to show the placement of the operators.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_11"><head>Fig. 11 :Fig. 12 :</head><label>1112</label><figDesc>Surface-aligned peeling of the stag beetle dataset. Note how the internal features can be seen by lifting the wing shells. Surface-aligned peeling of an orange. The internal structure of the orange is clearly visible without the need of segmentation.Different placement of the operator shows two stages of an orange peel</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 1 :</head><label>1</label><figDesc>Performance results for different volume datasets, with d = 1.0 for the distance between view aligned slices of the volume</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGEMENTS</head><p>Volumetric datasets are courtesy of Lawrence Berkeley Laboratory, UNC Chapel Hill, University of Iowa, U.S. National Library of Medicine, Viatronix Inc. and Viena University of Technology. We want to thank Dr. Stanley Trooksin, Dr. Sid Roychowdhury and Dr. Marsha Jessup for valuable input on surgical and medical illustration. The illustrations in the paper are courtesy of medmovie.com and Nucleus Medical Art, Inc.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Ray tracing deformed surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Barr</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics (Proc. SIG-GRAPH</title>
+		<imprint>
+			<biblScope unit="volume">86</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="287" to="296" />
+			<date type="published" when="1986" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Integrating dynamic deformations into interactive volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Brunet</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Nowak</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Gleicher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics /IEEE VGTC Symposium on Visualization</title>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="219" to="226" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Ray casting free-form deformedvolume objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Hesser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Männer</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">J. of Vis. and Computer Animation</title>
+		<imprint>
+			<biblScope unit="volume">14</biblScope>
+			<biblScope unit="issue">2</biblScope>
+			<biblScope unit="page" from="61" to="72" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Deforming and animating discretely sampled object representations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Correa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Islam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">W</forename><surname>Jones</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P.-Y</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Silver</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">J</forename><surname>Walton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">J</forename><surname>Willis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics State of the Art Report</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Spatial transfer functions: a unified approach to specifying deformation in volume modeling and animation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Silver</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">S</forename><surname>Winter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Singh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Cornea</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Volume Graphics &apos;03</title>
+		<meeting>Volume Graphics &apos;03</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="35" to="44" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Discontinuous displacement mapping for volume graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Correa</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Silver</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Volume Graphics &apos;06</title>
+		<meeting>Volume Graphics &apos;06</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Interactive cutaway illustrations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Diepstraten</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Comput. Graph. Forum</title>
+		<imprint>
+			<biblScope unit="volume">22</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="523" to="532" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Volume illustration: non-photorealistic rendering of volume models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Ebert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Rheingans</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="195" to="202" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><forename type="middle">T</forename><surname>Exhibition</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Animating volumetric models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Gagvani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Silver</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Graphical Models</title>
+		<imprint>
+			<biblScope unit="volume">63</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="443" to="458" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">A survey of deformable modeling in computer graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Gibson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Mirtich</forename></persName>
+		</author>
+		<idno>TR97-19</idno>
+	</analytic>
+	<monogr>
+		<title level="j">MERL Technical Report</title>
+		<imprint>
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical Report</note>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Volume splitting and its applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Islam</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Silver</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Transactions on Visualization and Computer Graphics</title>
+		<imprint/>
+	</monogr>
+	<note>To appear</note>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Interactive space deformation with hardwareassisted rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Kurzion</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Yagel</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Comput. Graph. Appl</title>
+		<imprint>
+			<biblScope unit="volume">17</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="66" to="77" />
+			<date type="published" when="1997" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">A magnification lens for interactive volume visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">C</forename><surname>Lamar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Hamann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">I</forename><surname>Joy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">In Pacific Graphics</title>
+		<imprint>
+			<biblScope unit="page" from="223" to="232" />
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Using deformations for browsing volumetric data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">J</forename><surname>Mcguffin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Tancau</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Balakrishnan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">IEEE Visualization</title>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="401" to="408" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Physically based deformable models in computer graphics</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Nealen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Muller</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Keiser</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Boxerman</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Carlson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Eurographics STAR Report</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Efficient bump mapping hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Peercy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Airy</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Cabral</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics, Proc. SIGGRAPH &apos;97</title>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="page" from="303" to="307" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Interactive volume rendering on standard PC graphics hardware using multi-textures and multi-state rasterization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Rezk-Salama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Bauer</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Greiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIGGRAPH/Eurographics Workshop on Graphics Hardware</title>
+		<meeting>SIGGRAPH/Eurographics Workshop on Graphics Hardware</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="109" to="118" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Fast volumetric deformation on general purpose hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Rezk-Salama</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Scheuering</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Soza</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><surname>Greiner</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. SIG-GRAPH/Eurographics Graphics Hardware Workshop</title>
+		<meeting>SIG-GRAPH/Eurographics Graphics Hardware Workshop</meeting>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="17" to="24" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Real time volume manipulation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Singh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Cornea</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Volume Graphics</title>
+		<meeting>Volume Graphics</meeting>
+		<imprint>
+			<date type="published" when="2003" />
+			<biblScope unit="page" from="45" to="51" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">A simple and flexible volume rendering framework for graphics-hardware-based ray casting</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Stegmaier</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Strengert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Klein</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. Volume Graphics</title>
+		<meeting>Volume Graphics</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="187" to="195" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<monogr>
+		<title level="m">G. von Hagens&apos; Bodyworlds</title>
+		<imprint>
+			<date type="published" when="2005" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Interactive clipping techniques for texture-based volume visualization and volume shading</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Weiskopf</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Engel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comput. Graph</title>
+		<imprint>
+			<biblScope unit="volume">9</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="298" to="312" />
+			<date type="published" when="2003" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Efficiently using graphics hardware in volume rendering applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Ertl</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics (Proc. SIGGRAPH 98)</title>
+		<imprint>
+			<date type="published" when="1998" />
+			<biblScope unit="page" from="279" to="296" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<analytic>
+		<title level="a" type="main">Real-time volume deformations</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Westermann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Salama</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics Forum</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

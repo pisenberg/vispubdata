@@ -1,0 +1,611 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">View Dependent Isosurface Extraction</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarden</forename><surname>Livnat</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">University of Utah</orgName>
+							</affiliation>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Charles</forename><surname>Hansen</surname></persName>
+							<affiliation key="aff0">
+								<orgName type="institution">University of Utah</orgName>
+							</affiliation>
+						</author>
+						<title level="a" type="main">View Dependent Isosurface Extraction</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-19T20:38+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<abstract>
+				<p>We propose a new approach to polygonal isosurface extraction that is based on extracting only the visible portion of the isosurface. The visibility tests are done in two phases. First, coarse visibility tests are performed in software to determine the visible cells. These tests are based on hierarchical tiles and shear-warp factorization. The second phase resolves the visible portions of the extracted triangles and is accomplished by the graphics hardware. While the latest isosurface extraction methods have effectively eliminated the search phase bottleneck, the cost of constructing and rendering the isosurface remains high. Many of today&apos;s large datasets contain very large and complex isosurfaces that can easily overwhelm even state-of-the-art graphics hardware. The proposed approach is output sensitive and is thus well suited for remote visualization applications where the extraction and rendering phases are done on a separate machines.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">Introduction</head><p>The marching cubes <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b22">23]</ref> method demonstrated that isosurface extraction can be reduced to solving a local triangulation problem through a table lookup. To achieve this, the marching cubes method visits each and every cell of the data. More sophisticated searching strategies visit practically only the cells that contain the isosurface <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b0">1]</ref>.</p><p>Originally the bottleneck in isosurface extraction was locating the cells that contain the isosurface. Today's large datasets pose new challenges. Datasets of several gigabytes are found in medicine as well as the geo-sciences. The size of isosurfaces extracted from these datasets can reach several million polygons, many of which are less than one pixel in size. Two problems emerge due to the vast number of polygons. First, due to the shear number of cells containing an isosurface, the computation of all the local triangulations can be very time consuming. Second, the huge number of polygons can easily overwhelm even the most powerful graphics accelerators, leading to poor interaction. This problem is compounded when a desktop machine is used to render the isosurface while a remote server, with potentially more memory, is used to extract the isosurface. This can occur over either a LAN or a WAN.</p><p>One current approach to the large number of polygons problem is to apply mesh reduction techniques <ref type="bibr" target="#b17">[18,</ref><ref type="bibr" target="#b13">14]</ref> to the isosurface either as a post process to the extraction phase or during the extracting phase itself <ref type="bibr" target="#b16">[17]</ref>. However, mesh reduction is expensive and requires extracting the entire isosurface for examination. Furthermore, a change in the isovalue requires the full extraction of a new isosurface and the reapplication of the mesh reduction step.</p><p>A different approach is to employ ray-tracing techniques that do not need to create an intermediate polygonal representation. Raytracing, nevertheless, does not take advantage of graphics hardware and requires a large number of CPUs for interactivity <ref type="bibr" target="#b15">[16]</ref>.</p><p>In this paper we present a novel view dependent isosurface extraction approach, as illustrated in <ref type="figure" target="#fig_0">Figure 1</ref>, which further reduces the search, construction and display by only visiting the cells that contain the visible portion of the isosurface from a given view point. Our approach is based on a hierarchical front-to-back traversal of   <ref type="figure" target="#fig_0">Figure 1</ref>. Note the large internal structures that are part of the full isosurface but are not part of the view-dependent isosurface the dataset with dynamic pruning of sections that are hidden from the view point by previously extracted sections of the isosurface. <ref type="figure" target="#fig_1">Figure 2</ref> shows the potential saving of such an approach. Note the large section of the isosurface, which represents the internal organs in the head, yet is not part of the view-dependent isosurface.</p><p>This work explores the middle ground between mostly hardware based (e.g. marching cubes + Z-buffer) and purely software (e.g. ray-tracing) algorithm for isosurface extraction. Our goal is to reduce the load on the network and/or graphics hardware by performing some of the visibility tests in software. This approach leads to an output sensitive method that can reduce the load of other components in the visualization pipeline such as transmission of the isosurface geometry over a network.</p><p>In the next section we review previous approaches to isosurface extraction. In Section 3 we present our algorithm, drawing on recent innovations in the area of visibility algorithms. Sections 4-5 detail these algorithms as well as our modifications. Results are presented in Section 6. We conclude and discuss future directions in Section 7.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">Related Work</head><p>Marching cubes <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b22">23]</ref> is perhaps the most widely known 3D isosurface extraction algorithm. The novelty of this approach was the reduction of the global extraction problem to a large set of local triangulation (one per data cell) based on a lookup table. Since the introduction of the marching cubes method, much work <ref type="bibr" target="#b11">[12,</ref><ref type="bibr" target="#b12">13]</ref> was dedicated to the ambiguities introduced by the lookup table and other methods of representing the isosurface inside a single cell.</p><p>Another issue that has received attention was the localization of the cells that actually contained the isosurface. Wilhelms and Van Gelder <ref type="bibr" target="#b20">[21,</ref><ref type="bibr" target="#b21">22]</ref> were the first to point out the large amount of time that was spent analyzing empty cells. To alleviate this problem, they introduced an octree based hierarchy over the dataset and tagged each node (a meta-cell) in the tree with the minimum and maximum values of the data in their subtree. Given an isovalue, one can then descend the hierarchy, pruning empty subtrees based on this minmax scheme.  In recent years, many other methods for accelerating the search phase were proposed <ref type="bibr" target="#b2">[3,</ref><ref type="bibr" target="#b3">4,</ref><ref type="bibr" target="#b5">6,</ref><ref type="bibr" target="#b6">7,</ref><ref type="bibr" target="#b14">15,</ref><ref type="bibr" target="#b19">20,</ref><ref type="bibr" target="#b18">19]</ref> all of which have a complexity of On, where n is the size of the dataset. In 1996, we introduced the span space <ref type="bibr" target="#b9">[10]</ref> as a mean for mapping the search onto a two-dimension space. Using the span space, we proposed a near optimal isosurface extraction (NOISE) algorithm that has a time complexity of O p n + k, where k is the size of the isosurface. Cignoni et. al <ref type="bibr" target="#b0">[1]</ref> employed another decomposition of the span space leading to an optimal search method with a time complexity of Olog n + k. <ref type="figure" target="#fig_2">Figure 3</ref> depicts a relative (not to scale) comparison between these methods with respect to the search, construction and display phases.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">The Algorithm</head><p>The proposed method is based on the observation that isosurfaces extracted from very large datasets tend to exhibit high depth complexity for to two reasons. First, since the datasets are very large, the projection of individual cells tend to be sub-pixel. This leads to a large number of polygons, possibly non-overlapping, projecting onto individual pixels. Secondly, for some datasets, large sections of an isosurface are internal and thus, are occluded by other sections of the isosurface, as illustrated in <ref type="figure" target="#fig_1">Figure 2</ref>. These internal sections, common in medical datasets, can not be seen from any direction unless the external isosurface is peeled away or cut off. Therefore, if one can extract just the visible portions of the isosurface, the number of rendered polygons will be reduced resulting in a faster algorithm. <ref type="figure">Figure 4</ref> depicts a two dimensional scenario. In a view dependent methods only the solid lines are extracted whereas in non view dependent isocontouring both solid and dotted are extracted.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Visible Isoline</head><p>Non−Visible Isoline Screen <ref type="figure">Figure 4</ref>: A two dimensional scenario.  The proposed algorithm, which is based on a hierarchical traversal of the data and a marching cubes triangulation, exploit coherency in the object, value, and image spaces, as well as balancing the work between the hardware and the software. We employ a three step approach depicted in <ref type="figure" target="#fig_4">Figure 5</ref>. First, we augment Wilhelms' and Van Gelder's algorithm by traversing down the octree in a front-to-back order in addition to pruning empty sub-trees based on the min-max values stored at the octree nodes. The second step employs coarse software visibility tests for each [meta-] cell which intersect the isosurface. The aim of these tests is to determine whether the [meta-] cell is hidden from the view point by previously extracted sections of the isosurface (thus the requirement for a front-to-back traversal). Finally, the triangulation of the visible cells are forwarded to the graphics accelerator for rendering by the hardware. It is at this stage that the final and exact [partial-] visibility of the triangles is resolved. A dataflow diagram is depicted in <ref type="figure" target="#fig_5">Figure 6</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Visibility</head><p>Quickly determining whether a meta-cell is hidden and thus can be pruned, is fundamental to this algorithm. This is implemented by creating a virtual screen with one bit per pixel. We then project the triangles, as they are extracted, on to this screen and set those bits which are covered, providing an occlusion mask. We note that it is important to quickly and efficiently classify a cell as visible. A hidden cell, and all of its children, will not be traversed further and thus can justify the time and effort invested in the classification. A visible cell, on the other hand, does not gain any benefit from this test and the cost of the visibility test is added to the total cost of extracting the isosurface. As such, the cell visibility test should not depend heavily on the projected screen area otherwise the cost would prohibit the use of the test for metacells at high levels of the octree -exactly those meta-cells that can potentially save the most.</p><p>Two components influence the visibility cost, namely the cost of projecting a point, triangle, or a meta-cell on to the screen and the cost of either scan-converting triangles or determining if a meta-cell projected area contains any unset pixels.</p><p>In the next sections, we address these costs in two ways. First, we employ a hierarchical tiling for the virtual screen. Secondly, to reduce the cost of the projection we use a variation of the shearwarp factorization.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">Image Space Culling</head><p>We employ hierarchical tiles <ref type="bibr" target="#b4">[5]</ref> as a mean for fast classification of meta-cells and determining the coverage of extracted triangles. The hierarchical nature of the algorithm ensures that the cost of either of these two operations will not depend highly on their projected area.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Hierarchical Tiles</head><p>Hierarchical tiles provide a mechanism for accelerating software based rendering. The idea is to project one polygon at a time in a front-to-back order and render only those pixels that contribute to the final image. The front-to-back order ensures that each pixel is rendered only once.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>In Out Covered</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Partially covered</head><p>Not covered Edge <ref type="figure">Figure 7</ref>: An Edge Tile.</p><p>A coverage map (a tile) is a rectangle bitmap (we use 8x8) in which each bit represents a pixel in the final image. The algorithms is based on the premise that all the possible coverage of a single edge crossing a tile can be precomputed and tabulated based on the points where the edge intersect the tile boarder, <ref type="figure">Figure 7</ref>. The coverage pattern of a convex polygon for a particular tile of the image is computed by combining the coverage maps of the polygon edges. The coverage map of a triangle can thus be computed from three precomputed tiles with no dependency on the number of pixels the triangle actually cover, <ref type="figure" target="#fig_6">Figure 8</ref>. We refer the reader to the work by Greene <ref type="bibr" target="#b4">[5]</ref> for a detailed explanation on how the three states (Covered, Partially-covered and Not-covered) can be represented by two tile masks and the rules for combining coverage maps. Rendering a polygon amounts to computing the coverage map of the polygon for each tile in the image and isolating only those pixels that are covered by the polygon and where already covered, <ref type="figure" target="#fig_7">Figure 9</ref>. In order to accelerate the rendering, the tiles are organized in a hierarchical structure in which each meta-tile represents a block of [meta-] tiles. Under this structure, a polygon is projected onto the top meta-tile and only those sub-tiles in which the polygon might be visible are checked recursively, leading to a logarithmic search.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>= + +</head></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Hierarchical Visibility Mask</head><p>Our implementation differs from the one proposed by Greene in that we do not actually render the visible portion of a projected triangle. Rather, we mark the triangle as visible and forward it to the graphics hardware. It is then left to the graphics accelerator to determine which pieces of the triangle are actually visible and correctly render them.</p><p>One should note that it is not possible to determine a-priori the front-to-back relations between the triangles inside a single cell. It is therefore mandatory to accept all or none of the triangles, even though they need to be projected on the hierarchical tiles one triangle at a time. <ref type="figure" target="#fig_0">Figure 10</ref> shows the classification of the cells as well as the portions of the isolines which are extracted. Note that the entire isoline section in a visible cell (shown in light gray) is extracted. The non-visible portions will be later removed by the graphics accelerator. An additional feature we employ limits recursion down the octree once the size of a meta-cell is approximately the size of a single pixel. Instead, we forward a single point with an associated normal to the graphics hardware, similar to the dividing cubes method <ref type="bibr" target="#b1">[2]</ref>. The normal is estimated by the gradient of the field. The advantage of this method is that the single point potentially represents a large number of polygons since the meta-cell that projects to a pixel may still be high in the octree.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">Warped IsoSurface Extraction (WISE)</head><p>A key component in the visibility test is the projection of a point, a triangle or a meta-cell onto the screen. In general, the perspective projection of a point is a 4x4 transformation followed by two divide operations, for a total of 16 multiplications 12 additions and 2 division per vertex. Clearly, the cost of performing such transformation for each and every vertex of the projected meta-cells and triangles is too high. In addition, the non-linearity of the perspective transformation prohibits the use of pre-computed transformation table.</p><p>To accelerate this critical step, we take advantage of the shear-warp factorization of the viewing transformation.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Shear-Warp Factorization</head><p>In 1994, Lacroute <ref type="bibr" target="#b7">[8,</ref><ref type="bibr" target="#b8">9]</ref> presented a volume rendering method that was based on the shear-warp factorization of the viewing transformation. The underlying idea is to factor the viewing transformation into a shear followed by a warp transformation. The data is first projected into a sheared object space that is used to create an intermediate, albeit warped, image. Once this image is complete a warping transformation is applied to create the correct final image. <ref type="figure" target="#fig_0">Figure 11</ref> illustrates the shear-warp transformation for an orthographic projection. For a perspective projection the slices need also to be scaled as seen in <ref type="figure" target="#fig_0">Figure 12</ref>. The advantage of this method is that the intermediate image is aligned with one of the dataset faces. This alignment enables the use of a parallel projection of the 3D dataset. The warp stage is then applied to a 2D image rather than to each data point. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Shear But No Warp</head><p>We now note that the visibility on the image plane and on the warped projection plane are the same, see <ref type="figure" target="#fig_0">Figure 13</ref>. In other words, any point in the dataset that is visible on the image plane is also visible on the warped projection plane and similarly, points which would be occluded on the image plane are also occluded on the warped plane. It is therefore sufficient to perform the visibility tests on the warped projection plane. The advantage of this approach is two fold. First, the perspective projection is removed. Second, since the shear and scale factors are, with respect to the current view point, constant for each slice we can pre-compute them once for each new view point. <ref type="figure" target="#fig_0">Figure 13</ref>: Warped space. Let X; Y; Z be the coordinate system of the dataset and let s x ; s y ; s z be the scaling vector of the data with respect to this coordinate system. Let us assume, without loss of generality, that the current warped projection plane is Z = 0. We first transform the current eye location onto the X; Y; Z coordinate system and then pre-compute the shear and scale coefficients, foreach Z s = Z s z =Z s z , eye z scale x Z = 1 , s s x scale y Z = 1 , s s y shear x Z = s eye x shear y Z = s eye y</p><p>The projection of any grid point px; y; z can now be computed as,</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Project p</head><p>x = p x scale x p z + shear x p z y = p y scale y p z + shear y p z for a total of two multiplications and two additions per vertex.</p><p>While the Z coordinate of every grid point is known in advance and thus the shear and scale factor can be pre-computed for each new view point, the same does not hold true for the vertices of the isosurface triangles. However, since the projection onto the warped projection plane is orthographic it can be shown that a vertex projection is, for a total of two multiplication, five additions and one division.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">Results</head><p>We tested our method with two datasets. The first is a small dataset (64 3 ) of a CT scanned head where most of the internal structure, e.g. the brain, was removed by hand segmentation. This results in lower depth complexity. The other larger dataset (256 3 ) has a large number of internal structures that normally would be extracted as isosurfaces when one extracts the skin. We ran experiments in two scenarios. In one scenario, the isosurfaces were extracted and rendered on the same high end machine, an SGI Reality Monster (using a single CPU). In the second scenario, we use a lower-end machine (SGI Indigo2 Extreme connected with a 100-BaseT switched Ethernet) for the rendering phase and the Reality Monster for the isosurface extraction.</p><p>The results for the first scenario, <ref type="table" target="#tab_2">Table 1</ref>, shows that for larger and more complex isosurfaces the new method still outperforms extraction of the full isosurface, though the performance falls short when only a change of the view point is considered.</p><p>The results for the second scenario, <ref type="table" target="#tab_3">Table 2</ref>, demonstrate the advantage of this method. Even when the time for the extraction is added to each new view position, the new method out performs a regular full octree traversal and extraction due to the LAN bandwidth limitations.</p><p>It is important to note the large reduction in the size, up to a factor of 15, of the extracted isosurface.  </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="7">Conclusions</head><p>We have developed a new approach to isosurface extraction which relies on extracting only the visible portion of the isosurface. It was demonstrated that the reduction in the isosurface size can be substantial (up to 93%) which makes it attractive for remote visualization. We note that in some cases the algorithm did not perform as well. These are cases in which the depth complexity is not high and the size of the full isosurface is within the capability of the graphics adaptor.</p><p>In the future, we plan on optimizing and parallelizing our code as well as applying it to much larger datasets such as the visible human project and geological seismic survey. We are currently looking at other projection methods to accelerate the software visibility tests. For faster view changes, we intend to employ image based rendering techniques on the user side to enable warping between several distinct view dependent isosurfaces with the same isovalue.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Figure 1 :</head><label>1</label><figDesc>Left: The user view, Right: The same isosurface from a 90 degree angle to the user view, illustrating the incomplete reconstruction.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Figure 2 :</head><label>2</label><figDesc>Extracted isosurface. A cut plane through the full and view-dependent isosurfaces extracted from the same view point as in</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Figure 3 :</head><label>3</label><figDesc>Complexity Comparison.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Figure 5 :</head><label>5</label><figDesc>The three step algorithm.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Figure 6 :</head><label>6</label><figDesc>and front to back Image Space Prune non−visible [meta−] cells Small [meta−] cells −−&gt; Points with Normals Prune non−visible triangles of a visible cell The algorithm data flow. Additional pruning of the octree nodes is accomplished by projecting the meta-cell on to the virtual screen and checking if any part of it is visible, i.e. if any of the pixels it covers are not set. If the entire projection of the meta-cell is not visible, none of its children can be visible.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Figure 8 :</head><label>8</label><figDesc>A triangle tile coverage map.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Figure 9 :</head><label>9</label><figDesc>Application of a triangle coverage map and an image tile coverage map.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Figure 10 :</head><label>10</label><figDesc>Cells and isolines visibility.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Figure 11 :Figure 12 :</head><label>1112</label><figDesc>Shear-warp in orthographic projection. Shear-warp in perspective projection.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head>Ray tracing View dependent MC Noise Octree OptimalRay tracing Data Overhead Time Complexity Memory View dependent Complete isosurface MC Noise Octree View dependent Optimal</head><label></label><figDesc></figDesc><table><row><cell>S.W.</cell></row><row><cell>Display</cell></row><row><cell>H.W.</cell></row><row><cell>Display</cell></row><row><cell>Construct</cell></row><row><cell>Search</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_2"><head>Table 1 :</head><label>1</label><figDesc>Scenario I: Local Visualization</figDesc><table><row><cell>method</cell><cell>view</cell><cell>extr.</cell><cell>polygons</cell><cell>points</cell><cell>rend.</cell></row><row><cell></cell><cell></cell><cell>time</cell><cell></cell><cell></cell><cell>time</cell></row><row><cell cols="2">Small dataset</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Octree</cell><cell>any</cell><cell>0.48</cell><cell>46,222</cell><cell></cell><cell>0.16</cell></row><row><cell>VD</cell><cell>normal</cell><cell>0.79</cell><cell>9036</cell><cell></cell><cell>0.06</cell></row><row><cell>VD</cell><cell>closeup</cell><cell>0.59</cell><cell>7995</cell><cell></cell><cell>0.02</cell></row><row><cell>VD</cell><cell>zoom out</cell><cell>0.60</cell><cell>5938</cell><cell>1,112</cell><cell>0.02</cell></row><row><cell cols="2">Large dataset</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Octree</cell><cell>any</cell><cell>3.86</cell><cell>353,868</cell><cell></cell><cell>1.28</cell></row><row><cell>VD</cell><cell>normal</cell><cell>2.56</cell><cell>22,405</cell><cell></cell><cell>0.04</cell></row><row><cell>VD</cell><cell>closeup</cell><cell>0.85</cell><cell>5,588</cell><cell></cell><cell>0.03</cell></row><row><cell>VD</cell><cell>zoom out</cell><cell>0.99</cell><cell>1,080</cell><cell>7,888</cell><cell>0.02</cell></row></table><note></note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_3"><head>Table 2 :</head><label>2</label><figDesc>Scenario II: Remote Visualization</figDesc><table><row><cell>method</cell><cell>view</cell><cell>extr.</cell><cell>polygons</cell><cell>points</cell><cell>rend.</cell></row><row><cell></cell><cell></cell><cell>time</cell><cell></cell><cell></cell><cell>time</cell></row><row><cell cols="2">Small dataset</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Octree</cell><cell>any</cell><cell>0.42</cell><cell>46,222</cell><cell></cell><cell>1.35</cell></row><row><cell>VD</cell><cell>normal</cell><cell>0.79</cell><cell>9184</cell><cell></cell><cell>0.27</cell></row><row><cell>VD</cell><cell>closeup</cell><cell>0.31</cell><cell></cell><cell>2735</cell><cell>0.05</cell></row><row><cell>VD</cell><cell>zoomout</cell><cell>0.40</cell><cell>2154</cell><cell>2319</cell><cell>0.11</cell></row><row><cell cols="2">Large dataset</cell><cell></cell><cell></cell><cell></cell><cell></cell></row><row><cell>Octree</cell><cell>any</cell><cell>3.57</cell><cell>342,640</cell><cell></cell><cell>10.58</cell></row><row><cell>VD</cell><cell>normal</cell><cell>2.31</cell><cell>20,330</cell><cell></cell><cell>0.60</cell></row><row><cell>VD</cell><cell>closeup</cell><cell>1.14</cell><cell>6,078</cell><cell>5,374</cell><cell>0.30</cell></row><row><cell>VD</cell><cell>zoomout</cell><cell>0.38</cell><cell></cell><cell>7,364</cell><cell>0.12</cell></row></table><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="8">Acknowledgments</head><p>This work was supported in part by the National Science Foundation. Special thanks to Chris R. Johnson for his helpful comments and suggestions. The authors would like to thank the reviewers for their insightful comments. The head dataset was provided by the Los Alamos National Laboratory. Furthermore, we appreciate access to facilities that are part of the NSF STC for Computer Graphics and Scientific Visualization, the C-SAFE DOE ASCI Alliance Center and the DOE Advanced Visualization Technology Center.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<analytic>
+		<title level="a" type="main">Optimal isosurface extraction from irregular volume data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Cignoni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Montani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Puppo</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopigno</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of IEEE 1996 Symposium on Volume Visualization</title>
+		<meeting>IEEE 1996 Symposium on Volume Visualization</meeting>
+		<imprint>
+			<publisher>ACM Press</publisher>
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Two algorithms for the threedimensional reconstruction of tomograms</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Harvey</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">William</forename><forename type="middle">E</forename><surname>Lorenson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Sigwalt</forename><surname>Ludke</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Carl</forename><forename type="middle">R</forename><surname>Crawford</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Bruce</forename><forename type="middle">C</forename><surname>Teeter</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Medical Physics</title>
+		<imprint>
+			<biblScope unit="volume">15</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="320" to="327" />
+			<date type="published" when="1988-05" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Span filter: An optimization scheme for volume visualization of large finite element models</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">S</forename><surname>Gallagher</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;91</title>
+		<meeting>Visualization &apos;91<address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1991" />
+			<biblScope unit="page" from="68" to="75" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Advanced interactive visualization for CFD</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><surname>Giles</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Haimes</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computing Systems in Engineering</title>
+		<imprint>
+			<biblScope unit="volume">1</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="51" to="62" />
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Hierarchical polygon tiling with coverage masks</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Ned</forename><surname>Greene</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics, Annual Conference Series</title>
+		<imprint>
+			<date type="published" when="1996-08" />
+			<biblScope unit="page" from="65" to="74" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<analytic>
+		<title level="a" type="main">Isosurface generation by using extrema graphs</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Itoh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Koyamada</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;94</title>
+		<meeting><address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="77" to="83" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<analytic>
+		<title level="a" type="main">Volume thining for automatic isosurface propagation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><surname>Itoh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Yamaguchi</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Koyyamada</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;96</title>
+		<meeting><address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="303" to="310" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Fast volume rendeing using a shear-warp factorization of the viewing transformation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philippe</forename><surname>Lacroute</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Marc</forename><surname>Levoy</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH 94, Annual Conference Series</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="451" to="458" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Fast volume rendering using shear-warp factorization of the viewing transformation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Philippe</forename><forename type="middle">G</forename><surname>Lacroute</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1995-09" />
+			<pubPlace>Stanford university</pubPlace>
+		</imprint>
+	</monogr>
+	<note type="report_type">Technical report</note>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">A near optimal isosurface extraction algorithm using the span space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Trans. Vis. Comp. Graphics</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="73" to="84" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Marching cubes: A high resolution 3D surface construction algorithm</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">E</forename><surname>Lorensen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">E</forename><surname>Cline</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">21</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="163" to="169" />
+			<date type="published" when="1987-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Approximation of isosurface in the marching cubes: Ambiguity problem</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">V</forename><surname>Sergey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Matveyev</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;94</title>
+		<imprint>
+			<date type="published" when="1994-10" />
+			<biblScope unit="page" from="288" to="292" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Discretized marching cubes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Montani</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scateni</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Scopingo</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;94</title>
+		<meeting><address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1994-10" />
+			<biblScope unit="page" from="281" to="287" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">A type-merging algorithm for extracting an isosurface from volumetric data</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Kyu Ho</forename><surname>Kwang-Man Oh</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Park</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Visual Computer</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="page" from="406" to="419" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<analytic>
+		<title level="a" type="main">Case study: Mantle convection visualization on the cray T3D</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><forename type="middle">S</forename><surname>Painter</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Bunge</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Livnat</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;96</title>
+		<meeting><address><addrLine>Los Alamitos, CA</addrLine></address></meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="409" to="412" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Interactive ray tracing for isosurface rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Steven</forename><surname>Parker</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter</forename><surname>Shirley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Yarden</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Chuck</forename><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Peter-Pike</forename><surname>Sloan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Visualization &apos;98</title>
+		<imprint>
+			<date type="published" when="1998" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">skeleton climbing&apos;:fast isosurfaces with fewer triangles</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tim</forename><surname>Poston</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><forename type="middle">T</forename><surname>Nguyen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Pheng-Ann</forename><surname>Heng</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Tien-Tsin</forename><surname>Wong</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Pacific Graphics&apos;97</title>
+		<meeting><address><addrLine>Seoul, Korea</addrLine></address></meeting>
+		<imprint>
+			<date type="published" when="1997-10" />
+			<biblScope unit="page" from="117" to="126" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<analytic>
+		<title level="a" type="main">Cornhill. Octree-based decimation of marching cubes surfaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Raj</forename><surname>Shekhar</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Elias</forename><surname>Fayyad</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Roni</forename><surname>Yagel</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Fredric</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;96</title>
+		<meeting>Visualization &apos;96</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="335" to="342" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<analytic>
+		<title level="a" type="main">Isosurfacing in span space with utmost efficiency (issue)</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">D</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Hansen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Livnat</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;96</title>
+		<meeting>Visualization &apos;96</meeting>
+		<imprint>
+			<publisher>IEEE Computer Society Press</publisher>
+			<date type="published" when="1996" />
+			<biblScope unit="page" from="287" to="294" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">Sweeping simplicies: A fast isosurface extraction algorithm for unstructured grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Shen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">R</forename><surname>Johnson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proceedings of Visualization &apos;95</title>
+		<meeting>Visualization &apos;95</meeting>
+		<imprint>
+			<date type="published" when="1995" />
+			<biblScope unit="page" from="143" to="150" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Octrees for faster isosurface generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">5</biblScope>
+			<biblScope unit="page" from="57" to="62" />
+			<date type="published" when="1990-11" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Octrees for faster isosurface generation</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Wilhelms</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Van Gelder</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">ACM Transactions on Graphics</title>
+		<imprint>
+			<biblScope unit="volume">11</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="201" to="227" />
+			<date type="published" when="1992-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Data structure for soft objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Geoff</forename><surname>Wyvill</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Craig</forename><surname>Mcpheeters</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Brian</forename><surname>Wyvill</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">The Visual Computer</title>
+		<imprint>
+			<biblScope unit="volume">2</biblScope>
+			<biblScope unit="page" from="227" to="234" />
+			<date type="published" when="1986" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>

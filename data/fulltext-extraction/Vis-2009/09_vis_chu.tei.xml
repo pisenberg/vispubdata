@@ -1,0 +1,803 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xml:space="preserve" xmlns="http://www.tei-c.org/ns/1.0" 
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+xsi:schemaLocation="http://www.tei-c.org/ns/1.0 /home/pisenberg/grobid/grobid-0.6.1/grobid-home/schemas/xsd/Grobid.xsd"
+ xmlns:xlink="http://www.w3.org/1999/xlink">
+	<teiHeader xml:lang="en">
+		<fileDesc>
+			<titleStmt>
+				<title level="a" type="main">GL4D: A GPU-based Architecture for Interactive 4D Visualization</title>
+			</titleStmt>
+			<publicationStmt>
+				<publisher/>
+				<availability status="unknown"><licence/></availability>
+			</publicationStmt>
+			<sourceDesc>
+				<biblStruct>
+					<analytic>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Alan</forename><surname>Chu</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Chi-Wing</forename><surname>Fu</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Andrew</forename><forename type="middle">J</forename><surname>Hanson</surname></persName>
+						</author>
+						<author>
+							<persName xmlns="http://www.tei-c.org/ns/1.0"><roleName>Member, IEEE</roleName><forename type="first">Pheng-Ann</forename><surname>Heng</surname></persName>
+						</author>
+						<title level="a" type="main">GL4D: A GPU-based Architecture for Interactive 4D Visualization</title>
+					</analytic>
+					<monogr>
+						<imprint>
+							<date/>
+						</imprint>
+					</monogr>
+				</biblStruct>
+			</sourceDesc>
+		</fileDesc>
+		<encodingDesc>
+			<appInfo>
+				<application version="0.6.1" ident="GROBID" when="2021-02-20T19:51+0000">
+					<desc>GROBID - A machine learning software for extracting information from scholarly documents</desc>
+					<ref target="https://github.com/kermitt2/grobid"/>
+				</application>
+			</appInfo>
+		</encodingDesc>
+		<profileDesc>
+			<textClass>
+				<keywords>
+					<term>Mathematical visualization</term>
+					<term>four-dimensional visualization</term>
+					<term>graphics hardware</term>
+					<term>interactive illumination</term>
+				</keywords>
+			</textClass>
+			<abstract>
+				<p>This paper describes GL4D, an interactive system for visualizing 2-manifolds and 3-manifolds embedded in four Euclidean dimensions and illuminated by 4D light sources. It is a tetrahedron-based rendering pipeline that projects geometry into volume images, an exact parallel to the conventional triangle-based rendering pipeline for 3D graphics. Novel features include GPU-based algorithms for real-time 4D occlusion handling and transparency compositing; we thus enable a previously impossible level of quality and interactivity for exploring lit 4D objects. The 4D tetrahedrons are stored in GPU memory as vertex buffer objects, and the vertex shader is used to perform per-vertex 4D modelview transformations and 4D-to-3D projection. The geometry shader extension is utilized to slice the projected tetrahedrons and rasterize the slices into individual 2D layers of voxel fragments. Finally, the fragment shader performs per-voxel operations such as lighting and alpha blending with previously computed layers. We account for 4D voxel occlusion along the 4D-to-3D projection ray by supporting a multi-pass back-to-front fragment composition along the projection ray; to accomplish this, we exploit a new adaptation of the dual depth peeling technique to produce correct volume image data and to simultaneously render the resulting volume data using 3D transfer functions into the final 2D image. Previous CPU implementations of the rendering of 4D-embedded 3-manifolds could not perform either the 4D depth-buffered projection or manipulation of the volumerendered image in real-time; in particular, the dual depth peeling algorithm is a novel GPU-based solution to the real-time 4D depthbuffering problem. GL4D is implemented as an integrated OpenGL-style API library, so that the underlying shader operations are as transparent as possible to the user.</p>
+			</abstract>
+		</profileDesc>
+	</teiHeader>
+	<text xml:lang="en">
+		<body>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="1">INTRODUCTION</head><p>Visualizing geometric objects embedded in four-dimensional space is an interesting and challenging problem with a long history <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b24">25]</ref>. Since our everyday physical world is three-dimensional, we find it difficult to envision objects that are naturally defined in four dimensions. Computer graphics modeling tools, which are not constrained by the physical world, therefore provide a natural approach to rendering and interacting with high-dimensional mathematical objects and learning how to visualize their properties. The visualization environment we describe in this paper provides interactive computer tools for inspecting and exploring geometric objects defined using four-dimensional coordinate systems using generalized lighting and rendering methods; recent advances in graphics processors permit the interactive implementation both of standard but formerly-slow features such as 4D depth culling and new features such as 4D alpha blending. A basic and fundamental fact is that 3-manifolds are required to create plausible 4D analogs of 3D lighting models, so that the rendering problem itself is supplemented by a model-extension problem for surfaces. Thus typical examples of interesting basic 4D objects include the hypercube or tesseract, which is already a 3-manifold and therefore directly renderable, and the flat torus (T 2 ), which is a two-manifold and therefore must be thickened in some way to turn it into a renderable 3manifold. Among the other wide classes of interesting objects that can be studied with our 4D rendering methods are complex functions of one complex variable and complex polynomial surfaces in two complex variables <ref type="bibr" target="#b19">[20]</ref>. Among the spectrum of 4D visualization techniques that the environment described here can support at interactive frame rates we note, for example, 4D depth buffering, 4D alpha blending, 3D volume viewing of the projected 4D geometry with tunable transfer functions, stereo imaging, and a full 4D diffuse plus specular illumination model. With the migration from fixed-pipeline rendering to programmable pipeline rendering <ref type="bibr" target="#b27">[28,</ref><ref type="bibr" target="#b32">33]</ref>, the OpenGL API had undergone a radical revision, allowing the OpenGL API to exploit the massive parallel floating point computation power in the underlying graphics hardware for rendering as well as general purpose computation. One of our objectives here is thus to propose a novel architectural design, GL4D, specifically to exploit programmable shaders in the GPU to efficiently perform high-quality interactive 4D rendering and visualization. The GL4D architecture includes the following functionalities:</p><p>• Defining 4D geometry model data and managing the data transfer to the graphics hardware;</p><p>• Performing 4D modelview and projection transformations to a virtual 3D volumetric screen through volumetric rasterization with the geometry shader <ref type="bibr" target="#b8">[9]</ref>;</p><p>• Implementation of high-quality per-voxel operators in 4D, including the specification of 4D vertex normals and light sources to support lighting computations in the fragment shader;</p><p>• Order-independent rendering of opaque tetrahedron-based geometry in 4D using per-voxel occlusion/visibility computation and back-face culling in the geometry shader;</p><p>• Alpha-blended transparent 4D geometry rendering using a multislice multi-pass alpha composition of the projected geometry, extending the dual depth peeling technique to 4D;</p><p>• Support for helpful visual cues in the 4D rendering, including interactively controllable lighting and viewing, coloring coding schemes, false intersection highlights, and screen-door effects.</p><p>A final design feature is that the application programming interface (API) of GL4D is constructed in the style of an OpenGL library API, so that it can serve as a highly-transparent programming environment for developing 4D visualization applications.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Related Work.</head><p>Early research on the visualization of highdimensional geometry included the work of Noll <ref type="bibr" target="#b31">[32]</ref> and Banchoff <ref type="bibr" target="#b1">[2,</ref><ref type="bibr" target="#b2">3]</ref>, who exploited 3D computer graphics methods to display fourdimensional objects. Methods exploited in a variety of early works <ref type="bibr" target="#b0">[1,</ref><ref type="bibr" target="#b17">18,</ref><ref type="bibr" target="#b18">19,</ref><ref type="bibr" target="#b24">[25]</ref><ref type="bibr" target="#b25">[26]</ref><ref type="bibr" target="#b26">[27]</ref> included wireframe representations, hyperplane slicing, color coding, view transformations, projection, and animation.</p><p>Extending the methods of 3D rendering by analogy to the fourth dimension, Burton et al. <ref type="bibr" target="#b9">[10,</ref><ref type="bibr" target="#b34">35]</ref> and Hanson and Heng <ref type="bibr" target="#b22">[23]</ref> proposed various frameworks that included lighting models for the visualization of 4D geometries. Rendering 3D geometry onto a 2D screen was replaced by projecting 4D geometry into a 3D image volume, including both color and depth buffering to support hidden surface removal in the 4D-to-3D projection. Hanson and Heng also proposed a thickening mechanism in order to convert 2D surfaces and 1D curves embedded in four-dimensional space into renderable 3-manifolds. The resulting volume images naturally required 3D volume rendering methods to expose the internal structure of the projected 4D geometry. Alpha blending along the 4D projection direction was not implemented. An alternative volume rendering to expose geometric structure after 4Dto-3D projection was suggested by Banks <ref type="bibr" target="#b3">[4]</ref> , who employed principal curves on surfaces, transparency, and screen-door effects to highlight intersections in the projected geometry; in addition, Banks <ref type="bibr" target="#b4">[5]</ref> proposed a general mechanism to compute diffuse and specular reflection of a k-manifold embedded in n-space. Hanson and Cross <ref type="bibr" target="#b10">[11,</ref><ref type="bibr" target="#b20">21]</ref> developed techniques implementing 4D rendering with the Shirley-Tuchman volume method <ref type="bibr" target="#b33">[34]</ref>. assuming that the objects in 4D are static and occlusion-free in the 3D image buffer. Such methods cannot provide real-time occlusion computation and have limited interactivity compared to the methods introduced in the current paper.</p><p>Approaches to closely related problems include Feiner and Beshers <ref type="bibr" target="#b16">[17]</ref> "worlds within worlds" interface system to manipulate and explore high-dimensional data space via nested coordinate systems. A related system developed by Miller and Gavosto <ref type="bibr" target="#b29">[30]</ref>; used sampling methods to render and visualize 4D slices of n-dimensional data such as fractals and satellite orbits. Duffin and Barrett <ref type="bibr" target="#b11">[12]</ref> proposed a user interface design to carry out n-dimensional rotation. Among other interesting contributions to the field are those of Egli et al. <ref type="bibr" target="#b12">[13]</ref>, who proposed a moving coordinate frame mechanism to generalize the sweeping method for representing high-dimensional data, the work of Bhaniramka et al. <ref type="bibr" target="#b7">[8]</ref>, who explored isosurfacing in high-dimensional data by a marching-cube-like algorithm for hypercubes, and that of Neophytou and Mueller <ref type="bibr" target="#b30">[31]</ref>, who investigated the use of splatting to display 4D datasets such as time-varying 3D data. Recently, Hanson and Zhang <ref type="bibr" target="#b23">[24]</ref> proposed a multimodal user interface design that integrates visual representation and haptic interaction, allowing users to simultaneously see and touch 4D geometry; this approach was then extended <ref type="bibr" target="#b35">[36]</ref> to exploit the idea of a reduced-dimension shadow space to directly manipulate higher-dimensional geometries.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Contributions of this paper include:</head><p>1. The GL4D framework, a novel visualization architecture for 4D geometry based on state-of-the-art programmable graphics hardware. Our approach carefully explores and adopts various features of the GPU, including the geometry shader, to provide the first complete example of GPU-based 4D rendering methods supporting interactive visualization. 2. The delivery of high-quality 4D geometry visualization that supports interactive controls for a wide range of aspects. This is the first environment that can deliver both high-quality voxel-based rendering of the 3D image and real-time 4D fragment lighting and blending, as well as occlusion computation for 4D geometry. In particular, we exploit a new concept of transparency processing for 4D geometry by adopting the depth peeling technique to 4D and properly blending projected fragments falling into the same voxel. In addition, we also support a variety of visual cues, such as self-intersections, within the framework of GL4D. 3. An OpenGL-style API library for the GL4D implementation that can serve as a transparent and generic interface for developing 4D visualization applications.</p><p>Paper Organization. The paper is organized as follows: After the architecture overview presented in Section 2, Sections 3 and 4 detail the GPU-based procedure for processing an input stream of 4D tetrahedrons: Section 3 focuses on the application of vertex and geometry shaders for transformations in 4D and volumetric rasterization, while Section 4 presents the per-voxel processing steps in the fragment shader, including 4D lighting and hidden surface elimination (or alpha composition in case of transparency). Section 5 shows the results of applications to various 4D geometric models and presents the library API of GL4D. Finally, Section 6 presents the conclusion and discusses possible directions for future work.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2">OVERVIEW: THE GL4D ARCHITECTURE</head><p>The GL4D visualization architecture is a rasterization-based rendering system for 4D virtual mathematical worlds using the tetrahedron as the rendering primitive. Its design parallels the conventional rasterizationbased rendering pipeline in 3D computer graphics: In 3D computer graphics, we have 2-simplices, i.e., triangles, as the primitive elements used to represent surfaces in 3D that have unique normals and respond to lighting models; in the 4D computer graphics world of GL4D, we have 3-simplices, i.e., tetrahedrons, as the building blocks of hypersurfaces (3-manifolds) in 4D that have unique normals and respond to lighting models generalized to 4D virtual worlds. Tetrahedrons are therefore the elementary rendering primitives needed to support lighting in a 4D rendering environment.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.1">4D Geometry Input for GL4D</head><p>The GL4D architecture supports these tetrahedron-based inputs:</p><p>1. Tetrahedrons -Individual tetrahedrons are input to GL4D in immediate mode using the obvious sequence of glVertex calls between glBegin and glEnd.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.">Hypersurfaces (Hexahedral meshes) -A retained mode allows us</head><p>to directly load hypersurfaces by means of a hexahedral grid of 4D vertices through command calls in the GL4D API. 3. Surfaces embedded in 4D -We can also input lower-dimensional geometries, such as 2-manifolds (surfaces), through command calls in GL4D. Just as we must thicken a 3D space curve to form a renderable tube in 3-space, we need to thicken 2-manifolds to allow them to interact uniquely with 4D lights. The thickening process in <ref type="bibr" target="#b22">[23]</ref> is employed internally inside GL4D to build the geometric representations in terms of 4D tetrahedrons.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.2">Hexahedral meshes</head><p>In 3-space, we can parameterize a surface by a mapping from a uvparametric space to a 2D-grid of 3D coordinates. In 4-space, we can also parameterize an intrinsic or thickened 3-manifold by a mapping from a uvw-parametric space to a 3D-grid of 4D coordinates. We refer to this geometric as a hexahedral mesh. In GL4D, we can define a vector of four parametric equations (each for one dimension in 4D) in terms of u, v, and w, and pass the equations to GL4D. GL4D can uniformly (and possibly with an adaptive strategy) sample the equations and construct a hexahedral mesh internally. By decomposing each cell in the hexahedral mesh into tetrahedrons, GL4D transfers the geometry data to the tetrahedron-based processing pipeline in the GPU. It is worthwhile noting that per-vertex normals in the mesh can be computed either via an explicit parametric equation, via the Gram-Schmidt process and a 4D cross product, or explicitly input from the user.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="2.3">Overview: Tetrahedron-Processing Pipeline</head><p>The tetrahedron-processing pipeline in GL4D is divided into the following three major components; the first one is on the CPU side, while the other two are on the GPU side; see also <ref type="figure" target="#fig_0">Figure 1</ref>.</p><p>• The first component is a tetrahedron tessellator on the CPU side to generate a tetrahedron stream given different kinds of user input, for example, hexahedral meshes or various kinds of 4D geometries.</p><p>• The second component in GL4D is the geometry subsystem, which parallels that in conventional 3D rendering. It includes 1) a per-vertex transformation unit that employs the vertex shader to transform (modelview and projection) the 4D geometry from 4D object space to 4D eye space, and finally projects to the 3D volumetric screen, and 2) a 3D-rasterization unit that employs the geometry shader to voxelize the input tetrahedrons into scanplanes of voxels in the 3D projected geometry.</p><p>• The last component is a GPU-based per-fragment processing unit that carries out per-voxel computation after 3D rasterization (or voxelization). Here we perform per-voxel operations such as lighting and occlusion computation to create a volume-rendered image of the 4D geometry. We can also include visual cues other than lighting in this per-fragment processing step; see Section 5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3">GL4D: THE GEOMETRY SUBSYSTEM</head><p>Following the order-independent design for rendering triangles in conventional 3D graphics hardware, GL4D also uses order-independent processing for the input tetrahedrons. After tetrahedron transfer from the CPU side, the GPU side uses the vertex shader and the geometry shader to transform and voxelize the input tetrahedrons, and then the fragment shader processes individual voxel fragments.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.1">Vertex Shader: Transformation and Projection</head><p>The first step on the GPU side of GL4D is the vertex shader for pervertex transformation in 4D; the 4D modelview transformation is first applied to transform each vertex coordinate from object-space (input from the 4D tetrahedrons) to eye space in 4D, while the projection transformation projects the resultant eye-space coordinates to the volumetric image buffer. Users can invoke various GL4D commands to set up the modelview and projection transformations in 4D. Note that in 3D, we project and image 3D objects on a 2D screen, whereas in 4D, we project and image 4D objects on a volumetric screen; later in the GL4D pipeline, GPU-accelerated 3D volume rendering is used to represent the contents of the volumetric screen image. At the end of each vertex shader call, each resultant vertex has two coordinates attached: a 4D eye coordinate after the 4D modelview transform, and a normalized device coordinate defined in the space of the volumetric screen. In addition, we also transform the 4D normal vector from the 4D object space to the 4D eye space, to support pervoxel 4D lighting later in the fragment shader; see <ref type="figure" target="#fig_1">Figure 2</ref>. Note that we can support not only orthographic projection, but also perspective projection, as demonstrated in the hypercube visualization example shown in Section 5.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="3.2">Geometry shader: Rasterizing the Tetrahedrons</head><p>In order to support per-voxel lighting and per-voxel hidden surface removal (and alpha composition) in the fragment shader, we first have to rasterize the input tetrahedrons into voxel fragments inside the volumetric screen buffer. Here we apply the geometry shader provided by the programmable rendering pipeline to carry out a per-primitive (per-tetrahedron) 3D rasterization. It is worthwhile noting that existing voxelization methods <ref type="bibr" target="#b13">[14,</ref><ref type="bibr" target="#b15">16,</ref><ref type="bibr" target="#b28">29]</ref> were originally designed for voxelizing triangle-based 3D models; these methods do not apply efficiently to the voxelization of our volume-bounding tetrahedrons. Our 3D rasterization of tetrahedrons is designed as follows:</p><formula xml:id="formula_0">Assembling Tetrahedrons.</formula><p>First, since no rendering primitives in conventional graphics hardware are designed for tetrahedron transfer, we must adapt existing rendering primitives so that the graphics hardware can properly assemble individual tetrahedrons in each geometry shader call. Here we employ the geometry-shader-specific primitive, namely GL LINES ADJACENCY EXT; since this primitive type is 4vertex-based, we can group the four vertices of each tetrahedron into a single adjacency line primitive. In this way, the primitive assembly unit in the graphics hardware can properly group the four corresponding vertices in a single geometry shader call.</p><p>Backface Culling.</p><p>On commodity graphics hardware, backface culling of triangles can be done by computing the cross product of the two on-edge vectors from the first vertex in a triangle (in eye space), and then by checking the sign of the z-component in the resultant vector. If the z-component has the same sign as the viewing direction's z-component, the triangle is back-facing and can be culled. In 4D graphics, we can implement an analogous mechanism for discarding back-facing tetrahedrons in the geometry shader. We first must ensure that the vertices in all input tetrahedrons are ordered in a consistent manner. Note that given a 4D tetrahedron with the vertex input sequence (p 0 , p 1 , p 2 , p 3 ), we can have two possible spatial arrangements as shown in <ref type="figure" target="#fig_2">Figure 3</ref>: First, we can determine a 3D subspace containing the tetrahedron similar to a 2D plane containing a triangle in 3D; then, the two possible spatial arrangements are:</p><p>1. p 1 p 2 p 3 are in clockwise order as seen from p 0 in the 3D subspace of the tetrahedron 2. p 1 p 2 p 3 are in anti-clockwise order as seen from p 0 in the 3D subspace of the tetrahedron</p><p>In GL4D, all input tetrahedrons should be ordered in anti-clockwise order, or else the face normal will be flipped. We can compute the 4D cross product as a determinant:</p><p>Face normal of a tetrahedron =</p><formula xml:id="formula_1">v1 x v2 x v3 xx v1 y v2 y v3 yŷ v1 z v2 z v3 zẑ v1 w v2 w v3 wŵ , where v i = p i − p 0 = (vi x , vi y , vi z , vi w )</formula><p>, with i = 1, 2, and 3, are the three on-edge vectors on the tetrahedron from p 0 . Furthermore, since backface culling requires only the sign of the w-component in the resulting face normal, we can simplify the computation:</p><formula xml:id="formula_2">Face normal s w − component = v1 x v2 x v3 x v1 y v2 y v3 y v1 z v2 z v3 w = v1 xyz • ( v2 xyz × v3 xyz ) .</formula><p>In this way, we can readily implement the above computation in the geometry shader as a 3D cross product followed by a 3D dot product. If the resultant w-component is negative, the tetrahedron is back-facing and can be culled. Following the convention in OpenGL, users of the GL4D API can also enable or disable this 4D culling feature.</p><p>Multi-slice Rasterization.</p><p>In order to trigger a fragment shader call for each voxel fragment inside a 3D-rasterized tetrahedron, we employ a multi-slice (multi-pass) rasterization scheme to voxelize tetrahedrons from back to front inside the volumetric screen. In each slicing step, the tetrahedrons are voxelized on a specific slicing plane, and all these slicing planes are parallel to the 2D screen in the eye space with respect to the virtual camera that renders the volumetric screen onto the display window. Hence, we can properly voxelize each tetrahedron slice by slice from back to front in an order-independent manner, and can still correctly compose the fragment colors later in the fragment processing. To efficiently voxelize a tetrahedron over a specific slicing plane, we adopt the Marching Tetrahedron method <ref type="bibr" target="#b36">[37]</ref> to rasterize a tetrahedron volume in GL4D. When a slicing plane intersects a tetrahedron (see <ref type="figure" target="#fig_3">Figure 4</ref>) there are only two possible voxelizable footprints: 1) a triangle, where the slicing plane cuts three edges of the tetrahedron, and 2) a quadrilateral, where the slicing plane cuts four edges of the tetrahedron. For both cases, we find that the output can be modeled as a triangle strip, and, hence, we can employ triangle strip (i.e., GL TRIANGLE STRIP in OpenGL) as the output primitive type from the geometry shader.</p><p>Moreover, our geometry shader can label each vertex as positive (takes value 1) or negative (takes value 0), depending on which side the vertex resides with respect to a given slicing plane; see also <ref type="figure" target="#fig_3">Figure 4</ref>. Then, we can pack the zeros and ones of the four vertices as a 4bit integer so that we can quickly index the intersecting edges from a constructed edge table in the geometry shader code. In this way, we can efficiently compute the edge-plane intersections and output the intersecting shape as a triangle strip.</p><p>Output from Geometry Shader.</p><p>Triangle strips output from the geometry shader are rasterized by the standard rasterization engine on the graphics hardware, and hence we can trigger a fragment shader call to process each rasterized voxel fragment.</p><p>When the geometry shader generates the triangle strips, we attach to each associated vertex a set of three attributes: a projected position (gl Position) inside the volume screen buffer, and a 4D position and normal in the 4D eye space. It is worthwhile noting that a few interpolation steps are required in the geometry shader to compute these per-vertex attributes at the edge-plane intersection points because these attributes are originally given (from the vertex shader) only at the tetrahedron vertices. After the geometry shader, the standard rasterization engine can then help to further interpolate these data over the rasterized triangle strips; the fragment shader that follows thus receives these data for each voxel fragment.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4">GL4D: VOXEL FRAGMENT PROCESSING</head><p>With the goal of supporting high-quality 4D lighting and occlusion, GL4D performs lighting, hidden surface removal, and transparency composition in a per-voxel manner in the fragment shader. Note that earlier 4D visualization work performed lighting and occlusion in a per-vertex or even per-primitive manner, and back-to-front sorting of tetrahedrons was required before the volume rendering. Note that when tetrahedrons are projected from 4D to 3D, the projected tetrahedrons may intersect each other in the volumetric screen region, and per-primitive sorting may not always properly identify the occluding regions. With per-voxel fragment processing, we can guarantee highquality self-intersection detection.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.1">Hidden surface removal</head><p>The first per-voxel-fragment operation carried out in the fragment shader is hidden surface removal. Here we take a "camouflage approach" by employing the early depth culling mechanism available on existing graphics hardware. At the end of the geometry shader, we replace the z value in the output position (e.g., the gl Position output from the geometry shader) by the depth value along the 4 th wdimension; hence, the early depth culling takes the w-dimension depth as its input as well as the book-keeping value in the depth buffer. As a result, we can efficiently discard occluded voxel fragments without invoking the fragment shaders on them.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.2">Per-voxel lighting</head><p>The second per-voxel operation that takes place in the fragment shader is per-voxel lighting in 4D. Here we employ the interpolated 4D normals and positions (in eye space); these were output from the geometry shader, and were later interpolated by the standard rasterization engine. We employ the standard Phong illumination (in 4D eye space) because of its simplicity and efficiency in the shader computation:</p><formula xml:id="formula_3">I = k a + k d max(L •N , 0 ) + k s max( (R •V) n s , 0 ) ,</formula><p>whereN,V ,L, andR are the normal vector, the view vector (from the voxel fragment to view point), the light vector (from the voxel fragment to the light source), and the light-reflected vector, respectively; I is the resultant reflectance from the voxel, whereas k a , k d , k s , and n s are the ambient, diffuse, specular, and shininess terms, respectively. Note thatN,V ,L, andR are all unit vectors defined in 4D eye space and 4D dot products have to be used. Furthermore, following the conventional OpenGL lighting model in local viewer mode, we can setV to be (0, 0, 0, 1) when local viewer mode is enabled.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.3">Notion of Rendering 4D Transparent Objects</head><p>In addition to opaque 4D objects, we also support the rendering of transparent 4D objects. In the case of 3D graphics, we render transparent objects by composing the fragments that fall onto each screen pixel either from back to front or from front to back; implicitly, we base this ordering on the z-distance of the fragments from the eye point. While such an alpha composition process is well-developed in 3D graphics, its extension to 4D needs clarification.</p><p>In 4D graphics, since we eventually display the final rendering on a 2D computer screen, each screen pixel could find its projection from any point in a 2D subspace rather than along a 1D projective line as in 3D graphics. Therefore, we do not have a straightforward z ordering. We could have the following situations:</p><p>• First, if the 4D object is opaque, we can ignore the alpha composition in the w-dimension and perform the hidden surface removal as in subsection 4.1; hence, we take only the w-nearest voxel fragment in the 3D volumetric screen.</p><p>• Second, if the 4D object is transparent, we can compose the voxel fragments that fall into the same voxel (in the volumetric screen) in a back-to-front (or front-to-back) manner along the w-dimension. After alpha composition along the w-dimension, the volume rendering step that follows will further compose the voxel fragments along the z-dimension to the final screen; see <ref type="figure" target="#fig_4">Figure 5</ref>. Since the 4D modelview and projection transforms are interactively controlled by the user, we leave the subspace ordering decision to the user.</p><p>• Finally, the user can also disable the alpha composition in the volume rendering step from 3D to 2D screen, exposing only the w-dimension alpha composition effect in the nearest z layer.</p><p>Though the above approaches do not perform alpha composition directly over the entire zw-subspace for each screen pixel, we argue whether such a direct approach can exist as there are no obvious depth orderings for voxel fragments over the entire zw-subspace. Hence, we propose the above achievable approaches to rendering 4D transparent objects, and indeed, these are feasible methods that can be practically realized on shaders with existing GPU technology, as we see in the next subsection. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="4.4">Dual Depth Peeling for 4D Transparent Objects</head><p>To support efficient alpha composition along the w-dimension with proper depth sorting (as in the second and third approaches above), we extend the conventional dual depth peeling method <ref type="bibr" target="#b6">[7,</ref><ref type="bibr" target="#b14">15]</ref>; this method can handle 2n depth layers in n rendering passes, and five textures are needed in the implementation: two of them are used for storing minimum and maximum per-pixel depth values in a ping-pong manner across subsequent rendering passes; another two store per-pixel color and alpha values accumulated from the front and back peeling side (also in a ping-pong manner); the last one is for storing the color and alpha values accumulated from back to front peeling.</p><p>Note that the ping-pong technique is adopted for the min-max depth value, the accumulated color, and alpha values to avoid a read-write hazard when going from one rendering pass to the next, and we use GL MAX blending mode for all three render targets as in OpenGL. With such an adaptation, we can produce transparent renderings of objects in 4D such as the 4D hypercube as illustrated in <ref type="figure" target="#fig_0">Figure 14</ref>.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5">IMPLEMENTATION AND RESULTS</head><p>In this section, we first describe the implementation issues and performance analysis of GL4D; we then present the visualization results for various 4D models and briefly outline the library API of GL4D.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.1">Implementation Issues</head><p>GL4D is implemented on top of OpenGL 2.1, and requires support for the geometry shader to handle per-tetrahedron processing. The basic principles of the implementation are listed in the following.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>Vertex Buffer Object.</head><p>To avoid excessive geometry transfer and redundant vertex program computation (for the same vertex), the retained mode of GL4D caches the 4D geometry input on the GPU as (index-based) vertex buffer objects, which stores three arrays of data attributes: one for 4D object-space positions, one for 4D object-space normals (for each 4D position), and one for indices, with each set of four consecutive indices forming one tetrahedron in 4D.</p><p>Hexahedral-cell-to-tetrahedron Decomposition. In the hexahedralcell-to-tetrahedron decomposition, we can divide a hexahedral cell into five or six tetrahedrons as depicted in <ref type="figure" target="#fig_5">Figure 6</ref>. However, if we examine the triangle patterns on matching faces of adjacent cells in the decomposition, the patterns in the six-tetrahedron decomposition can match properly without a T-join, while the five-tetrahedron decomposition apparently does not. However, we can work around this by using a five-tetrahedron decomposition that alternates two different orientations of the five-tetrahedron decomposition in a hexahedral mesh; see <ref type="figure" target="#fig_6">Figure 7</ref>. We can thus seamlessly match the diagonals across neighboring hexahedral cell faces (see <ref type="figure" target="#fig_6">Figure 7</ref> (right)), while generating fewer tetrahedrons as compared to the six-tetrahedron decomposition.  Tetrahedron-slicing.</p><p>To speed up the performance of primitive assembly (also known as IA, the input assembler) and the geometry shader, we compute for each rendering frame the z range of groups of tetrahedrons. Then, for each multi-slice rendering pass (within each rendering frame), we assemble only the tetrahedrons that overlap with the z value of the current slice; hence, we can reduce the workload of primitive assembly, and avoid intensive tetrahedron-slice intersections in the geometry shader. <ref type="table" target="#tab_1">Table 1</ref> shows a performance analysis of GL4D; three PC systems equipped with different graphics boards were employed to render three different 4D models (hypercube, 4D torus, and Steiner surface) with per-voxel hidden surface removal and per-voxel lighting in 4D:</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.2">Performance of GL4D</head><p>• 8600: Dell OptiPlex GX620 with Intel Pentium D 3GHz, 1GB memory, and GeForce 8600 GTS; <ref type="figure">Fig. 8</ref>. Rotating the hypercube in 4D space. This is a 3-manifold composed of eight 3D cubes; we shade each 3D cube with its own color.</p><p>• 9800GT: Dell XPS 730 with Intel Core 2 Quad CPU Q9400 2.66GHz, 3GB memory, and GeForce 9800 GT;</p><p>• GTX285: Dell Precision T5400 with Intel Xeon CPU 2.50 GHz, 8GB memory, and GeForce GTX285. It is worth noting that although the hypercube only has 40 4D tetrahedrons, these tetrahedrons are relatively large in size compared to tetrahedrons in other models; hence, they produce a substantial number of tetrahedron-slice intersections and voxel fragments. The number of slices in the 3D rasterization (or voxelization) process can greatly affect the performance (and quality) of GL4D; the greater the number of slices, the more tetrahedron-slice intersections occur (the first data row for each model shown in the table), and hence, the more calls to the geometry shader and the more voxel fragments for the fragment shader to process. In general, 256 slices are employed in practice. We also tested the performance of GL4D on a series of three successive generations of graphics cards: GeForce 8600, GeForce 9800GT, and GeForce GTX285. We can see from the table that realtime performance can be achieved with the latest GPU technology. For instance, using the GTX285 to display the flat torus using 256 slices, GL4D can generate 81.9M tetrahedron-slice intersections per second.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.3">Visualization Results</head><p>In this subsection, we explore and demonstrate various visualization effects on different 4D geometric models, including the hypercube, the flat torus (T 2 ), the knotted sphere, Steiner's Roman surface, and the CP 2 quintic 2-manifold corresponding to a cross-section of string theory's quintic Calabi-Yau 6-manifold in CP 4 .</p><p>Hypercube. Considering a 3D cube as a two-manifold composed of six 2D squares bounding a solid 3D block, a 4D hypercube can similarly be thought of as a 3-manifold built from eight 3D cubes bounding a solid 4D block. <ref type="figure">Figure 8</ref> depicts an image sequence obtained by rotating a 4D hypercube in a fixed plane in 4D space; the boundary 3D cubes are shaded with different colors so that we can see which cubes are facing the 4D camera; cubes with back-facing normals are hidden from sight in the 4D view. The initial viewpoint shows three of four possible front-facing boundary cubes and the 4D projection rotates until only the single red cube is facing the 4D camera. The lower left circles contain the four coordinate axes projected to the 2D screen space. In the penultimate view, the red axis disappears because it aligns with our 4D viewing ray. Finally, we turn down the opacity to show more internal details of the jello-like red cube.</p><p>We demonstrate 4D perspective projection in GL4D with the hypercube in <ref type="figure" target="#fig_7">Figure 9</ref>. The left sub-figure shows an orthographic view of the hypercube, while the middle and right figures employ shorter and shorter focal lengths (larger fields of view) in the virtual 4D pinhole camera. Unlike ordinary 3D projection, the perspective distortion in the right figure persists in any 3D viewpoint if we were to make a 3D rotation; it is a feature of the 4D, not the 3D, projection. Flat Torus. The flat torus (T 2 ) is a particular embedding of the familiar donut-shaped 3D torus that is completely flat in 4D Euclidean space. GL4D adds circles at each point to create a thickened 3manifold from this 2-manifold embedded in 4D. <ref type="figure" target="#fig_0">Figure 10</ref> shows an image sequence of the projected torus rotating in 4D. The initial projection to the XYZ subspace is a tube-shaped object; see the first axis icon for the first two sub-figures. After reducing the opacity value (i.e., the second sub-figure), we gradually rotate the torus to its XYW subspace. The bright rings embedded in the shape come from specular highlights in the 4D lighting. After we rotate the torus in 4D slightly off the XYZ axes (the third sub-figure), the single-ring highlights start to split and the volume visualization helps to reveal features of the internal structure as the object is rotated to different 4D projections.</p><p>Knotted Sphere. The knotted sphere embedded in 4D space is constructed by spinning a knotted line segment around a central axis. GL4D thickens this 2-manifold to make it locally a 3-manifold in 4space; certain anomalies are expected to remain for topological reasons. In <ref type="figure" target="#fig_0">Figure 11</ref>, we present first the opaque knotted sphere (the leftmost sub-figure). Since the defining 2-manifold for the knotted sphere is constructed over a 2D parametric domain, GL4D can apply textures onto the knotted sphere in the parameter space. This opens up the interior visibility of the opaque rendering as shown in the second subfigure of <ref type="figure" target="#fig_0">Figure 11</ref>. In practice, GL4D can sample an input 2D texture in the fragment shader by using the parametric coordinates. Next, we can reduce the voxel opacity in the volume rendering as well as animating the lighting direction, as shown in the sequence on right hand side of <ref type="figure" target="#fig_0">Figure 11</ref>.</p><p>Steiner Surface.</p><p>In the visualization of Steiner surface, we exploit the stereo viewing capability of GL4D. We can set up a pair of 4D virtual cameras with user-controllable interocular distance and render stereo pairs; <ref type="figure" target="#fig_0">Figure 12</ref>. shows stereo views of two different 4D orientations of the Steiner surface with divergent viewing (walleyed/parallel viewing). For each orientation, we render also an opaque version of the geometry.</p><p>Calabi-Yau Quintic Cross-section. Finally, we use the GL4D tools to render a complex patch-based surface geometry into the volumetric <ref type="figure" target="#fig_0">Fig. 10</ref>. Rotating the 4D embedded flat torus (from left to right) in the ZW plane, from XYZ to XYW; note the change in the axis icons. <ref type="figure" target="#fig_0">Fig. 11</ref>. Knotted sphere projected from 4D space; from left to right: we use a large opacity value in the volume rendering so that the model appears like an opaque surface; a screen door effect is added by applying a checkerboard deletion pattern in the parametric space; next, we reduce the opacity and animate the 4D lighting direction.</p><p>screen buffer. <ref type="figure" target="#fig_0">Figure 13</ref> shows the Calabi-Yau quintic cross-section; it consists of 5 2 = 25 patches, each shaded with different colors keyed to the two phase transformations applied to the fundamental patch <ref type="bibr" target="#b19">[20]</ref>. Note that this complicated surface can result in a large number of selfintersections when projected to the volumetric screen buffer. GL4D can efficiently detect and highlight these self-intersections using a pervoxel and per-slice method, similar to the screen parallel approach to intersection curves described by Banks <ref type="bibr" target="#b5">[6]</ref>. Intersections are marked in red in the right column of <ref type="figure" target="#fig_0">Figure 13</ref>. 4D Transparency with Dual Depth Peeling.</p><p>By adapting the dual peeling method to render 4D objects, we can correctly sort and compose fragments that are projected into the same voxel location in the volume screen buffer. <ref type="figure" target="#fig_0">Figure 14</ref> illustrates the rendering result; the first column shows two poses of the hypercube, rendered without the dual depth peeling; only one color is received per voxel as the object is opaque in the 4D to 3D projection. The second and third columns show corresponding stereo views, but with 4D transparency supported by dual depth peeling; here, each voxel can receive multiple colors originating from different boundary cubes in the projection along w. </p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="5.4">The library API</head><p>The library API of GL4D is built on top of OpenGL 2.1, and it consists of the following four groups of functions:</p><formula xml:id="formula_4">Initialization:</formula><p>First, we have gl4DInit to initialize various offscreen rendering buffers (implemented using frame buffer objects in OpenGL) and load the shader programs (vertex, geometry, and fragment shaders) into the GPU memory.</p><p>Parameter settings: Next, we can employ gl4DParam to assign values to various parameters in GL4D, including transformations, lighting, material, texture, culling, opacity values in the w-dimension and zdimension accumulation, and various state enabling parameters.</p><p>Geometry input: There are two rendering modes in GL4D:</p><p>• Immediate mode:</p><p>we can call gl4DBegin (with GL4D TETRAHEDRONS or GL4D TETRAHEDRON STRIP) to start an input session, followed by some number of calls to gl4DNormal and gl4DVertex to input normals and vertices, ending with gl4DEnd.</p><p>• Retained mode: we can also pass the entire 4D geometry through various GL4D functions, e.g., gl4DSurface defines a parametric surface (with thickening) and gl4DHexahedralGrid creates a hexahedral grid of 4D vertices.</p><p>Rendering control: Finally, we use gl4DClearBuffer to clear the buffers , and gl4DRenderBegin and gl4DRenderEnd to define a rendering session in GL4D; gl4DRenderBegin starts a GL4D rendering session and activates the shaders, while gl4DRenderEnd ends the session by performing GPU-accelerated volume rendering: it renders the tetrahedron fragments that have accumulated in the volumetric buffer into the standard frame buffer.</p></div>
+<div xmlns="http://www.tei-c.org/ns/1.0"><head n="6">CONCLUSION</head><p>This paper proposes a carefully-designed visualization architecture that adapts a state-of-the-art programmable rendering pipeline for the visualization of 4D mathematical models. The proposed GL4D architecture is a highly-efficient GPU-based API, taking advantage of all existing shader modules in the GPU hardware to efficiently process a stream of tetrahedrons and produce volume-rendered views of 4D geometries. We incorporate visual effects into the GL4D framework, including stereo viewing, texturing, a screendoor effect, self-intersection flags, and 4D lighting, as well as the novel notion of 4D transparency composition; the latter is supported by extending the dual depth peeling method into the fourth w-dimension.</p><p>In future work, we hope to explore the inclusion of highperformance ray tracing methods in GL4D to improve the rendering quality and to extend the scope to include such effects as 4D shadows. We would also like to apply the GL4D architecture to the visualization of more types of mathematical models and additional classes of 4D information such as 3D scalar fields <ref type="bibr" target="#b21">[22]</ref> and time-dependent data. A 3D scalar field, for example, can be rendered as a 3-manifold of 4D height values (like a top-down view of a 2D elevation map), whose normal vectors result in extremely detailed 4D diffuse and specular shading effects in the volume rendering. We also hope to integrate GL4D with interaction methods such as haptic devices and the Wii Remote.</p></div><figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_0"><head>Fig. 1 .</head><label>1</label><figDesc>Overview of the GL4D Architecture.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_1"><head>Fig. 2 .</head><label>2</label><figDesc>Vertex shader: per-vertex processing: 4D modelview transformation followed by 4D to 3D projection.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_2"><head>Fig. 3 .</head><label>3</label><figDesc>Two possible vertex orderings in a tetrahedron; in the figure, p 0 is above the paper, whereas the other points are on the paper.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_3"><head>Fig. 4 .</head><label>4</label><figDesc>Two possible cross-sections when slicing a tetrahedron with a plane: a triangle or a quadrilateral; note that vertices behind the slicing planes are colored in red.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_4"><head>Fig. 5 .</head><label>5</label><figDesc>Rendering transparent 4D objects: alpha composition along wdimension followed by z-dimension.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_5"><head>Fig. 6 .</head><label>6</label><figDesc>Possible ways of decomposing a hexahedral cell into tetrahedrons: six tetrahedrons (top) and five tetrahedrons (bottom).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_6"><head>Fig. 7 .</head><label>7</label><figDesc>Decomposing a hexahedral mesh into tetrahedrons by alternating the orientations of five-tetrahedron decompositions.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_7"><head>Fig. 9 .</head><label>9</label><figDesc>Hypercube under different projections; Left: orthographic; middle: perspective; right: also perspective, but with a larger field-of-view (and the 4D camera moved closer to the hypercube).</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_8"><head>Fig. 13 .</head><label>13</label><figDesc>Two different views of Calabi-Yau quintic cross-section in 4D; the red color (2nd column) indicates self-intersection in the projection.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_9"><head>Fig. 14 .</head><label>14</label><figDesc>Rendering the 4D hypercube with and without 4D transparency, in the right and left columns, respectively; stereo images with divergent viewing are used in the transparent renderings.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" xml:id="fig_10"><head>Fig. 12 .</head><label>12</label><figDesc>Steiner surface: two stereoscopic views using divergent (wall-eyed) viewing.</figDesc></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_0"><head>•</head><label></label><figDesc>Alan Chu is with the Chinese University of Hong Kong; E-mail: achu@cse.cuhk.edu.hk . • Chi-Wing Fu is with the Nanyang Technological University, Singapore; E-mail: cwfu@ntu.edu.sg . • Andrew J. Hanson is with Indiana University, Bloomington; E-mail: hansona@indiana.edu . • Pheng-Ann Heng is with the Chinese University of Hong Kong; E-mail: pheng@cse.cuhk.edu.hk .</figDesc><table /><note>Manuscript received 31 March 2009; accepted 27 July 2009; posted online 11 October 2009; mailed on 5 October 2009. For information on obtaining reprints of this article, please send email to: tvcg@computer.org .</note></figure>
+<figure xmlns="http://www.tei-c.org/ns/1.0" type="table" xml:id="tab_1"><head>Table 1 .</head><label>1</label><figDesc>Frame rate (frame per second) of GL4D for different 4D models and different PC systems with different numbers of slices.</figDesc><table /><note></note></figure>
+		</body>
+		<back>
+
+			<div type="acknowledgement">
+<div xmlns="http://www.tei-c.org/ns/1.0"><head>ACKNOWLEDGMENTS</head><p>We would like to thank the anonymous reviewers, who provided invaluable comment to help the authors improve the manuscript. This research was supported in part by MOE AcRF Tier1 Grant (RG 13/08) and NSF-0430730.</p></div>
+			</div>
+
+			<div type="references">
+
+				<listBibl>
+
+<biblStruct xml:id="b0">
+	<monogr>
+		<title/>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><forename type="middle">A</forename><surname>Abbott</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><surname>Flatland</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1952" />
+			<publisher>Dover Publications, Inc</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b1">
+	<analytic>
+		<title level="a" type="main">Visualizing two-dimensional phenomena in fourdimensional space: A computer graphics approach</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">F</forename><surname>Banchoff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Statistical Image Processing and Computer Graphics</title>
+		<editor>E. Wegman and D. Priest</editor>
+		<meeting><address><addrLine>New York</addrLine></address></meeting>
+		<imprint>
+			<publisher>Marcel Dekker, Inc</publisher>
+			<date type="published" when="1986" />
+			<biblScope unit="page" from="187" to="202" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b2">
+	<analytic>
+		<title level="a" type="main">Beyond the third dimension: Geometry, computer graphics, and higher dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">T</forename><forename type="middle">F</forename><surname>Banchoff</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Scientific American Library</title>
+		<imprint>
+			<date type="published" when="1990" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b3">
+	<analytic>
+		<title level="a" type="main">Interactive display and manipulation of two-dimensional surfaces in four dimensional space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">C</forename><surname>Banks</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Symposium on Interactive 3D Graphics</title>
+		<meeting><address><addrLine>New York</addrLine></address></meeting>
+		<imprint>
+			<publisher>ACM</publisher>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="197" to="207" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b4">
+	<analytic>
+		<title level="a" type="main">Illumination in diverse codimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">C</forename><surname>Banks</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Computer Graphics</title>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="327" to="334" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b5">
+	<monogr>
+		<title level="m" type="main">Screen-parallel determination of intersection curves. Parallel Computing</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">C</forename><surname>Banks</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1997" />
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="page" from="953" to="960" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b6">
+	<monogr>
+		<title level="m" type="main">Order independent transparency with dual depth peeling</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">L</forename><surname>Bavoil</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Myers</surname></persName>
+		</author>
+		<ptr target="http://developer.download.nvidia.com/SDK/10/opengl/src/dualdepthpeeling/doc/DualDepthPeeling.pdf" />
+		<imprint>
+			<date type="published" when="2008" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b7">
+	<analytic>
+		<title level="a" type="main">Isosurfacing in higher dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Bhaniramka</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Wenger</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Crawfis</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of IEEE Visualization</title>
+		<meeting>of IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2000" />
+			<biblScope unit="page" from="267" to="273" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b8">
+	<monogr>
+		<title level="m" type="main">Ext geometry shader4 extension specification</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Brown</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">B</forename><surname>Lichtenbelt</surname></persName>
+		</author>
+		<ptr target="http://developer.download.nvidia.com/opengl/specs/GLEXTgeometryshader4.txt" />
+		<imprint>
+			<date type="published" when="2007-05" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b9">
+	<analytic>
+		<title level="a" type="main">Shades of a higher dimension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><forename type="middle">A</forename><surname>Carey</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">P</forename><surname>Burton</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><forename type="middle">M</forename><surname>Campbell</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics World</title>
+		<imprint>
+			<biblScope unit="page" from="93" to="94" />
+			<date type="published" when="1987-10" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b10">
+	<analytic>
+		<title level="a" type="main">Virtual reality performance for virtual geometry</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Cross</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Hanson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of IEEE Visualization</title>
+		<meeting>of IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="156" to="163" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b11">
+	<analytic>
+		<title level="a" type="main">Spiders: a new user interface for rotation and visualization of n-dimensional point sets</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">L</forename><surname>Duffin</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">A</forename><surname>Barrett</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of IEEE Visualization 1994</title>
+		<meeting>of IEEE Visualization 1994</meeting>
+		<imprint>
+			<date type="published" when="1994" />
+			<biblScope unit="page" from="205" to="211" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b12">
+	<analytic>
+		<title level="a" type="main">Moving coordinate frames for representation and visualization in four dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><surname>Egli</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Petit</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><forename type="middle">F</forename><surname>Stewart</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers and Graphics</title>
+		<imprint>
+			<biblScope unit="volume">20</biblScope>
+			<biblScope unit="issue">6</biblScope>
+			<biblScope unit="page" from="905" to="919" />
+			<date type="published" when="1996" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b13">
+	<analytic>
+		<title level="a" type="main">Fast scene voxelization and applications</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Eisemann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">X</forename><surname>Décoret</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of the 2006 symposium on Interactive 3D graphics and games</title>
+		<meeting>of the 2006 symposium on Interactive 3D graphics and games</meeting>
+		<imprint>
+			<date type="published" when="2006" />
+			<biblScope unit="page" from="71" to="78" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b14">
+	<monogr>
+		<title level="m" type="main">Interactive order-independent transparency</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Everitt</surname></persName>
+		</author>
+		<ptr target="http://developer.nvidia.com/object/InteractiveOrderTransparency.html" />
+		<imprint>
+			<date type="published" when="2001" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b15">
+	<analytic>
+		<title level="a" type="main">Hardware accelerated voxelization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Fang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Chen</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Graphics</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="433" to="442" />
+			<date type="published" when="2000" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b16">
+	<analytic>
+		<title level="a" type="main">Visualizing N-dimensional virtual worlds with N-vision</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Feiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><surname>Beshers</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH 1990</title>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="page" from="37" to="38" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b17">
+	<monogr>
+		<title level="m" type="main">Geometry of Four Dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">R</forename><surname>Forsyth</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1930" />
+			<publisher>Cambridge U. Press</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b18">
+	<monogr>
+		<title level="m" type="main">A Topological Picturebook</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">G</forename><forename type="middle">K</forename><surname>Francis</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1987" />
+			<publisher>Springer Verlag</publisher>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b19">
+	<analytic>
+		<title level="a" type="main">A construction for computer visualization of certain complex curves</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Hanson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Notices of the Amer. Math. Soc</title>
+		<imprint>
+			<biblScope unit="volume">41</biblScope>
+			<biblScope unit="issue">9</biblScope>
+			<biblScope unit="page" from="1156" to="1163" />
+			<date type="published" when="1994" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b20">
+	<analytic>
+		<title level="a" type="main">Interactive visualization methods for four dimensions</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Hanson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">A</forename><surname>Cross</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of IEEE Visualization</title>
+		<meeting>of IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="1993" />
+			<biblScope unit="page" from="196" to="203" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b21">
+	<analytic>
+		<title level="a" type="main">Four-dimensional views of 3D scalar fields</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Hanson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">A</forename><surname>Heng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of IEEE Visualization &apos;92</title>
+		<meeting>of IEEE Visualization &apos;92</meeting>
+		<imprint>
+			<date type="published" when="1992" />
+			<biblScope unit="page" from="84" to="91" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b22">
+	<analytic>
+		<title level="a" type="main">Illuminating the fourth dimension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Hanson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><forename type="middle">A</forename><surname>Heng</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Computer Graphics and Applications</title>
+		<imprint>
+			<biblScope unit="volume">12</biblScope>
+			<biblScope unit="issue">4</biblScope>
+			<biblScope unit="page" from="54" to="62" />
+			<date type="published" when="1992-07" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b23">
+	<analytic>
+		<title level="a" type="main">Multimodal exploration of the fourth dimension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Hanson</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of IEEE Visualization</title>
+		<meeting>of IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2005" />
+			<biblScope unit="page" from="263" to="270" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b24">
+	<monogr>
+		<title level="m" type="main">Geometry and the Imagination</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">D</forename><surname>Hilbert</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Cohn-Vossen</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1952" />
+			<pubPlace>Chelsea, New York</pubPlace>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b25">
+	<analytic>
+		<title level="a" type="main">Some techniques for visualizing surfaces in four-dimensional space</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">C</forename><forename type="middle">M</forename><surname>Hoffmann</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">J</forename><surname>Zhou</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Aided Design</title>
+		<imprint>
+			<biblScope unit="volume">23</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="83" to="91" />
+			<date type="published" when="1991" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b26">
+	<monogr>
+		<title level="m" type="main">Four-space visualization of 4D objects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Hollasch</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1991" />
+		</imprint>
+		<respStmt>
+			<orgName>Arizona State University</orgName>
+		</respStmt>
+	</monogr>
+	<note type="report_type">Master thesis</note>
+</biblStruct>
+
+<biblStruct xml:id="b27">
+	<analytic>
+		<title level="a" type="main">A user-programmable vertex engine</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">E</forename><surname>Lindholm</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">M</forename><forename type="middle">J</forename><surname>Kligard</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Moreton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIGGRAPH 2001</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="149" to="158" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b28">
+	<analytic>
+		<title level="a" type="main">Real-time voxelization of triangle meshes on the GPU</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">I</forename><surname>Llamas</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">ACM SIGGRAPH 2007 sketches</title>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page">18</biblScope>
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b29">
+	<analytic>
+		<title level="a" type="main">The immersive visualization probe for exploring ndimensional spaces</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Gavosto</forename><surname>Miller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">IEEE Comp. Graph. and App</title>
+		<imprint>
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="issue">1</biblScope>
+			<biblScope unit="page" from="76" to="85" />
+			<date type="published" when="2004" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b30">
+	<analytic>
+		<title level="a" type="main">Space-time points: 4D splatting on efficient grids</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">N</forename><surname>Neophytou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Mueller</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of IEEE Symposium on Volume Visualization and Graphics</title>
+		<meeting>of IEEE Symposium on Volume Visualization and Graphics</meeting>
+		<imprint>
+			<date type="published" when="2002" />
+			<biblScope unit="page" from="97" to="106" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b31">
+	<analytic>
+		<title level="a" type="main">A computer technique for displaying N-dimensional hyperobjects</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">M</forename><surname>Noll</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Communication ACM</title>
+		<imprint>
+			<biblScope unit="volume">10</biblScope>
+			<biblScope unit="issue">8</biblScope>
+			<biblScope unit="page" from="469" to="473" />
+			<date type="published" when="1967" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b32">
+	<analytic>
+		<title level="a" type="main">A real-time procedural shading system for programmable graphics hardware</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><surname>Proudfoot</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><forename type="middle">R</forename><surname>Mark</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">S</forename><surname>Tzvetkov</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Hanrahan</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">SIG-GRAPH</title>
+		<imprint>
+			<date type="published" when="2001" />
+			<biblScope unit="page" from="159" to="170" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b33">
+	<monogr>
+		<title level="m" type="main">A polygonal approximation to direct scalar volume rendering</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">P</forename><surname>Shirley</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><surname>Tuchman</surname></persName>
+		</author>
+		<imprint>
+			<date type="published" when="1990" />
+			<biblScope unit="volume">24</biblScope>
+			<biblScope unit="page" from="63" to="70" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b34">
+	<analytic>
+		<title level="a" type="main">Hidden volumes: The 4th dimension</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">K</forename><forename type="middle">V</forename><surname>Steiner</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">R</forename><forename type="middle">P</forename><surname>Burton</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computer Graphics World</title>
+		<imprint>
+			<biblScope unit="page" from="71" to="74" />
+			<date type="published" when="1987-02" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b35">
+	<analytic>
+		<title level="a" type="main">Shadow-driven 4D haptic visualization</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">H</forename><surname>Zhang</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">A</forename><forename type="middle">J</forename><surname>Hanson</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="m">Proc. of IEEE Visualization</title>
+		<meeting>of IEEE Visualization</meeting>
+		<imprint>
+			<date type="published" when="2007" />
+			<biblScope unit="page" from="1688" to="1695" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+<biblStruct xml:id="b36">
+	<analytic>
+		<title level="a" type="main">An elaborate ambiguity detection method for constructing isosurfaces within tetrahedral meshes</title>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Y</forename><surname>Zhou</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">W</forename><surname>Chen</surname></persName>
+		</author>
+		<author>
+			<persName xmlns="http://www.tei-c.org/ns/1.0"><forename type="first">Z</forename><surname>Tang</surname></persName>
+		</author>
+	</analytic>
+	<monogr>
+		<title level="j">Computers &amp; Graphics</title>
+		<imprint>
+			<biblScope unit="volume">19</biblScope>
+			<biblScope unit="issue">3</biblScope>
+			<biblScope unit="page" from="355" to="364" />
+			<date type="published" when="1995" />
+		</imprint>
+	</monogr>
+</biblStruct>
+
+				</listBibl>
+			</div>
+		</back>
+	</text>
+</TEI>
