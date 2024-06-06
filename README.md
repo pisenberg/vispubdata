@@ -11,6 +11,8 @@ You should first open the jupyter notebook found in the folder: vispubdata-updat
 - get an IEEEXplore API key: https://developer.ieee.org/
 - download the latest data from DBLP: https://dblp.org/xml/
 - ask the IEEE VIS publications chairs for the titles of the year of IEEE VIS you'd like to add
+- find the DOIs of the papers awarded in the year of the conference you'd like to add (you can try https://ieeevis.org)
+- find the graphics replicability stamp papers (Tobias Isenberg can help you) of the year you'd like to add
 
 
 Then open the jupyter notebooks in the respective folders in this order:
