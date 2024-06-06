@@ -12,5 +12,10 @@ You should first open the jupyter notebook found in the folder: vispubdata-updat
 - download the latest data from DBLP: https://dblp.org/xml/
 - ask the IEEE VIS publications chairs for the titles of the year of IEEE VIS you'd like to add
 
-Then read the instructions on how to proceed in the vispubdata-update jupyter notebook
 
+Then open the jupyter notebooks in the respective folders in this order:
+1. dblp-data-extraction
+2. vispubdata-update
+3. aminer-citation-update
+
+If you have any problems then contact petra.isenberg@inria.fr
