@@ -1,0 +1,1 @@
+Put the latest Aminder citation data file into this folder: https://www.aminer.org/citation
