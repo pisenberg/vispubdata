@@ -23,7 +23,7 @@ If you use this data, we would appreciate a citation to this paper:
 
 ## Contributors
 Contributors to the code are:
-Petra Isenberg, Natkamon Tovanich, and Tobias Isenberg
+[Petra Isenberg](), Natkamon Tovanich, and [Tobias Isenberg]()
 
 ## Code Purposes
 
@@ -31,7 +31,10 @@ There are two types of code in this reposotory, one for reproduing one of the fi
 
 ## Paper reproducibility
 
-The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates the reproduction of the plot in Figure 1 of the [corresponding paper](https://doi.org/10.1109/TVCG.2016.2615308), albeit adjusted to the updated data in the dataset (as of writing this text, years 2016--2023 of the IEEE VIS conference have been added).
+The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates the reproduction of the plot in Figure 1 of the [corresponding paper](https://doi.org/10.1109/TVCG.2016.2615308), albeit adjusted to the updated data in the dataset (as of writing this text, years 2016--2023 of the IEEE VIS conference have been added). The original figure looks as follows:
+
+![Figure 1 of VisPubData publication](reproducibility/figure1-original.png "Figure 1 of VisPubData publication (image is in the public domain)")
+(image is in the public domain)
 
 ### Prerequisites
 * a Python 3 installation; e.g., https://www.python.org/downloads/ or https://www.anaconda.com/download/
