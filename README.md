@@ -53,7 +53,7 @@ cd reproducibility/
 python3 reproducibility.py
 ```
 
-The script then produces the equivalent of Figure 1 of the paper as `reproducibility/reproducibility.pdf`, which looks like this (2023 version):
+The script then produces the equivalent of Figure 1 of the paper as `reproducibility/reproducibility.pdf`, but updated to the most recent version of the dataset, which looks like this (2023 version):
 
 ![udated version of Figure 1 of VisPubData publication](reproducibility/figure1-updated.png "updated version of Figure 1 of VisPubData publication (image is in the public domain)")
 (image is in the public domain)
