@@ -4,7 +4,7 @@ The code in this repository relates to the [VisPubData](http://www.vispubdata.or
 
 Petra Isenberg, Florian Heimerl, Steffen Koch, Tobias Isenberg, Panpan Xu, Charles D. Stolper, Michael Sedlmair, Jian Chen, Torsten Möller, and John Stasko. vispubdata.org: A Metadata Collection about IEEE Visualization (VIS) Publications. IEEE Transactions on Visualization and Computer Graphics, 23(9):2199–2206, September 2017. doi: [10.1109/TVCG.2016.2615308](https://doi.org/10.1109/TVCG.2016.2615308)
 
-If you use this data, we would appreciate a citation to this paper:
+If you use this data, we would appreciate a citation to our paper:
 ```
 @article{Isenberg:2017:VMC,
   author      = {Petra Isenberg and Florian Heimerl and Steffen Koch and Tobias Isenberg and Panpan Xu and Charles D. Stolper and Michael Sedlmair and Jian Chen and Torsten M{\"o}ller and John Stasko},
@@ -45,7 +45,7 @@ The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates 
 
 ### Running the script
 
-The [`reproducibility/reproducibility.py`](reproducibility/reproducibility.py) script essentially loads the current state of the dataset  and then directly produces the new version of the figure in the local directory. Because it is not possible to download the corresponding data from the script without authentication, please first go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit?usp=sharing) that contains the VisPubData dataset, make sure that the first tab on the bottom is selected ("Main dataset"), and then download the data using the menu vis File > Download > Comma Separated Values (.csv) and then save the file to `reproducibility/vispubdata.csv`. Next, please go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1I6n4a6xvmoanAIDiSsGlaOVljAJ5IkT2C_naI-dStNo/edit?usp=sharing) that contains the data about the journal presentations, and then download that dataset the same way as before and save the file to `reproducibility/vis-journal-presentations.csv`.
+The [`reproducibility/reproducibility.py`](reproducibility/reproducibility.py) script essentially loads the current state of the dataset  and then directly produces the new version of the figure in the local directory. Because it is not possible to download the corresponding data from the script (i.e., via the API) without authentication, please first go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit?usp=sharing) that contains the VisPubData dataset, make sure that the first tab on the bottom is selected ("Main dataset"), and then download the data using the menu vis File > Download > Comma Separated Values (.csv) and then save the file to `reproducibility/vispubdata.csv`. Next, please go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1I6n4a6xvmoanAIDiSsGlaOVljAJ5IkT2C_naI-dStNo/edit?usp=sharing) that contains the data about the journal presentations, and then download that dataset the same way as before and save the file to `reproducibility/vis-journal-presentations.csv`.
 
 Then everything is in place to run the script. To do so, simply do:
 ```
