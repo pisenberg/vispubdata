@@ -4,7 +4,7 @@ The code in this repository relates to the [VisPubData](http://www.vispubdata.or
 
 Petra Isenberg, Florian Heimerl, Steffen Koch, Tobias Isenberg, Panpan Xu, Charles D. Stolper, Michael Sedlmair, Jian Chen, Torsten Möller, and John Stasko. vispubdata.org: A Metadata Collection about IEEE Visualization (VIS) Publications. IEEE Transactions on Visualization and Computer Graphics, 23(9):2199–2206, September 2017. doi: [10.1109/TVCG.2016.2615308](https://doi.org/10.1109/TVCG.2016.2615308)
 
-If you use this data, we would appreciate a publication to this paper:
+If you use this data, we would appreciate a citation to this paper:
 ```
 @article{Isenberg:2017:VMC,
   author      = {Petra Isenberg and Florian Heimerl and Steffen Koch and Tobias Isenberg and Panpan Xu and Charles D. Stolper and Michael Sedlmair and Jian Chen and Torsten M{\"o}ller and John Stasko},
@@ -30,6 +30,18 @@ Petra Isenberg, Natkamon Tovanich, and Tobias Isenberg
 There are two types of code in this reposotory, one for reproduing one of the figures we show in the paper mentioned above (for the purpose of showing reproducibility via the [Graphics Replicability Stamp Initiative](https://www.replicabilitystamp.org/)), and the other code for supporting the continued update of the dataset.
 
 ## Paper reproducibility
+
+The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates the reproduction of the plot in Figure 1 of the [corresponding paper](https://doi.org/10.1109/TVCG.2016.2615308), albeit adjusted to the updated data in the dataset (as of writing this text, years 2016--2023 of the IEEE VIS conference have been added).
+
+### Prerequisites
+* a Python 3 installation; e.g., https://www.python.org/downloads/ or https://www.anaconda.com/download/
+* dedicated Python libraries installed with `pip3` or `conda` as follows (or similar):
+    * `altair`: `pip3 install altair` or `conda install -c conda-forge altair` (see https://altair-viz.github.io/)
+    * `vl-convert`: `pip3 install vl-convert-python` or `conda install -c conda-forge vl-convert-python` (see https://altair-viz.github.io/user_guide/saving_charts.html)
+    * `beautifulsoup4`: `pip3 install beautifulsoup4` or `conda install -c conda-forge beautifulsoup4` (see https://www.crummy.com/software/BeautifulSoup/ and https://anaconda.org/anaconda/beautifulsoup4; seems to be already included with recent versions of Anaconda)
+    * `pandas`: `pip3 install pandas` (see https://pandas.pydata.org/docs/getting_started/install.html; already included in Anaconda)
+
+### Running the script
 
 work in progress ...
 
