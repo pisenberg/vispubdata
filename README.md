@@ -45,15 +45,18 @@ The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates 
 
 ### Running the script
 
-The [`reproducibility/reproducibility.py`](reproducibility/reproducibility.py) essentially loads the current state of the dataset  and then directly produces the new version of the figure in the local directory. Because it is not possible to download the corresponding data from the script without authentication, please first go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit?usp=sharing) that contains the data, make sure that the first tab on the bottom is selectted ("Main dataset"), and then download the data using the menu vis File > Download > Comma Separated Values (.csv) and then save the file to [`reproducibility/vispubdata.csv`](reproducibility/vispubdata.csv).
+The [`reproducibility/reproducibility.py`](reproducibility/reproducibility.py) essentially loads the current state of the dataset  and then directly produces the new version of the figure in the local directory. Because it is not possible to download the corresponding data from the script without authentication, please first go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit?usp=sharing) that contains the data, make sure that the first tab on the bottom is selected ("Main dataset"), and then download the data using the menu vis File > Download > Comma Separated Values (.csv) and then save the file to [`reproducibility/vispubdata.csv`](reproducibility/vispubdata.csv). Next, please go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1I6n4a6xvmoanAIDiSsGlaOVljAJ5IkT2C_naI-dStNo/edit?usp=sharing) that contains the data about the journal presentations, and then download that dataset the same way as before and save the file to [`reproducibility/vis-journal-presentations.csv`](reproducibility/vis-journal-presentations.csv).
 
-To run the script, simply do:
+Then everything is in place to run the script. To do so, simply do:
 ```
 cd reproducibility/
 python3 reproducibility.py
 ```
 
-work in progress ...
+The script then produces the equivalent of Figure 1 of the paper as `reproducibility/reproducibility.pdf`, which looks like this (2023 version):
+
+![udated version of Figure 1 of VisPubData publication](reproducibility/figure1-updated.png "updated version of Figure 1 of VisPubData publication (image is in the public domain)")
+(image is in the public domain)
 
 ## How to update
 This code will allow to create an update of the vispubdata dataset you can find here: https://sites.google.com/site/vispubdata. If you have only small fixes of the data to report you might be better off to leave a comment on the google spreadsheet with the data: https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437
