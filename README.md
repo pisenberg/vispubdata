@@ -31,7 +31,7 @@ There are two types of code in this repository, one for reproduing one of the fi
 
 ## Paper reproducibility
 
-The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates the reproduction of the plot in Figure 1 of the [corresponding paper](https://doi.org/10.1109/TVCG.2016.2615308), albeit adjusted to the updated data in the dataset (as of writing this text, years 2016–2023 of the IEEE VIS conference have been added). The original figure looks as follows:
+The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates the reproduction of the plot in Figure 1 of the [corresponding paper](https://doi.org/10.1109/TVCG.2016.2615308), albeit adjusted to the updated data in the dataset (as of writing this text, years 2016–2023 of the IEEE VIS conference have been added). The original figure from the paper looks as follows:
 
 ![Figure 1 of VisPubData publication](reproducibility/figure1-original.png "Figure 1 of VisPubData publication (image is in the public domain)")
 (image is in the public domain)
@@ -58,7 +58,7 @@ The script then produces the equivalent of Figure 1 of the paper as `reproducibi
 ![udated version of Figure 1 of VisPubData publication](reproducibility/figure1-updated.png "updated version of Figure 1 of VisPubData publication (image is in the public domain)")
 (image is in the public domain)
 
-## How to update
+## How to update the VisPubData dataset
 This code will allow to create an update of the vispubdata dataset you can find here: https://sites.google.com/site/vispubdata. If you have only small fixes of the data to report you might be better off to leave a comment on the google spreadsheet with the data: https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437
 
 You should first open the Jupyter notebook found in the folder [`vispubdata-update/`](vispubdata-update/). A few things you can already do:
