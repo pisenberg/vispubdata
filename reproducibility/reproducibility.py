@@ -16,7 +16,7 @@ journalpresentationsfilename = "vis-journal-presentations.csv"
 outputfilename = "reproducibility.pdf"
 googleSheetsLocation = "https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit?usp=sharing"
 googleSheetsLocation2 = "https://docs.google.com/spreadsheets/d/1I6n4a6xvmoanAIDiSsGlaOVljAJ5IkT2C_naI-dStNo/edit?usp=sharing"
-visPadding = 5
+visPadding = 0
 
 #####################################
 # change to directory of the script
@@ -64,7 +64,7 @@ if (os.path.isfile(inputfilename)):
         print(googleSheetsLocation2)
 
     # find first and last year of the dataset, and all venues
-    listOfVenuesToShow = ["VIS/VisWeek incl. TVCG/CG&A", "VIS/VisWeek w/o TVCG/CG&A", "Vis (1990-2011)", "SciVis (2012 onward)", "VAST", "InfoVis", "SciVis conf.", "VAST conf.", "TVCG @ VIS", "CG&A @ VIS"]
+    listOfVenuesToShow = ["VIS/VisWeek incl. journal pres.", "VIS/VisWeek w/o journal pres.", "Vis (1990–2011)", "SciVis (2012–2020)", "VAST (2006–2020)", "InfoVis (1995–2020)", "SciVis conf. (2015)", "VAST conf. (2014–2020)", "TVCG journal pres. @ VIS", "CG&A journal pres. @ VIS"]
     firstYear = vispubdataList[0]['year']
     lastYear = vispubdataList[0]['year']
     listOfVenuesInData = []
@@ -110,8 +110,7 @@ if (os.path.isfile(inputfilename)):
     # first, the original Vis conference, from 1990 to 2011 (inclusive); up to 2005 they were conference papers
     for year in range(firstYear, 2006): visPubDataAggregationDetailed[listOfVenuesToShow[2]][year] = visPubDataAggregation['Vis-C'][year]
     for year in range(2006, 2012): visPubDataAggregationDetailed[listOfVenuesToShow[2]][year] = visPubDataAggregation['Vis-J'][year]
-    # then the (renamed) SciVis conference, technically from 2012 but since we want to connect the lines we start from 2011
-    visPubDataAggregationDetailed[listOfVenuesToShow[3]][2011] = visPubDataAggregation['Vis-J'][2011]
+    # then the (renamed) SciVis conference, from 2012
     for year in range(2012, lastYear + 1): visPubDataAggregationDetailed[listOfVenuesToShow[3]][year] = visPubDataAggregation['SciVis-J'][year]
     # InfoVis is easy; up to 2005 as conference, then as journal
     for year in range(firstYear, 2006): visPubDataAggregationDetailed[listOfVenuesToShow[5]][year] = visPubDataAggregation['InfoVis-C'][year]
@@ -119,9 +118,11 @@ if (os.path.isfile(inputfilename)):
     # so is VAST; up to 2012 as conference, then as journal
     for year in range(firstYear, 2013): visPubDataAggregationDetailed[listOfVenuesToShow[4]][year] = visPubDataAggregation['VAST-C'][year]
     for year in range(2013, lastYear + 1): visPubDataAggregationDetailed[listOfVenuesToShow[4]][year] = visPubDataAggregation['VAST-J'][year]
-    # VAST conference from 2014 on
+    # but in 2012 VAST also had journal papers, so add these
+    visPubDataAggregationDetailed[listOfVenuesToShow[4]][2012] += visPubDataAggregation['VAST-J'][2012]
+    # VAST conference separate from the journal track from 2014 on
     for year in range(2014, lastYear + 1): visPubDataAggregationDetailed[listOfVenuesToShow[7]][year] = visPubDataAggregation['VAST-C'][year]
-    # SciVis conference only in 2015
+    # SciVis conference separate from the journal track only in 2015
     visPubDataAggregationDetailed[listOfVenuesToShow[6]][2015] = visPubDataAggregation['SciVis-C'][2015]
     # TVCG journal presentations
     for year in range(firstYear, lastYear + 1): visPubDataAggregationDetailed[listOfVenuesToShow[8]][year] = visPubDataAggregation['TVCG-J'][year]
@@ -131,30 +132,23 @@ if (os.path.isfile(inputfilename)):
     # finally, sum up the totals
     for year in range(firstYear, lastYear + 1):
         sum = 0
-        # for venue in listOfVenuesToShow[2:6]: # we do not include the later conference-only papers
         for venue in listOfVenuesToShow[2:8]:
             if not math.isnan(visPubDataAggregationDetailed[venue][year]):
                 sum += visPubDataAggregationDetailed[venue][year]
         visPubDataAggregationDetailed[listOfVenuesToShow[1]][year] = sum
         sum = 0
-        # for venue in listOfVenuesToShow[2:6]: # we do not include the later conference-only papers
-        #     if not math.isnan(visPubDataAggregationDetailed[venue][year]):
-        #         sum += visPubDataAggregationDetailed[venue][year]
-        # for venue in listOfVenuesToShow[9:10]: # but here the journal presentations
-        #     if not math.isnan(visPubDataAggregationDetailed[venue][year]):
-        #         sum += visPubDataAggregationDetailed[venue][year]
         for venue in listOfVenuesToShow[2:10]:
             if not math.isnan(visPubDataAggregationDetailed[venue][year]):
                 sum += visPubDataAggregationDetailed[venue][year]
         visPubDataAggregationDetailed[listOfVenuesToShow[0]][year] = sum
-    # but without counting Vis/SciVis 2011 twice (see hack from before):
-    visPubDataAggregationDetailed[listOfVenuesToShow[1]][2011] -= visPubDataAggregationDetailed[listOfVenuesToShow[3]][2011]
-    visPubDataAggregationDetailed[listOfVenuesToShow[0]][2011] -= visPubDataAggregationDetailed[listOfVenuesToShow[3]][2011]
 
     # and add the final unified VIS starting from 2021
     for year in range(2021, lastYear + 1):
         visPubDataAggregationDetailed[listOfVenuesToShow[1]][year] += visPubDataAggregation['Vis-J'][year]
         visPubDataAggregationDetailed[listOfVenuesToShow[0]][year] += visPubDataAggregation['Vis-J'][year]
+
+    # we still want to connect the SciVis line with the former Vis line
+    visPubDataAggregationDetailed[listOfVenuesToShow[3]][2011] = visPubDataAggregation['Vis-J'][2011]
 
     # empty years (should actually not be needed)
     for year in range(firstYear, lastYear + 1):
@@ -165,33 +159,36 @@ if (os.path.isfile(inputfilename)):
     dataToPlot = []
     for venue in listOfVenuesToShow: # redo the data for the line graph, because this is not stacked
         for year in range(firstYear, lastYear + 1):
-            dataToPlot.append({"venue": venue, "name": venue, "year": year, "count": visPubDataAggregationDetailed[venue][year]})#, "order": color_number * 2, "order2": color_number})
+            dataToPlot.append({"venue": venue, "name": venue, "year": year, "count": visPubDataAggregationDetailed[venue][year]})
     altairData = pd.DataFrame(dataToPlot)
-    # we need to layer the SciVis conf. data, as only that one needs to be shown with a dot
-    dataToPlot2 = []
-    for year in range(firstYear, lastYear + 1):
-        dataToPlot2.append({"venue": venue, "name": venue, "year": year, "count": visPubDataAggregationDetailed['SciVis conf.'][year]})#, "order": color_number * 2, "order2": color_number})
-    altairData2 = pd.DataFrame(dataToPlot2)
 
     # regular data
     chart1 = alt.Chart(altairData, width={"step": 15}).mark_line().encode(
-        x = alt.X('year:N', title=None).axis(labelAngle=-45),
-        y = alt.Y('count:Q', title=None),
+        x = alt.X('year:N', title=None).axis(labelAngle=-45, grid = True, gridOpacity = 0.15),#, gridOpacity = alt.condition(alt.datum.year_N == 2000, if_true = alt.value(0.95), if_false = alt.value(0.1))),
+        y = alt.Y('count:Q', title=None).axis(grid = True, gridOpacity = 0.75),
         strokeWidth=alt.value(3),
         color = alt.Color('name:N', sort=None, title=None),
         order = alt.Order("venue:Q")
     )
-    # the special treatment for SciVis conf. data
-    chart2 = alt.Chart(altairData2, width={"step": 15}).mark_point(filled=True).encode(
+
+    # we need to layer the SciVis conf. data, as only that one needs to be shown with a dot
+    # we also use this layer to connect the Vis and SciVis lines better
+    dataToPlot2 = []
+    for year in range(firstYear, lastYear + 1):
+        dataToPlot2.append({"venue": listOfVenuesToShow[6], "name": listOfVenuesToShow[6], "year": year, "count": visPubDataAggregationDetailed[listOfVenuesToShow[6]][year]})
+    dataToPlot2.append({"venue": listOfVenuesToShow[2], "name": listOfVenuesToShow[2], "year": 2011, "count": visPubDataAggregationDetailed[listOfVenuesToShow[2]][2011]})
+    altairData2 = pd.DataFrame(dataToPlot2)
+
+    chart2 = alt.Chart(altairData2, width={"step": 15}).mark_point(filled=True, opacity=1).encode(
         x = alt.X('year:N', title=None).axis(labelAngle=-45),
         y = alt.Y('count:Q', title=None),
-        size=alt.value(45),
-        color = alt.value('#77a2d4'),
+        size=alt.condition(alt.datum.venue == listOfVenuesToShow[6], alt.value(30), alt.value(9.2)),
+        color = alt.condition(alt.datum.venue == listOfVenuesToShow[6], alt.value('#a3c6ea'), alt.value('#f9aa5e')),
         order = alt.Order("venue:Q")
     )
     chart = (chart1+chart2).configure_range(
         #                           l gray     d gray     orange    blue       green       red        l blue     l green   l purple   d purple
-        category=alt.RangeScheme(['#aaaaaa', '#444444', '#f58518', '#4c78a8', '#54a24b', '#e45756', '#77a2d4', '#84d278', '#b279a2', '#5f2d53', '#ff9da6', '#bab0ac'])
+        category=alt.RangeScheme(['#a3a3a3', '#525252', '#f9aa5e', '#669bd8', '#64b235', '#e83e50', '#a3c6ea', '#c4e6a7', '#b456b2', '#672d97'])
     ).configure_legend(columns=4, orient='bottom', direction='horizontal', titleLimit=0, labelLimit=0, symbolSize=200, symbolStrokeWidth=3.5
     ).configure_view(strokeWidth=0).properties(
         padding={"left": visPadding, "right": visPadding, "bottom": visPadding, "top": visPadding},
