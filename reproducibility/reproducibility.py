@@ -14,9 +14,18 @@ import math
 inputfilename = "vispubdata.csv"
 journalpresentationsfilename = "vis-journal-presentations.csv"
 outputfilename = "reproducibility.pdf"
-googleSheetsLocation = "https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit?usp=sharing"
-googleSheetsLocation2 = "https://docs.google.com/spreadsheets/d/1I6n4a6xvmoanAIDiSsGlaOVljAJ5IkT2C_naI-dStNo/edit?usp=sharing"
+vispubdataGoogleID = "1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU"
+visJournalPresentationsGoogleID = "1I6n4a6xvmoanAIDiSsGlaOVljAJ5IkT2C_naI-dStNo"
 visPadding = 0
+useFiles = False
+
+#####################################
+# compute the needed URLs
+#####################################
+googleSheetsLocation = "https://docs.google.com/spreadsheets/d/" + vispubdataGoogleID + "/edit?usp=sharing"
+googleSheetsLocation2 = "https://docs.google.com/spreadsheets/d/" + visJournalPresentationsGoogleID + "/edit?usp=sharing"
+vispubdata_sheet_url = "https://docs.google.com/spreadsheets/d/" + vispubdataGoogleID + "/gviz/tq?tqx=out:csv"
+visjournalpresentations_sheet_url = "https://docs.google.com/spreadsheets/d/" + visJournalPresentationsGoogleID + "/gviz/tq?tqx=out:csv"
 
 #####################################
 # change to directory of the script
@@ -28,41 +37,72 @@ if pathOfTheScript != "": os.chdir(pathOfTheScript)
 # main parts of the script
 #####################################
 
-# check if the needed data file exists
-if (os.path.isfile(inputfilename)):
-    vispubdataList = []
-    journalpresentationsList = []
-    # load the previously downloaded data file
-    with open(inputfilename, 'r', encoding="utf-8") as csvfile:
-        # create a CSV reader object
-        reader = csv.DictReader(csvfile)
-        # iterate over the rows
-        for row in reader:
-            dataItem = {}
-            dataItem['doi'] = row['DOI'].lower()
-            dataItem['year'] = int(row['Year'])
-            dataItem['papertype'] = row['PaperType']
-            dataItem['venue'] = row['Conference']
+vispubdataList = []
+journalpresentationsList = []
 
-            if dataItem['papertype'] in ['C', 'J']:
-                vispubdataList.append(dataItem)
-    
-    if (os.path.isfile(journalpresentationsfilename)):
-        with open(journalpresentationsfilename, 'r', encoding="utf-8") as csvfile:
+if useFiles:
+    print("Loading data from local files ...")
+    # check if the needed data file exists
+    if (os.path.isfile(inputfilename)):
+        # load the previously downloaded data file
+        with open(inputfilename, 'r', encoding="utf-8") as csvfile:
             # create a CSV reader object
             reader = csv.DictReader(csvfile)
             # iterate over the rows
             for row in reader:
                 dataItem = {}
-                dataItem['doi'] = row['doi'].lower()
-                dataItem['year'] = int(row['year'])
-                dataItem['journal'] = row['journal']
-                journalpresentationsList.append(dataItem)
-    else:
-        print("The input data file " + journalpresentationsfilename + " was not found, please first go the shared Google Sheets location.")
-        print("There download the journal presentations dataset as a CSV file to " + journalpresentationsfilename + ". The url for the data is:")
-        print(googleSheetsLocation2)
+                dataItem['doi'] = row['DOI'].lower()
+                dataItem['year'] = int(row['Year'])
+                dataItem['papertype'] = row['PaperType']
+                dataItem['venue'] = row['Conference']
 
+                if dataItem['papertype'] in ['C', 'J']:
+                    vispubdataList.append(dataItem)
+        
+        if (os.path.isfile(journalpresentationsfilename)):
+            with open(journalpresentationsfilename, 'r', encoding="utf-8") as csvfile:
+                # create a CSV reader object
+                reader = csv.DictReader(csvfile)
+                # iterate over the rows
+                for row in reader:
+                    dataItem = {}
+                    dataItem['doi'] = row['doi'].lower()
+                    dataItem['year'] = int(row['year'])
+                    dataItem['journal'] = row['journal']
+                    journalpresentationsList.append(dataItem)
+        else:
+            print("The input data file " + journalpresentationsfilename + " was not found, please first go the shared Google Sheets location.")
+            print("There download the journal presentations dataset as a CSV file to " + journalpresentationsfilename + ". The url for the data is:")
+            print(googleSheetsLocation2)
+
+    else:
+        print("The input data file " + inputfilename + " was not found, please first go the shared Google Sheets location.")
+        print("There download the VisPubData dataset as a CSV file to " + inputfilename + ". The url for the data is:")
+        print(googleSheetsLocation)
+else:
+    print("Loading data from Google directly ...")
+    # get the data from Google directly
+    vispubdataData = pd.read_csv(vispubdata_sheet_url, keep_default_na=False)
+    for index,row in vispubdataData.iterrows():
+        dataItem = {}
+        dataItem['doi'] = row['DOI'].lower()
+        dataItem['year'] = int(row['Year'])
+        dataItem['papertype'] = row['PaperType']
+        dataItem['venue'] = row['Conference']
+
+        if dataItem['papertype'] in ['C', 'J']:
+            vispubdataList.append(dataItem)
+
+    visjournalpresentationsData = pd.read_csv(visjournalpresentations_sheet_url, keep_default_na=False)
+    for index,row in visjournalpresentationsData.iterrows():
+        dataItem = {}
+        dataItem['doi'] = row['doi'].lower()
+        dataItem['year'] = int(row['year'])
+        dataItem['journal'] = row['journal']
+        journalpresentationsList.append(dataItem)
+
+# the actual data processing and visualization
+if (len(vispubdataList) > 0) and (len(journalpresentationsList) > 0):
     # find first and last year of the dataset, and all venues
     listOfVenuesToShow = ["VIS/VisWeek incl. journal pres.", "VIS/VisWeek w/o journal pres.", "Vis (1990–2011)", "SciVis (2012–2020)", "InfoVis (1995–2020)", "VAST (2006–2020)", "SciVis conf. (2015)", "VAST conf. (2014–2020)", "TVCG journal pres. @ VIS", "CG&A journal pres. @ VIS"]
     firstYear = vispubdataList[0]['year']
@@ -194,8 +234,3 @@ if (os.path.isfile(inputfilename)):
         height=300
     )
     chart.save(outputfilename)
-
-else:
-    print("The input data file " + inputfilename + " was not found, please first go the shared Google Sheets location.")
-    print("There download the VisPubData dataset as a CSV file to " + inputfilename + ". The url for the data is:")
-    print(googleSheetsLocation)
