@@ -1,4 +1,4 @@
-# Vispubdata Reproducibility and Update
+# VisPubData Reproducibility and Update
 
 The code in this repository relates to the [VisPubData](http://www.vispubdata.org/) collection of publications in the field of visualization. For more information please check the [corresponding publication about the project](https://doi.org/10.1109/TVCG.2016.2615308):
 
@@ -51,7 +51,7 @@ Alternatively, one can also download the data to local `csv` files and then run 
 ```
 useFiles = True
 ```
-in the configuration section of the script at the top, and then download the data as follows: Please first go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit?usp=sharing) that contains the VisPubData dataset, make sure that the first tab on the bottom is selected ("Main dataset"), and then download the data using the menu via File > Download > Comma Separated Values (.csv) and then save the file to `reproducibility/vispubdata.csv`. Next, please go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1I6n4a6xvmoanAIDiSsGlaOVljAJ5IkT2C_naI-dStNo/edit?usp=sharing) that contains the data about the journal presentations, and then download that dataset the same way as before and save the file to `reproducibility/vis-journal-presentations.csv`. Then everything is in place to run the script.
+in the configuration section of the [`reproducibility/reproducibility.py`](reproducibility/reproducibility.py) script at the top, and then download the data as follows: Please first go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit?usp=sharing) that contains the VisPubData dataset, make sure that the first tab on the bottom is selected ("Main dataset"), and then download the data using the menu via File > Download > Comma Separated Values (.csv) and then save the file to `reproducibility/vispubdata.csv`. Next, please go to the shared [Google Spreadsheet](https://docs.google.com/spreadsheets/d/1I6n4a6xvmoanAIDiSsGlaOVljAJ5IkT2C_naI-dStNo/edit?usp=sharing) that contains the data about the journal presentations, and then download that dataset the same way as before and save the file to `reproducibility/vis-journal-presentations.csv`. Then everything is in place to run the script.
 
 To run the script in either case, simply do:
 ```
@@ -67,9 +67,9 @@ The script then produces the equivalent of Figure 1 of the paper as `reproducibi
 Notice that the labels have been reworded slightly to reflect the changes that happened in the conference in the meantime as well as to make the distinction between journal conference papers and pure journal papers presented at the conference more clear, and that the labels are ordered differently from the original figure due to the use of a new plotting tool.
 
 ## How to update the VisPubData dataset
-This code will allow to create an update of the vispubdata dataset you can find here: https://sites.google.com/site/vispubdata. If you have only small fixes of the data to report you might be better off to leave a comment on the google spreadsheet with the data: https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437
+This code will allow to create an update of the [VisPubData dataset](http://www.vispubdata.org/). If you have only small fixes of the data to report you might be better off to leave a comment on the [Google spreadsheet with the data](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437).
 
-You should first open the Jupyter notebook found in the folder [`vispubdata-update/`](vispubdata-update/). A few things you can already do:
+Otherwise, you should first open the Jupyter notebook found in the folder [`vispubdata-update/`](vispubdata-update/). A few things you can already do:
 - get an IEEEXplore API key: https://developer.ieee.org/
 - download the latest data from DBLP: https://dblp.org/xml/
 - ask the IEEE VIS publications chairs for the titles of the year of IEEE VIS you'd like to add
