@@ -68,18 +68,34 @@ The script then produces the equivalent of Figure 1 of the paper as `reproducibi
 Notice that the labels have been reworded slightly to reflect the changes that happened in the conference in the meantime as well as to make the distinction between journal conference papers and pure journal papers presented at the conference more clear, and that the labels are ordered differently from the original figure due to the use of a new plotting tool.
 
 ## How to update the VisPubData dataset
-This code will allow to create an update of the [VisPubData dataset](http://www.vispubdata.org/). If you have only small fixes of the data to report you might be better off to leave a comment on the [Google spreadsheet with the data](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437).
+This code will allow to create an update of the [VisPubData dataset](http://www.vispubdata.org/). If you have only small fixes of the data to report you might be better off to leave a comment on the [Google spreadsheet with the data](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437) and email petra.isenberg@inria.fr to make the change for you. If, however, you would like to, for example, add a new year to the dataset, then read on.
 
-Otherwise, you should first open the Jupyter notebook found in the folder [`vispubdata-update/`](vispubdata-update/). A few things you can already do:
+First open the Jupyter notebook server in the main folder of this repositiry. 
+
+### How to start a jupyter notebook?
+- navigate to the main folder of this repsitory using the [command line|https://docs.jupyter.org/en/latest/glossary.html#term-command-line]. If you are on Anaconda python it's best to do this using the Anaconda prompt.
+- start the jupyter notebook there using by calling ''jupyter notebook''.
+- If this doesn't work out of the box, get more help here: https://docs.jupyter.org/en/latest/install.html
+
+### What else do I need?
+ However, in preparation, there are a few things you can already do.
+
 - get an IEEEXplore API key: https://developer.ieee.org/
 - download the latest data from DBLP: https://dblp.org/xml/
 - ask the IEEE VIS publications chairs for the titles of the year of IEEE VIS you'd like to add
 - find the DOIs of the papers awarded in the year of the conference you'd like to add (you can try https://ieeevis.org)
 - find the graphics replicability stamp papers (Tobias Isenberg can help you) of the year you'd like to add
 
-Then open the Jupyter notebooks in the respective folders in this order:
-1. [`dblp-data-extraction/`](dblp-data-extraction/)
-2. [`vispubdata-update/`](vispubdata-update/)
+### Which python modules do I need?
+There are a lot of them, many come with python. But you also need:
+- [lxml](https://lxml.de/)
+- [requests](https://pypi.org/project/requests/)
+- [crossrefapi](https://github.com/fabiobatalha/crossrefapi)
+
+### Ready? Let's go...
+Then open the Jupyter notebooks in the respective folders in this order. Each jupyter notebook contains the instructions for running it.
+1. [`dblp-data-extraction/`](dblp-data-extraction/): 'ParseDBLP-VIS-Authors.ipynb'
+2. [`vispubdata-update/`](vispubdata-update/): 'Vispubdata update IEEE VIS papers.ipynb'
 3. [`aminer-citation-update/`](aminer-citation-update/)
 
 If you have any problems then please contact petra.isenberg@inria.fr
