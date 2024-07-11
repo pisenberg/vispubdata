@@ -23,7 +23,7 @@ If you use this data, we would appreciate a citation to our paper:
 
 ## Contributors
 Contributors to the code are:
-[Petra Isenberg](), Natkamon Tovanich, and [Tobias Isenberg]()
+[Petra Isenberg](https://petra.isenberg.cc/), [Natkamon Tovanich](https://www.linkedin.com/in/natkamon-tovanich-00a1a5aa/), and [Tobias Isenberg](https://tobias.isenberg.cc/)
 
 ## Code Purposes
 
@@ -63,7 +63,7 @@ python3 reproducibility.py
 The script then produces the equivalent of Figure 1 of the paper as `reproducibility/reproducibility.pdf`, but updated to the most recent version of the dataset, which looks like this (2023 version):
 
 ![udated version of Figure 1 of VisPubData publication](reproducibility/figure1-updated.png "updated version of Figure 1 of VisPubData publication (image is available under the CC BY 4.0 license)")
-(the image is available under the [Creative Commons Attribution 4.0 International (CC BY 4.0) license](https://creativecommons.org/licenses/by/4.0/))
+(the image is available under the [Creative Commons Attribution 4.0 International (CC BY 4.0) license](https://creativecommons.org/licenses/by/4.0/); please attribute the image to the [contributors named above](#contributors) and cite the mentioned journal paper)
 
 Notice that the labels have been reworded slightly to reflect the changes that happened in the conference in the meantime as well as to make the distinction between journal conference papers and pure journal papers presented at the conference more clear, and that the labels are ordered differently from the original figure due to the use of a new plotting tool.
 
