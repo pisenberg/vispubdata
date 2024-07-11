@@ -41,8 +41,8 @@ The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates 
 * dedicated Python libraries installed with `pip3` or `conda` as follows (or similar):
     * `altair`: `pip3 install altair` or `conda install -c conda-forge altair` (see https://altair-viz.github.io/)
     * `vl-convert`: `pip3 install vl-convert-python` or `conda install -c conda-forge vl-convert-python` (see https://altair-viz.github.io/user_guide/saving_charts.html)
-    * a [`reproducibility/requirements.txt`](reproducibility/requirements.txt) includes all of these requirements, install them with `pip3 install -r reproducibility/requirements.txt`
     * `pandas`: `pip3 install pandas` (see https://pandas.pydata.org/docs/getting_started/install.html; already included in Anaconda)
+    * the file [`reproducibility/requirements.txt`](reproducibility/requirements.txt) includes all of these requirements, install them all in one go with `pip3 install -r reproducibility/requirements.txt`
 
 ### Running the script
 
