@@ -68,7 +68,7 @@ The script then produces the equivalent of Figure 1 of the paper as `reproducibi
 Notice that the labels have been reworded slightly to reflect the changes that happened in the conference in the meantime as well as to make the distinction between journal conference papers and pure journal papers presented at the conference more clear, and that the labels are ordered differently from the original figure due to the use of a new plotting tool.
 
 ## How to update the VisPubData dataset
-This code will allow you to create an update of the [VisPubData dataset](http://www.vispubdata.org/). If you have only small fixes of the data to report you might be better off to leave a comment on the [Google spreadsheet with the data](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437) and to e-mail petra.isenberg@inria.fr to make the change for you. If, however, you would like to, for example, add a new year to the dataset, then read on.
+This code will allow you to create an update of the [VisPubData dataset](http://www.vispubdata.org/). If you have only small fixes of the data to report you might be better off to leave a comment on the [Google spreadsheet with the data](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437) and to e-mail petra.isenberg@inria.fr to make the change for you. If, however, you would like to, for example, add a new year to the dataset or create a local update for yourself, then read on.
 
 ### Prerequisits
 - A Python 3 installation, we recommend [Anaconda](https://www.anaconda.com/download/).
