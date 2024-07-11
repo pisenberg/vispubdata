@@ -95,8 +95,8 @@ This code will allow you to create an update of the [VisPubData dataset](http://
 ### Ready? Let's go...
 Then use the newly opened browser window to open the the Jupyter notebooks in the respective folders in the order they are named below (double-click on the folder, then double-click on the respective `ipynb` file, which opens it in a new browser tab). Each Jupyter notebook contains additional prerequisites and the instructions for running it.
 1. [`dblp-data-extraction/ParseDBLP-VIS-Authors.ipynb`](dblp-data-extraction/ParseDBLP-VIS-Authors.ipynb)
-    - The last step in this notebook will take minutes to several tens of minutes, depending on your machine and the size of the data. The script, however, shows its progress in iterations and iterations per second.
-    - Unfortunately it is not possible to compute a percentage as the total number of needed iterations is not known ahead of time. The total number of needed iterations depends on the size of the DBLP data when downloaded and should be in the order of 170,000 (at time of writing these instructions) or more.
+    - The last step in this notebook will take several minutes, depending on your machine and the size of the data. The script, however, shows its progress in iterations and iterations per second.
+    - Unfortunately it is not possible to compute a percentage as the total number of needed iterations is not known ahead of time. The total number of needed iterations depends on the size of the DBLP data when downloaded and should be in the order of 220,000 (at time of writing these instructions) or more.
     - So just wait as long as these iteration counts continue to be updated.
     - If error messages appear check that you have the downloaded DBLP data files (according to the instructions above) and placed them into the [`dblp-data-extraction/data/`](dblp-data-extraction/data/) subfolder and that you also uncompressed the `dblp.xml.gz` file.
     - The script is done when you see a note that reports **finish**
