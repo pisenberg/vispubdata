@@ -70,31 +70,31 @@ Notice that the labels have been reworded slightly to reflect the changes that h
 ## How to update the VisPubData dataset
 This code will allow to create an update of the [VisPubData dataset](http://www.vispubdata.org/). If you have only small fixes of the data to report you might be better off to leave a comment on the [Google spreadsheet with the data](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437) and email petra.isenberg@inria.fr to make the change for you. If, however, you would like to, for example, add a new year to the dataset, then read on.
 
-First open the Jupyter notebook server in the main folder of this repositiry. 
-
-### How to start a jupyter notebook?
-- navigate to the main folder of this repsitory using the [command line|https://docs.jupyter.org/en/latest/glossary.html#term-command-line]. If you are on Anaconda python it's best to do this using the Anaconda prompt.
-- start the jupyter notebook there using by calling ''jupyter notebook''.
-- If this doesn't work out of the box, get more help here: https://docs.jupyter.org/en/latest/install.html
-
-### What else do I need?
- However, in preparation, there are a few things you can already do.
-
+### Prerequisits
+- a Python 3 installation, we recommend [Anaconda](https://www.anaconda.com/download/)
+- several additional Python packages:
+  - [lxml](https://lxml.de/)
+  - [requests](https://pypi.org/project/requests/)
+  - [crossrefapi](https://github.com/fabiobatalha/crossrefapi)
+  - the file [`requirements.txt`](requirements.txt) includes all of these requirements, install them all in one go with `pip3 install -r requirements.txt`
 - get an IEEEXplore API key: https://developer.ieee.org/
-- download the latest data from DBLP: https://dblp.org/xml/
+- download the latest data from DBLP: go to https://dblp.org/xml/ and download the files `dblp.xml.gz` and `dblp.dtd` and put them into the [`dblp-data-extraction/data`](dblp-data-extraction/data) subfolder in this repository. Also do not forget to extract the `dblp.xml.gz` to `dblp.xml`.
 - ask the IEEE VIS publications chairs for the titles of the year of IEEE VIS you'd like to add
 - find the DOIs of the papers awarded in the year of the conference you'd like to add (you can try https://ieeevis.org)
 - find the graphics replicability stamp papers (Tobias Isenberg can help you) of the year you'd like to add
 
-### Which python modules do I need?
-There are a lot of them, many come with python. But you also need:
-- [lxml](https://lxml.de/)
-- [requests](https://pypi.org/project/requests/)
-- [crossrefapi](https://github.com/fabiobatalha/crossrefapi)
+### Start the Jupyter notebook server
+- Navigate to the main folder of this repsitory (the top folder) using the [command line](https://docs.jupyter.org/en/latest/glossary.html#term-command-line). If you are on [Anaconda Python](https://www.anaconda.com/) it's best to do this using the Anaconda prompt.
+- Start the Jupyter notebook server there by calling:
+  ```
+  jupyter notebook
+  ```
+  This will open a browser window and show many folders (mainly for the different years of the dataset) and some files.
+- If this doesn't work out of the box, you can get more help here: https://docs.jupyter.org/en/latest/install.html
 
 ### Ready? Let's go...
 Then open the Jupyter notebooks in the respective folders in this order. Each jupyter notebook contains the instructions for running it.
-1. [`dblp-data-extraction/`](dblp-data-extraction/): 'ParseDBLP-VIS-Authors.ipynb'
+1. [`dblp-data-extraction/`](dblp-data-extraction/): 'ParseDBLP-VIS-Authors.ipynb' (note that you need to wait at the end for the notebook to report `DONE`. If error messages appear check that you have the downloaded data files in the [`dblp-data-extraction/data`](dblp-data-extraction/data) subfolder and that you also uncompressed the `dblp.xml.gz` file.)
 2. [`vispubdata-update/`](vispubdata-update/): 'Vispubdata update IEEE VIS papers.ipynb'
 3. [`aminer-citation-update/`](aminer-citation-update/)
 
