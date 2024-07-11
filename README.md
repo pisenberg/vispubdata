@@ -71,17 +71,18 @@ Notice that the labels have been reworded slightly to reflect the changes that h
 This code will allow to create an update of the [VisPubData dataset](http://www.vispubdata.org/). If you have only small fixes of the data to report you might be better off to leave a comment on the [Google spreadsheet with the data](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437) and email petra.isenberg@inria.fr to make the change for you. If, however, you would like to, for example, add a new year to the dataset, then read on.
 
 ### Prerequisits
-- a Python 3 installation, we recommend [Anaconda](https://www.anaconda.com/download/)
-- several additional Python packages:
+- A Python 3 installation, we recommend [Anaconda](https://www.anaconda.com/download/)
+- Several additional Python packages:
   - [lxml](https://lxml.de/)
   - [requests](https://pypi.org/project/requests/)
   - [crossrefapi](https://github.com/fabiobatalha/crossrefapi)
   - the file [`requirements.txt`](requirements.txt) includes all of these requirements, install them all in one go with `pip3 install -r requirements.txt`
-- get an IEEEXplore API key: https://developer.ieee.org/
-- download the latest data from DBLP: go to https://dblp.org/xml/ and download the files `dblp.xml.gz` and `dblp.dtd` and put them into the [`dblp-data-extraction/data`](dblp-data-extraction/data) subfolder in this repository. Also do not forget to extract the `dblp.xml.gz` to `dblp.xml`.
-- ask the IEEE VIS publications chairs for the titles of the year of IEEE VIS you'd like to add
-- find the DOIs of the papers awarded in the year of the conference you'd like to add (you can try https://ieeevis.org)
-- find the graphics replicability stamp papers (Tobias Isenberg can help you) of the year you'd like to add
+- Get an IEEEXplore API key: https://developer.ieee.org/
+- Download the latest data from DBLP: go to https://dblp.org/xml/ and download the files `dblp.xml.gz` and `dblp.dtd` and put them into the [`dblp-data-extraction/data`](dblp-data-extraction/data) subfolder in this repository. Also do not forget to extract the `dblp.xml.gz` to `dblp.xml`.
+- Ask the IEEE VIS publications chairs for the titles of the year of IEEE VIS you'd like to add.
+- Find the DOIs of the papers awarded in the year of the conference you'd like to add (you can try https://ieeevis.org).
+- Put the titles with the corresponding DOIs into a CSV table for use in the update process.
+- Get a list of the [graphics replicability stamp]() papers, not only for the year you want to add but for all years because the stamps are awarded retroactively. This list should contain the DOIs of the papers with a GRSI stamp, and it can include more papers than in the VisPubData database (because the GRSI is not limited to visualization papers). The script `extract-tvcg-dois-with-stamp.py` in [Tobias Isenberg](https://tobias.isenberg.cc/)'s [Visualization-Reproducibility repository](https://github.com/tobiasisenberg/Visualization-Reproducibility) generates such a list, if you need help just contact [Tobias](https://tobias.isenberg.cc/). Place the resulting CSV file into the [`vispubdata-update/`](vispubdata-update/) subdirectory, overwriting the existing [`vispubdata-update/tvcg-dois-with-stamp.csv`](vispubdata-update/tvcg-dois-with-stamp.csv) file.
 
 ### Start the Jupyter notebook server
 - Navigate to the main folder of this repsitory (the top folder) using the [command line](https://docs.jupyter.org/en/latest/glossary.html#term-command-line). If you are on [Anaconda Python](https://www.anaconda.com/) it's best to do this using the Anaconda prompt.
@@ -93,8 +94,10 @@ This code will allow to create an update of the [VisPubData dataset](http://www.
 - If this doesn't work out of the box, you can get more help here: https://docs.jupyter.org/en/latest/install.html
 
 ### Ready? Let's go...
-Then open the Jupyter notebooks in the respective folders in this order. Each jupyter notebook contains the instructions for running it.
-1. [`dblp-data-extraction/`](dblp-data-extraction/): 'ParseDBLP-VIS-Authors.ipynb' (note that you need to wait at the end for the notebook to report `DONE`. If error messages appear check that you have the downloaded data files in the [`dblp-data-extraction/data`](dblp-data-extraction/data) subfolder and that you also uncompressed the `dblp.xml.gz` file.)
+Then open the Jupyter notebooks in the respective folders in the  order they are named below. Each Jupyter notebook contains additional prerequisites and the instructions for running it.
+1. [`dblp-data-extraction/`](dblp-data-extraction/): 'ParseDBLP-VIS-Authors.ipynb'
+    - You need to wait at the end for the notebook to report `DONE`, which can take a few minutes.
+    - If error messages appear check that you have the downloaded data files in the [`dblp-data-extraction/data`](dblp-data-extraction/data) subfolder and that you also uncompressed the `dblp.xml.gz` file.
 2. [`vispubdata-update/`](vispubdata-update/): 'Vispubdata update IEEE VIS papers.ipynb'
 3. [`aminer-citation-update/`](aminer-citation-update/)
 
