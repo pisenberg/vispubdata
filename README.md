@@ -31,7 +31,7 @@ There are two types of code in this repository, one for reproduing one of the fi
 
 ## Paper reproducibility
 
-The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates the reproduction of the plot in Figure 1 of the [corresponding paper](https://doi.org/10.1109/TVCG.2016.2615308), albeit adjusted to the updated data in the dataset (as of writing this text, years 2016–2023 of the IEEE VIS conference have been added). The other figures in the paper are a manually created overview of the conference evolution (Figure 2) and screenshots of the dataset in use by other tools (Figures 3–5). The original version of Figure 1 from the paper looks as follows:
+The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates the reproduction of the plot in Figure 1 of the [corresponding paper](https://doi.org/10.1109/TVCG.2016.2615308), albeit adjusted to the updated data in the dataset (as of writing this text, years 2016–2023 of the IEEE VIS conference have been added). The other figures in the paper are a manually created overview of the conference evolution (Figure 2; for that see the files in the [`naming-graphic/`](naming-graphic/) subdirectory of this repository) and screenshots of the dataset in use by other tools (Figures 3–5). The original version of Figure 1 from the paper looks as follows:
 
 ![Figure 1 of VisPubData publication](reproducibility/figure1-original.png "Figure 1 of VisPubData publication (image is in the public domain)")
 (image is in the public domain)

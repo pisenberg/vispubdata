@@ -1,0 +1,1 @@
+This folder contains the (manually created) original and updated versions of Figure 2 in the [paper about VisPubData](https://doi.org/10.1109/TVCG.2016.2615308).
