@@ -23,7 +23,7 @@ If you use this data, we would appreciate a citation to our paper:
 
 ## Contributors
 Contributors to the code are:
-[Petra Isenberg](), Natkamon Tovanich, and [Tobias Isenberg]()
+[Petra Isenberg](https://petra.isenberg.cc/), [Natkamon Tovanich](https://www.linkedin.com/in/natkamon-tovanich-00a1a5aa/), and [Tobias Isenberg](https://tobias.isenberg.cc/)
 
 ## Code Purposes
 
@@ -41,8 +41,8 @@ The code in the [`reproducibility/`](reproducibility/) subdirectory facilitates 
 * dedicated Python libraries installed with `pip3` or `conda` as follows (or similar):
     * `altair`: `pip3 install altair` or `conda install -c conda-forge altair` (see https://altair-viz.github.io/)
     * `vl-convert`: `pip3 install vl-convert-python` or `conda install -c conda-forge vl-convert-python` (see https://altair-viz.github.io/user_guide/saving_charts.html)
-    * a [`reproducibility/requirements.txt`](reproducibility/requirements.txt) includes all of these requirements, install them with `pip3 install -r reproducibility/requirements.txt`
     * `pandas`: `pip3 install pandas` (see https://pandas.pydata.org/docs/getting_started/install.html; already included in Anaconda)
+    * the file [`reproducibility/requirements.txt`](reproducibility/requirements.txt) includes all of these requirements, install them all in one go with `pip3 install -r reproducibility/requirements.txt`
 
 ### Running the script
 
@@ -63,39 +63,40 @@ python3 reproducibility.py
 The script then produces the equivalent of Figure 1 of the paper as `reproducibility/reproducibility.pdf`, but updated to the most recent version of the dataset, which looks like this (2023 version):
 
 ![udated version of Figure 1 of VisPubData publication](reproducibility/figure1-updated.png "updated version of Figure 1 of VisPubData publication (image is available under the CC BY 4.0 license)")
-(the image is available under the [Creative Commons Attribution 4.0 International (CC BY 4.0) license](https://creativecommons.org/licenses/by/4.0/))
+(the image is available under the [Creative Commons Attribution 4.0 International (CC BY 4.0) license](https://creativecommons.org/licenses/by/4.0/); please attribute the image to the [contributors named above](#contributors) and cite the mentioned journal paper)
 
 Notice that the labels have been reworded slightly to reflect the changes that happened in the conference in the meantime as well as to make the distinction between journal conference papers and pure journal papers presented at the conference more clear, and that the labels are ordered differently from the original figure due to the use of a new plotting tool.
 
 ## How to update the VisPubData dataset
-This code will allow to create an update of the [VisPubData dataset](http://www.vispubdata.org/). If you have only small fixes of the data to report you might be better off to leave a comment on the [Google spreadsheet with the data](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437) and email petra.isenberg@inria.fr to make the change for you. If, however, you would like to, for example, add a new year to the dataset, then read on.
+This code will allow you to create an update of the [VisPubData dataset](http://www.vispubdata.org/). If you have only small fixes of the data to report you might be better off to leave a comment on the [Google spreadsheet with the data](https://docs.google.com/spreadsheets/d/1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU/edit#gid=1193315437) and to e-mail petra.isenberg@inria.fr to make the change for you. If, however, you would like to, for example, add a new year to the dataset, then read on.
 
-First open the Jupyter notebook server in the main folder of this repositiry. 
+### Prerequisits
+- A Python 3 installation, we recommend [Anaconda](https://www.anaconda.com/download/).
+- Several additional Python packages:
+  - [lxml](https://lxml.de/)
+  - [requests](https://pypi.org/project/requests/)
+  - [crossrefapi](https://github.com/fabiobatalha/crossrefapi)
+  - The file [`requirements.txt`](requirements.txt) includes all of these requirements, install them all in one go with `pip3 install -r requirements.txt`.
+- Get an IEEEXplore API key: https://developer.ieee.org/ (this may take a few days). **FIXME: extend description on where to place the key**
+- Download the latest data from the [DBLP]( https://dblp.org/): go to https://dblp.org/xml/ and download the files `dblp.xml.gz` and `dblp.dtd` and put them into the [`dblp-data-extraction/data/`](dblp-data-extraction/data/) subfolder in this repository. Also do not forget to extract the `dblp.xml.gz` to `dblp.xml`.
+- Ask the [IEEE VIS](https://ieeevis.org/) publications chairs for the titles of the year of IEEE VIS you'd like to add. Also find the DOIs of the papers awarded in the year of the conference you would like to add (you can try https://ieeevis.org, or check on https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=2945, or on https://www.computer.org/csdl/journal/tg; the IEEE VIS proceedings are **typically** the first issue in a TVCG volume/year). Then put the titles with the corresponding DOIs into a CSV table for use in the update process. **FIXME: extend description on where to put the file**
+- Get a list of the [graphics replicability stamp]() papers, not only for the year you want to add but for all years because the stamps are awarded retroactively. This list should contain the DOIs of the papers with a GRSI stamp (in no particular order), and it can include more papers than in the VisPubData database (because the GRSI is not limited to visualization papers). The script `extract-tvcg-dois-with-stamp.py` in [Tobias Isenberg](https://tobias.isenberg.cc/)'s [Visualization-Reproducibility repository](https://github.com/tobiasisenberg/Visualization-Reproducibility) generates such a list, if you need help just contact [Tobias](https://tobias.isenberg.cc/). Place the resulting CSV file into the [`vispubdata-update/`](vispubdata-update/) subdirectory, overwriting the existing [`vispubdata-update/tvcg-dois-with-stamp.csv`](vispubdata-update/tvcg-dois-with-stamp.csv) file. This step is not essential to be able to run things, as the repository already contains a [`vispubdata-update/tvcg-dois-with-stamp.csv`](vispubdata-update/tvcg-dois-with-stamp.csv) file with data on the GRSI up to a point. But it would, if course, be better to have up-to-date data.
 
-### How to start a jupyter notebook?
-- navigate to the main folder of this repsitory using the [command line|https://docs.jupyter.org/en/latest/glossary.html#term-command-line]. If you are on Anaconda python it's best to do this using the Anaconda prompt.
-- start the jupyter notebook there using by calling ''jupyter notebook''.
-- If this doesn't work out of the box, get more help here: https://docs.jupyter.org/en/latest/install.html
-
-### What else do I need?
- However, in preparation, there are a few things you can already do.
-
-- get an IEEEXplore API key: https://developer.ieee.org/
-- download the latest data from DBLP: https://dblp.org/xml/
-- ask the IEEE VIS publications chairs for the titles of the year of IEEE VIS you'd like to add
-- find the DOIs of the papers awarded in the year of the conference you'd like to add (you can try https://ieeevis.org)
-- find the graphics replicability stamp papers (Tobias Isenberg can help you) of the year you'd like to add
-
-### Which python modules do I need?
-There are a lot of them, many come with python. But you also need:
-- [lxml](https://lxml.de/)
-- [requests](https://pypi.org/project/requests/)
-- [crossrefapi](https://github.com/fabiobatalha/crossrefapi)
+### Start the Jupyter notebook server
+- Navigate to the main folder of this repsitory (the top folder) using the [command line](https://docs.jupyter.org/en/latest/glossary.html#term-command-line). If you are on [Anaconda Python](https://www.anaconda.com/) it is best to do this using the Anaconda prompt.
+- Start the Jupyter notebook server there by calling:
+  ```
+  jupyter notebook
+  ```
+  This will open a browser window and show the subfolders of the repository and the included files.
+- If this does not work out of the box, you can get more help here: https://docs.jupyter.org/en/latest/install.html
 
 ### Ready? Let's go...
-Then open the Jupyter notebooks in the respective folders in this order. Each jupyter notebook contains the instructions for running it.
-1. [`dblp-data-extraction/`](dblp-data-extraction/): 'ParseDBLP-VIS-Authors.ipynb'
-2. [`vispubdata-update/`](vispubdata-update/): 'Vispubdata update IEEE VIS papers.ipynb'
+Then use the browser window to open the the Jupyter notebooks in the respective folders in the order they are named below. Each Jupyter notebook contains additional prerequisites and the instructions for running it.
+1. [`dblp-data-extraction/ParseDBLP-VIS-Authors.ipynb`](dblp-data-extraction/ParseDBLP-VIS-Authors.ipynb)
+    - You need to wait at the end for the notebook to report `DONE`, which can take a few minutes.
+    - If error messages appear check that you have the downloaded data files in the [`dblp-data-extraction/data`](dblp-data-extraction/data) subfolder and that you also uncompressed the `dblp.xml.gz` file.
+2. [`vispubdata-update/Vispubdata update IEEE VIS papers.ipynb`](vispubdata-update/Vispubdata update IEEE VIS papers.ipynb)
 3. [`aminer-citation-update/`](aminer-citation-update/)
 
 If you have any problems then please contact petra.isenberg@inria.fr

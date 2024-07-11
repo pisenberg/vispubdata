@@ -17,6 +17,7 @@ outputfilename = "reproducibility.pdf"
 vispubdataGoogleID = "1xgoOPu28dQSSGPIp_HHQs0uvvcyLNdkMF9XtRajhhxU"
 visJournalPresentationsGoogleID = "1I6n4a6xvmoanAIDiSsGlaOVljAJ5IkT2C_naI-dStNo"
 visPadding = 0
+myLabelLimit = 500 # this is a weird issue: technically a value of 0 should mean no limit, but sometimes it literally means a limit of 0; so a sufficiently large number is needed here to avoid label cropping, 500 should work
 useFiles = False
 
 #####################################
@@ -227,7 +228,7 @@ if (len(vispubdataList) > 0) and (len(journalpresentationsList) > 0):
     chart = (chart1+chart2).configure_range(
         #                           l gray     d gray     orange    blue       red       green        l blue     l green   l purple   d purple
         category=alt.RangeScheme(['#a3a3a3', '#525252', '#f9aa5e', '#669bd8', '#e83e50', '#64b235', '#a3c6ea', '#c4e6a7', '#b456b2', '#672d97'])
-    ).configure_legend(columns=4, orient='bottom', direction='horizontal', titleLimit=0, labelLimit=0, symbolSize=200, symbolStrokeWidth=3.5
+    ).configure_legend(columns=4, orient='bottom', direction='horizontal', titleLimit=0, labelLimit=myLabelLimit, symbolSize=200, symbolStrokeWidth=3.5
     ).configure_view(strokeWidth=0).properties(
         padding={"left": visPadding, "right": visPadding, "bottom": visPadding, "top": visPadding},
         width=600,
