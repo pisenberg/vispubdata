@@ -16,6 +16,7 @@ If you use this data, we would appreciate a citation to our paper:
   month       = sep,
   pages       = {2199--2206},
   doi         = {10.1109/TVCG.2016.2615308},
+  shortdoi    = {10/dx8vv8},
   oa_hal_url  = {https://hal.science/hal-01376597},
   url         = {http://www.vispubdata.org/site/vispubdata/},
 }
