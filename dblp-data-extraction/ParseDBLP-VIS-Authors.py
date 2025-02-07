@@ -125,7 +125,12 @@ def parse_entity(dblp_path, save_path, type_name, features=None, save_to_csv=Fal
     if save_to_csv:
         f = open(save_path, 'w', newline='', encoding='utf8')
         writer = csv.writer(f, delimiter=',')
-        writer.writerow(features)  # write title
+
+        if include_key:
+            writer.writerow(features.insert(0,'key'))  # write title
+        else:
+            writer.writerow(features)  # write title
+        
         for record in results:
             # some features contain multiple values (e.g.: author), concatenate with `::`
             row = ['::'.join(v) for v in list(record.values())]
