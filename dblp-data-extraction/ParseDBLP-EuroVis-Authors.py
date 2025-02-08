@@ -150,10 +150,18 @@ def parse_entity(dblp_path, save_path, type_name, features=None, save_to_csv=Fal
                 if 'journals/cgf' in key:
                     #for journal papers we check if the DOI is in the list of EuroVis papers we have (because cgf published many non-EuroVis papers) 
                     # all vissym papers we add by defaul, hoping that there were never any short papers in there             
-                    if (not attrib_values['ee'] is None) and (len(attrib_values['ee']) > 0):
-                        doi = attrib_values['ee'][0]
-                        if not doi.lower() in euroVisPaperDois:
+                    
+                    if (not attrib_values['ee'] is None):
+                        if (len(attrib_values['ee']) > 0):
+                            doi = attrib_values['ee'][0].strip()
+                            if len(doi) == 0:
+                                addPaper = False
+                            elif not doi.lower() in euroVisPaperDois:
+                                addPaper = False
+                        else:
                             addPaper = False
+                    else:
+                        addPaper = False
                 
                 if addPaper:
                 
@@ -175,7 +183,8 @@ def parse_entity(dblp_path, save_path, type_name, features=None, save_to_csv=Fal
         f = open(save_path, 'w', newline='', encoding='utf8')
         writer = csv.writer(f, delimiter=',')
         if include_key:
-            writer.writerow(features.insert(0,'key'))  # write title
+            features.insert(0,'key')
+            writer.writerow(features)  # write title
         else:
             writer.writerow(features)  # write title
         for record in results:
