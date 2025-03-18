@@ -127,7 +127,8 @@ def parse_entity(dblp_path, save_path, type_name, features=None, save_to_csv=Fal
         writer = csv.writer(f, delimiter=',')
 
         if include_key:
-            writer.writerow(features.insert(0,'key'))  # write title
+            features.insert(0,'key')
+            writer.writerow(features)  # write title
         else:
             writer.writerow(features)  # write title
         
