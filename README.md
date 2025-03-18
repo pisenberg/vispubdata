@@ -61,7 +61,7 @@ cd reproducibility/
 python3 reproducibility.py
 ```
 
-The script then produces the equivalent of Figure 1 of the paper as `reproducibility/reproducibility.pdf`, but updated to the most recent version of the dataset, which looks like this (2023 version):
+The script then produces the equivalent of Figure 1 of the paper as `reproducibility/reproducibility.pdf`, but updated to the most recent version of the dataset, which looks like this (2024 version):
 
 ![udated version of Figure 1 of VisPubData publication](reproducibility/figure1-updated.png "updated version of Figure 1 of VisPubData publication (image is available under the CC BY 4.0 license)")
 (the image is available under the [Creative Commons Attribution 4.0 International (CC BY 4.0) license](https://creativecommons.org/licenses/by/4.0/); please attribute the image to the [contributors named above](#contributors) and cite [the mentioned journal paper](https://doi.org/10.1109/TVCG.2016.2615308))
