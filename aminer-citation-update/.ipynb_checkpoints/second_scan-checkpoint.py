@@ -1,13 +1,3 @@
-# Instructions
-# 1. Run first_scan.ipynb to match the paper title and/or DOI with Aminer
-# 2. Run second_scan.py to find the potential match papers from string distance function <-- YOU ARE HERE!
-# 3. Manually select the match papers from the second scan in candidate_papers.csv
-#    - To do so, we usually sort by papers matching score. > 80 is good. Below you can most likely discard. Check if two titles are similar. 
-#    - Delete rows of titles that do not look similar
-#    - Save the file
-# 4. Run merge_data.ipynb to match the result from the first (exact title or DOI match) and second scan (string distance candidates).
-# 5. The result is available at vispubdata_citation.csv.
-
 import pandas as pd
 import json
 import re
@@ -27,8 +17,8 @@ def task(row, choices):
 
 if __name__ == "__main__":
 
-    datasets = ['../vispubdata-update/results/vispubdata-update.csv',
-            '../vispubdata-update/results/vispubdata-update-journals.csv']
+    datasets = ['./vispubdata-update/results/vispubdata-update.csv',
+            './vispubdata-update/results/vispubdata-update-journals.csv']
     appendices = ['vis-papers','journal-papers']
 
 
@@ -47,12 +37,12 @@ if __name__ == "__main__":
         df["doi"] = df["DOI"].apply(lambda x: str(x).lower())
 
         # Load the matching data
-        match = pd.read_csv("../aminer-citation-update/results/exact_matching"+appendices[index]+".csv")
+        match = pd.read_csv("./aminer-citation-update/results/exact_matching"+appendices[index]+".csv")
         non_match = df[~df['doi'].isin(match['vispub_doi'])]
         print("Non-match", non_match.shape[0])
 
         # All titles in AMiner dataset
-        with open('../aminer-citation-update/results/aminer_titles'+appendices[index]+'.p', 'rb') as fp:
+        with open('./aminer-citation-update/results/aminer_titles'+appendices[index]+'.p', 'rb') as fp:
             choices = pickle.load(fp)
         print("AMiner titles", len(choices))
 
@@ -65,5 +55,5 @@ if __name__ == "__main__":
         print(f"Program finished in {(finish_time-start_time)/3600:.2f} hours")
         print("########################################")
         results = pd.DataFrame(results, columns = ["vispub_doi", "vispub_title", "aminer_id", "aminer_title", "score"])
-        results.to_csv('../aminer-citation-update/results/candidate_papers'+appendices[index]+'.csv', index=False)
+        results.to_csv('./aminer-citation-update/results/candidate_papers'+appendices[index]+'.csv', index=False)
         index = index + 1
